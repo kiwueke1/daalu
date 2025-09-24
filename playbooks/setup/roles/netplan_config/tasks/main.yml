@@ -1,0 +1,8 @@
+- name: Render netplan configuration
+  template:
+    src: 01-netcfg.yaml.j2
+    dest: /etc/netplan/01-netcfg.yaml
+    mode: '0644'
+
+- name: Apply netplan config
+  command: netplan apply

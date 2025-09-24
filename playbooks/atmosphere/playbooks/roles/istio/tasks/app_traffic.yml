@@ -1,0 +1,126 @@
+# app_traffic.yml
+# Configure Istio traffic objects (Gateway, VirtualService, DestinationRule) for applications
+
+# Ensure namespaces exist (idempotent)
+- name: Ensure traffic namespace exists ({{ item.traffic_namespace }})
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ item.traffic_namespace }}"
+    kubeconfig: "{{ istio_helm_kubeconfig }}"
+  loop: "{{ istio_applications | default([]) }}"
+  loop_control:
+    label: "{{ item.traffic_namespace }}"
+
+# 1) Collect all hosts from istio_applications
+- name: Collect all Gateway hosts
+  set_fact:
+    _all_hosts: "{{ (_all_hosts | default([])) + (item.hostnames | default([])) }}"
+  loop: "{{ istio_applications | default([]) }}"
+
+- name: Deduplicate hosts
+  set_fact:
+    _all_hosts: "{{ _all_hosts | default([]) | unique }}"
+
+# 2) Ensure the shared Gateway ONCE (no loop)
+- name: Ensure shared Gateway
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: networking.istio.io/v1beta1
+      kind: Gateway
+      metadata:
+        name: "{{ _istio_shared_gateway.name }}"
+        namespace: "{{ _istio_shared_gateway.namespace }}"
+      spec:
+        selector: "{{ _istio_shared_gateway.selector }}"
+        servers:
+          - port: { number: 80, name: http, protocol: HTTP }
+            hosts:
+              - "*.daalu.io"
+              - "daalu.io"
+            tls:
+              httpsRedirect: true
+          - port: { number: 443, name: https, protocol: HTTPS }
+            hosts:
+              - "*.daalu.io"
+              - "daalu.io"
+            tls:
+              mode: "{{ _istio_shared_gateway.tls.mode | default('SIMPLE') }}"
+              credentialName: "{{ _istio_shared_gateway.tls.credentialName }}"
+    kubeconfig: "{{ istio_helm_kubeconfig }}"
+
+
+# Create/Ensure the DestinationRule
+- name: Ensure DestinationRule for {{ item.name }}
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: networking.istio.io/v1beta1
+      kind: DestinationRule
+      metadata:
+        name: "{{ item.name }}-dr"
+        namespace: "{{ item.traffic_namespace }}"
+      spec:
+        host: "{{ item.service.name }}.{{ item.original_svc_namespace }}.svc.cluster.local"
+        trafficPolicy: "{{ item.destinationrule.trafficPolicy | default({}) }}"
+        subsets: >-
+          {{
+            [] if (item.service is not defined
+                   or item.service.subset is not defined
+                   or (item.service.subset | string) | length == 0)
+            else [
+              {
+                "name": item.service.subset,
+                "labels": {"version": item.service.subset}
+              }
+            ]
+          }}
+    kubeconfig: "{{ istio_helm_kubeconfig }}"
+  loop: "{{ istio_applications | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}-dr"
+
+# Create/Ensure the VirtualService
+- name: Ensure VirtualService for {{ item.name }}
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: networking.istio.io/v1beta1
+      kind: VirtualService
+      metadata:
+        name: "{{ item.name }}-vs"
+        namespace: "{{ item.traffic_namespace }}"
+      spec:
+        hosts: "{{ item.hostnames }}"
+        gateways:
+          - "{{ item.gateway.namespace }}/{{ item.gateway.name }}"
+        http:
+          - match:
+              - uri:
+                  prefix: /
+            route:
+              - destination: >-
+                  {{
+                    {
+                      "host": item.service.name ~ "." ~ item.original_svc_namespace ~ ".svc.cluster.local",
+                      "port": {"number": (item.service.port | int)}
+                    }
+                    | combine(
+                        (
+                          {"subset": item.service.subset}
+                          if (item.service is defined
+                              and item.service.subset is defined
+                              and (item.service.subset | string) | length > 0)
+                          else {}
+                        ),
+                        recursive=True
+                      )
+                  }}
+    kubeconfig: "{{ istio_helm_kubeconfig }}"
+  loop: "{{ istio_applications | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}-vs"

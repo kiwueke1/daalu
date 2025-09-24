@@ -1,0 +1,1 @@
+{"event": "verbose", "uuid": "c4265237-0f58-4a0e-8ece-38b4c1bab6dc", "counter": 15, "stdout": "\u001b[1;35mironcloud.duckdns.org is using the discovered Python interpreter at\u001b[0m", "start_line": 12, "end_line": 13, "runner_ident": "5bfe1b75-e6a7-46bd-a238-4ecadfd5c60c", "created": "2025-09-23T13:28:07.229093+00:00"}

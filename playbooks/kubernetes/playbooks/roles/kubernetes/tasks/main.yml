@@ -1,0 +1,49 @@
+# Copyright (c) 2023 VEXXHOST, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may
+# not use this file except in compliance with the License. You may obtain
+# a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations
+# under the License.
+
+- name: Remove kubernetes repository
+  ansible.builtin.apt_repository:
+    repo: "{{ kubernetes_repository_apt }}"
+    state: absent
+  when: ansible_facts['os_family'] in ['Debian']
+
+- name: Setup control plane
+  when: inventory_hostname in groups[kubernetes_control_plane_group]
+  ansible.builtin.include_tasks: control-plane.yml
+
+- name: Setup nodes
+  when: inventory_hostname not in groups[kubernetes_control_plane_group]
+  ansible.builtin.include_tasks: nodes.yml
+
+- name: Upgrade & restart Kubelet node for upgrade (if needed)
+  throttle: 1
+  vexxhost.kubernetes.kubeadm_upgrade_node:
+    api_endpoint: "https://{{ kubernetes_hostname }}:6443"
+    node: "{{ kubelet_hostname }}"
+    version: "{{ kubernetes_version }}"
+
+- name: Set node selector for CoreDNS components
+  run_once: true
+  delegate_to: "{{ kubernetes_bootstrap_node | default(groups[kubernetes_control_plane_group][0]) }}"
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: coredns
+        namespace: kube-system
+      spec:
+        template:
+          spec:
+            nodeSelector: "{{ kubernetes_coredns_node_selector }}"

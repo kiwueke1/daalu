@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: images-rbd-keyring
+  namespace: openstack
+type: Opaque
+stringData:
+  keyring: |
+    [client.images]
+        key = AQC+uz9olc20KxAAkOFqZeOIOOIomSg1WgqEUw==
+        caps mon = "allow r"
+        caps osd = "allow class-read object_prefix rbd_children, allow rwx pool=images"

@@ -1,0 +1,15 @@
+---
+kubeflow_vcluster_app_name: kubeflow-vcluster
+kubeflow_vcluster_namespace: argocd
+kubeflow_vcluster_project: default
+kubeflow_vcluster_chart: vcluster
+kubeflow_vcluster_repo_url: https://charts.loft.sh
+kubeflow_vcluster_target_revision: "0.26.0"
+kubeflow_vcluster_release_name: kubeflow-vcluster
+kubeflow_vcluster_destination_namespace: kubeflow
+
+vcluster_argocd_app_name: vcluster
+vcluster_argocd_app_repo_url: "https://api.github.com/repos/kiwueke1/argocd-infrastructure-app/contents/apps/vcluster/vcluster.yaml"
+
+# kubeconfig for applying ArgoCD app
+vcluster_kubeconfig: "{{ kubeconfig_path | default('~/.kube/config') }}"

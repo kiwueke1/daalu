@@ -1,0 +1,282 @@
+
+PLAY [Deploy Ceph monitors & managers] *****************************************
+
+TASK [Gathering Facts] *********************************************************
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.forget_package : Forget package] *********************
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.package : Update state for tar] **********************
+[0;36mskipping: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org][0m
+[0;36mskipping: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org][0m
+[0;36mskipping: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org][0m
+[0;36mskipping: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.directory : Create directory (/var/lib/downloads)] ***
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.download_artifact : Gather facts explicitly] *********
+[0;36mskipping: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org][0m
+[0;36mskipping: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org][0m
+[0;36mskipping: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org][0m
+[0;36mskipping: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.download_artifact : Starting download of file] *******
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org] => {[0m
+[0;32m    "msg": "https://github.com/opencontainers/runc/releases/download/v1.1.13/runc.amd64"[0m
+[0;32m}[0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org] => {[0m
+[0;32m    "msg": "https://github.com/opencontainers/runc/releases/download/v1.1.13/runc.amd64"[0m
+[0;32m}[0m
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org] => {[0m
+[0;32m    "msg": "https://github.com/opencontainers/runc/releases/download/v1.1.13/runc.amd64"[0m
+[0;32m}[0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org] => {[0m
+[0;32m    "msg": "https://github.com/opencontainers/runc/releases/download/v1.1.13/runc.amd64"[0m
+[0;32m}[0m
+
+TASK [vexxhost.containers.download_artifact : Download item] *******************
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.download_artifact : Extract archive] *****************
+[0;36mskipping: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org][0m
+[0;36mskipping: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org][0m
+[0;36mskipping: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org][0m
+[0;36mskipping: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.package : Update state for tar] **********************
+[0;36mskipping: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org][0m
+[0;36mskipping: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org][0m
+[0;36mskipping: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org][0m
+[0;36mskipping: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.forget_package : Forget package] *********************
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.package : Update state for tar] **********************
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.download_artifact : Gather facts explicitly] *********
+[0;36mskipping: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org][0m
+[0;36mskipping: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org][0m
+[0;36mskipping: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org][0m
+[0;36mskipping: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.download_artifact : Starting download of file] *******
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org] => {[0m
+[0;32m    "msg": "https://github.com/containerd/containerd/releases/download/v1.7.17/containerd-1.7.17-linux-amd64.tar.gz"[0m
+[0;32m}[0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org] => {[0m
+[0;32m    "msg": "https://github.com/containerd/containerd/releases/download/v1.7.17/containerd-1.7.17-linux-amd64.tar.gz"[0m
+[0;32m}[0m
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org] => {[0m
+[0;32m    "msg": "https://github.com/containerd/containerd/releases/download/v1.7.17/containerd-1.7.17-linux-amd64.tar.gz"[0m
+[0;32m}[0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org] => {[0m
+[0;32m    "msg": "https://github.com/containerd/containerd/releases/download/v1.7.17/containerd-1.7.17-linux-amd64.tar.gz"[0m
+[0;32m}[0m
+
+TASK [vexxhost.containers.download_artifact : Download item] *******************
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.download_artifact : Extract archive] *****************
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.containerd : Install AppArmor packages] **************
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.containerd : Create systemd service file for containerd] ***
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.containerd : Create folders for configuration] *******
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org] => (item={'path': '/etc/containerd'})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org] => (item={'path': '/etc/containerd'})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org] => (item={'path': '/etc/containerd'})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org] => (item={'path': '/etc/containerd'})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org] => (item={'path': '/var/lib/containerd'})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org] => (item={'path': '/var/lib/containerd'})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org] => (item={'path': '/var/lib/containerd'})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org] => (item={'path': '/var/lib/containerd'})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org] => (item={'path': '/run/containerd', 'mode': '0o711'})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org] => (item={'path': '/run/containerd', 'mode': '0o711'})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org] => (item={'path': '/run/containerd', 'mode': '0o711'})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org] => (item={'path': '/run/containerd', 'mode': '0o711'})[0m
+
+TASK [vexxhost.containers.containerd : Generate a 20G file for "/var/lib/containers"] ***
+[0;36mskipping: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org][0m
+[0;36mskipping: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org][0m
+[0;36mskipping: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org][0m
+[0;36mskipping: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.containerd : Install "xfsprogs" package] *************
+[0;36mskipping: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org][0m
+[0;36mskipping: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org][0m
+[0;36mskipping: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org][0m
+[0;36mskipping: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.containerd : Create an "xfs" filesystem on "/var/lib/containerd.img"] ***
+[0;36mskipping: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org][0m
+[0;36mskipping: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org][0m
+[0;36mskipping: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org][0m
+[0;36mskipping: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.containerd : Mount the "xfs" filesystem] *************
+[0;36mskipping: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org][0m
+[0;36mskipping: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org][0m
+[0;36mskipping: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org][0m
+[0;36mskipping: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.containerd : Create containerd config file] **********
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.containerd : Force any restarts if necessary] ********
+
+TASK [vexxhost.containers.containerd : Force any restarts if necessary] ********
+
+TASK [vexxhost.containers.containerd : Force any restarts if necessary] ********
+
+TASK [vexxhost.containers.containerd : Force any restarts if necessary] ********
+
+TASK [vexxhost.containers.containerd : Enable and start service] ***************
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.forget_package : Forget package] *********************
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.download_artifact : Gather facts explicitly] *********
+[0;36mskipping: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org][0m
+[0;36mskipping: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org][0m
+[0;36mskipping: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org][0m
+[0;36mskipping: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.download_artifact : Starting download of file] *******
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org] => {[0m
+[0;32m    "msg": "https://download.docker.com/linux/static/stable/x86_64/docker-24.0.9.tgz"[0m
+[0;32m}[0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org] => {[0m
+[0;32m    "msg": "https://download.docker.com/linux/static/stable/x86_64/docker-24.0.9.tgz"[0m
+[0;32m}[0m
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org] => {[0m
+[0;32m    "msg": "https://download.docker.com/linux/static/stable/x86_64/docker-24.0.9.tgz"[0m
+[0;32m}[0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org] => {[0m
+[0;32m    "msg": "https://download.docker.com/linux/static/stable/x86_64/docker-24.0.9.tgz"[0m
+[0;32m}[0m
+
+TASK [vexxhost.containers.download_artifact : Download item] *******************
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.download_artifact : Extract archive] *****************
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.docker : Install AppArmor packages] ******************
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.docker : Ensure group "docker" exists] ***************
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.docker : Create systemd service file for docker] *****
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.docker : Create folders for configuration] ***********
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org] => (item={'path': '/etc/docker'})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org] => (item={'path': '/etc/docker'})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org] => (item={'path': '/etc/docker'})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org] => (item={'path': '/etc/docker'})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org] => (item={'path': '/var/lib/docker', 'mode': '0o710'})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org] => (item={'path': '/var/lib/docker', 'mode': '0o710'})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org] => (item={'path': '/var/lib/docker', 'mode': '0o710'})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org] => (item={'path': '/var/lib/docker', 'mode': '0o710'})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org] => (item={'path': '/run/docker', 'mode': '0o711'})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org] => (item={'path': '/run/docker', 'mode': '0o711'})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org] => (item={'path': '/run/docker', 'mode': '0o711'})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org] => (item={'path': '/run/docker', 'mode': '0o711'})[0m
+
+TASK [vexxhost.containers.docker : Create systemd socket file for docker] ******
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.docker : Create docker daemon config file] ***********
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.docker : Force any restarts if necessary] ************
+
+TASK [vexxhost.containers.docker : Force any restarts if necessary] ************
+
+TASK [vexxhost.containers.docker : Force any restarts if necessary] ************
+
+TASK [vexxhost.containers.docker : Force any restarts if necessary] ************
+
+TASK [vexxhost.containers.docker : Enable and start service] *******************
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org][0m
+
+TASK [repository : Check if ceph_repository_version minimal 16.2] **************
+[0;36mskipping: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org][0m
+[0;36mskipping: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org][0m
+[0;36mskipping: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org][0m
+[0;36mskipping: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org][0m
+
+TASK [repository : Install packages] *******************************************

@@ -1,0 +1,121 @@
+# Copyright (c) 2022 VEXXHOST, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may
+# not use this file except in compliance with the License. You may obtain
+# a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations
+# under the License.
+
+- name: Determine node to use for bootstrapping cluster
+  block:
+    - name: Check if any control plane is bootstrapped
+      ansible.builtin.stat:
+        path: /etc/kubernetes/admin.conf
+      register: kubernetes_admin_conf_stat
+      loop: "{{ groups[kubernetes_control_plane_group] }}"
+      delegate_to: "{{ item }}"
+      delegate_facts: true
+
+- name: Pick node from pre-existing cluster
+  ansible.builtin.set_fact:
+    kubernetes_bootstrap_node: "{{ kubernetes_admin_conf_stat.results | selectattr('stat.exists', 'equalto', true) | map(attribute='item') | first }}"
+  when: kubernetes_admin_conf_stat.results | selectattr('stat.exists', 'equalto', true) | length > 0
+
+- name: Select first node to initialize cluster
+  ansible.builtin.set_fact:
+    kubernetes_bootstrap_node: "{{ groups[kubernetes_control_plane_group] | first }}"
+  when: kubernetes_admin_conf_stat.results | selectattr('stat.exists', 'equalto', true) | length == 0
+
+- name: Print selected bootstrap node
+  ansible.builtin.debug:
+    msg: "{{ kubernetes_bootstrap_node }}"
+
+- name: Upload cluster configuration for bootstrap node
+  ansible.builtin.template:
+    src: kubeadm.yaml.j2
+    dest: /etc/kubernetes/kubeadm.yaml
+    owner: root
+    group: root
+    mode: "0640"
+  when: inventory_hostname == kubernetes_bootstrap_node
+
+- name: Upload cluster CA certificate
+  when: kubernetes_allow_custom_ca
+  block:
+    - name: Create pki folder
+      ansible.builtin.file:
+        path: /etc/kubernetes/pki
+        state: directory
+        owner: root
+        group: root
+        recurse: true
+    - name: Create kubernetes ca key
+      ansible.builtin.copy:
+        content: "{{ kubernetes_custom_ca_key }}"
+        dest: /etc/kubernetes/pki/ca.key
+        mode: "0600"
+      when:
+        - (kubernetes_custom_ca_key is defined) and (kubernetes_custom_ca_key|length > 0)
+    - name: Create kubernetes ca cert
+      ansible.builtin.copy:
+        content: "{{ kubernetes_custom_ca_cert }}"
+        dest: /etc/kubernetes/pki/ca.crt
+        mode: "0644"
+      when:
+        - (kubernetes_custom_ca_cert is defined) and (kubernetes_custom_ca_cert|length > 0)
+    - name: Create etcd-ca key
+      ansible.builtin.copy:
+        content: "{{ kubernetes_custom_etcd_ca_key }}"
+        dest: /etc/kubernetes/pki/etcd/ca.key
+        mode: "0600"
+      when:
+        - (kubernetes_custom_etcd_ca_key is defined) and (kubernetes_custom_etcd_ca_key|length > 0)
+    - name: Create etcd-ca cert
+      ansible.builtin.copy:
+        content: "{{ kubernetes_custom_etcd_ca_cert }}"
+        dest: /etc/kubernetes/pki/etcd/ca.crt
+        mode: "0644"
+      when:
+        - (kubernetes_custom_etcd_ca_cert is defined) and (kubernetes_custom_etcd_ca_cert|length > 0)
+    - name: Create front-proxy-ca key
+      ansible.builtin.copy:
+        content: "{{ kubernetes_custom_front_proxy_ca_key }}"
+        dest: /etc/kubernetes/pki/front-proxy-ca.key
+        mode: "0600"
+      when:
+        - (kubernetes_custom_front_proxy_ca_key is defined) and (kubernetes_custom_front_proxy_ca_key|length > 0)
+    - name: Create front-proxy-ca cert
+      ansible.builtin.copy:
+        content: "{{ kubernetes_custom_front_proxy_ca_cert }}"
+        dest: /etc/kubernetes/pki/front-proxy-ca.crt
+        mode: "0644"
+      when:
+        - (kubernetes_custom_front_proxy_ca_cert is defined) and (kubernetes_custom_front_proxy_ca_cert|length > 0)
+
+- name: Initialize cluster
+  throttle: 1
+  ansible.builtin.shell: |
+    kubeadm init --config /etc/kubernetes/kubeadm.yaml --upload-certs \
+                 --ignore-preflight-errors=DirAvailable--etc-kubernetes-manifests{% if kubernetes_allow_unsafe_swap %},Swap{% endif %}
+  args:
+    creates: /etc/kubernetes/admin.conf
+  environment:
+    PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+  when: inventory_hostname == kubernetes_bootstrap_node
+
+- name: Check if the node is already part of the cluster
+  ansible.builtin.stat:
+    path: /etc/kubernetes/kubelet.conf
+  register: kubernetes_kubelet_stat
+
+- name: Join cluster
+  ansible.builtin.include_tasks: join-cluster.yml
+  when:
+    - inventory_hostname != kubernetes_bootstrap_node
+    - not kubernetes_kubelet_stat.stat.exists

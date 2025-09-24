@@ -1,0 +1,1 @@
+{"event": "verbose", "uuid": "f47b0052-03a4-4a85-a2a4-9cb6550b62bf", "counter": 20, "stdout": "ansible-playbook: error: unrecognized arguments: /home/kez/Documents/python_projects/daalu/daalu/playbooks/atmosphere/playbooks/monitoring.yaml", "start_line": 19, "end_line": 20, "runner_ident": "e2455ac7-f7ec-4961-9d1b-0b796c683d87", "created": "2025-09-22T03:31:45.633137+00:00"}

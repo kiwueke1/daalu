@@ -1,0 +1,1 @@
+{"event": "verbose", "uuid": "f176ee9a-3fa7-4c72-9e41-efbb4a9c281d", "counter": 33, "stdout": "\u001b[1;35mcould change the meaning of that path. See https://docs.ansible.com/ansible-\u001b[0m", "start_line": 26, "end_line": 27, "runner_ident": "d91ef580-d257-41bb-9991-56e7352e8fda", "created": "2025-09-23T03:33:53.444346+00:00"}

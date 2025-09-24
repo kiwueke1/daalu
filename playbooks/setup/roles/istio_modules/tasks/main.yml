@@ -1,0 +1,38 @@
+---
+- name: Create Istio kernel modules configuration file
+  copy:
+    dest: /etc/modules-load.d/99-istio-modules.conf
+    content: |
+      br_netfilter
+      ip_tables
+      iptable_filter
+      iptable_mangle
+      iptable_nat
+      iptable_raw
+      nf_nat
+      x_tables
+      xt_REDIRECT
+      xt_conntrack
+      xt_multiport
+      xt_owner
+      xt_tcpudp
+    mode: '0644'
+
+- name: Load kernel modules
+  community.general.modprobe:
+    name: "{{ item }}"
+    state: present
+  with_items:
+    - br_netfilter
+    - ip_tables
+    - iptable_filter
+    - iptable_mangle
+    - iptable_nat
+    - iptable_raw
+    - nf_nat
+    - x_tables
+    - xt_REDIRECT
+    - xt_conntrack
+    - xt_multiport
+    - xt_owner
+    - xt_tcpudp

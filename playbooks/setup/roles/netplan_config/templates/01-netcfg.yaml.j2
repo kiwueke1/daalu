@@ -1,0 +1,13 @@
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    ens19:
+      dhcp4: no
+      addresses:
+        - {{ ens19_address | default('10.10.0.x/16') }}
+
+    ens20:
+      dhcp4: no
+      addresses:
+        - {{ ens20_address | default('10.11.0.x/16') }}

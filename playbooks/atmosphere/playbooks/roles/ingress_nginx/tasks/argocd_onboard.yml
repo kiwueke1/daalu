@@ -1,0 +1,50 @@
+- name: Check if ingress-nginx is already added to Argo CD
+  ansible.builtin.debug:
+    msg: "ingress-nginx already onboarded to Argo CD"
+  when: "'ingress-nginx' in argocd_apps_list | map('lower') | list"
+  delegate_to: localhost
+  run_once: true
+
+- name: Download and apply ingress-nginx Argo CD app if not already present
+  block:
+    - name: Wait for Argo CD CRDs to be available
+      kubernetes.core.k8s_info:
+        api_version: apiextensions.k8s.io/v1
+        kind: CustomResourceDefinition
+        name: applications.argoproj.io
+        kubeconfig: "/etc/kubernetes/admin.conf"
+      register: argocd_crd
+      until: argocd_crd.resources is defined and (argocd_crd.resources | length > 0)
+      retries: 30
+      delay: 10
+      delegate_to: localhost
+      run_once: true
+    - name: Download Argo CD app manifest via GitHub v3 API
+      ansible.builtin.uri:
+        url: "https://api.github.com/repos/kiwueke1/argocd-infrastructure-app/contents/apps/ingress-nginx/ingress-nginx.yaml"
+        method: GET
+        return_content: true
+        headers:
+          Accept: "application/vnd.github.v3.raw"
+          Authorization: "token {{ github_token }}"
+      register: ingress_nginx_raw_yaml
+      delegate_to: localhost
+      run_once: true
+
+    - name: Write Argo CD app manifest to file
+      ansible.builtin.copy:
+        dest: /tmp/ingress-nginx-argocd-app.yaml
+        content: "{{ ingress_nginx_raw_yaml.content }}"
+      delegate_to: localhost
+      run_once: true
+
+    - name: Apply ingress-nginx Argo CD app
+      kubernetes.core.k8s:
+        state: present
+        src: /tmp/ingress-nginx-argocd-app.yaml
+        kubeconfig: "/etc/kubernetes/admin.conf"
+      register: apply_ingress_nginx_argocd
+      delegate_to: localhost
+      run_once: true
+
+  when: "'ingress-nginx' not in argocd_apps_list | map('lower') | list"

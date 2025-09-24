@@ -1,0 +1,83 @@
+# Copyright (c) 2022 VEXXHOST, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may
+# not use this file except in compliance with the License. You may obtain
+# a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations
+# under the License.
+
+- name: Bootstrap cluster
+  ansible.builtin.include_tasks: bootstrap-cluster.yml
+
+- name: Create folder for admin configuration
+  ansible.builtin.file:
+    path: /root/.kube
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Creating a symlink for admin configuration file
+  ansible.builtin.file:
+    src: /etc/kubernetes/admin.conf
+    dest: /root/.kube/config
+    state: link
+    force: true
+
+- name: Add bash autocomplete for kubectl
+  ansible.builtin.lineinfile:
+    path: /root/.bashrc
+    line: "source <(kubectl completion bash)"
+    insertbefore: EOF
+
+# TODO(fitbeard): Move common system packages from all roles to dedicated role.
+- name: Install PIP
+  ansible.builtin.package:
+    name:
+      - python3-pip
+      - python3-cryptography
+
+- name: Install Kubernetes python package
+  ansible.builtin.pip:
+    name: kubernetes
+
+- name: Allow workload on control plane node
+  kubernetes.core.k8s_taint:
+    state: absent
+    name: "{{ kubelet_hostname }}"
+    taints:
+      - effect: NoSchedule
+        key: node-role.kubernetes.io/control-plane
+      - effect: NoSchedule
+        key: node-role.kubernetes.io/master
+
+- name: Upgrade if necessary
+  when:
+    - kubernetes_upgrade_check_upgrade_required is defined
+    - kubernetes_upgrade_check_upgrade_required | bool
+  block:
+    - name: Start an upgrade
+      run_once: true
+      changed_when: true
+      ansible.builtin.shell: |
+        kubeadm upgrade apply --v=5 --yes v{{ kubernetes_version }}
+
+    - name: Check if the Kubernetes API services is up to date
+      ansible.builtin.command:
+        cmd: grep -q "v{{ kubernetes_version }}" /etc/kubernetes/manifests/kube-apiserver.yaml
+      changed_when: false
+      ignore_errors: true
+      register: kube_apiserver_version_check
+
+    - name: Trigger an upgrade of the Kubernetes API services
+      throttle: 1
+      changed_when: true
+      ansible.builtin.shell: |
+        kubeadm upgrade node
+      when: kube_apiserver_version_check is failed

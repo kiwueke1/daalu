@@ -1,0 +1,73 @@
+# Copyright (c) 2023 VEXXHOST, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may
+# not use this file except in compliance with the License. You may obtain
+# a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations
+# under the License.
+
+containerd_versions: "{{ containerd_archive_checksums['amd64'].keys() | list | community.general.version_sort }}"
+containerd_version: "{{ containerd_versions | last }}"
+
+containerd_archive_checksums:
+  amd64:
+    1.7.17: 04cf937349f82d29fe98553ff45a7e9ea2ed6b81fe6514e3679cf263b50409ff
+  arm64:
+    1.7.17: 8d9749985796a208e860afe331ec77cb485566104e5cc7c0b5e9e82ec7681969
+
+containerd_download_url: "https://github.com/containerd/containerd/releases/download/v{{ containerd_version }}/containerd-{{ containerd_version }}-{{ ansible_facts['system'] | lower }}-{{ download_artifact_goarch }}.tar.gz" # noqa: yaml[line-length]
+containerd_download_dest: "{{ download_artifact_work_directory }}/containerd-{{ containerd_version }}-{{ ansible_facts['system'] | lower }}-{{ download_artifact_goarch }}.tar.gz" # noqa: yaml[line-length]
+containerd_archive_checksum: "{{ containerd_archive_checksums[download_artifact_goarch][containerd_version] }}"
+
+containerd_pause_image: registry.k8s.io/pause:3.9
+containerd_insecure_registries: []
+
+# NOTE(mnaser): This is to accomodate for the uninstallation of the old packages
+#               that shipped with the operating system
+containerd_package_name: containerd
+
+containerd_binaries:
+  - containerd
+  - containerd-shim
+  - containerd-shim-runc-v1
+  - containerd-shim-runc-v2
+  - containerd-stress
+  - ctr
+
+containerd_cfg_dir: /etc/containerd
+containerd_cfg_file: "{{ containerd_cfg_dir }}/config.toml"
+containerd_storage_dir: /var/lib/containerd
+containerd_state_dir: /run/containerd
+
+# NOTE(fitbeard): The default value is not -999 here because containerd's
+#                 oom_score_adj has been set to the -999 even if
+#                 `containerd_oom_score`` is 0.
+#
+# https://github.com/kubernetes-sigs/kubespray/pull/9275#issuecomment-1246499242
+containerd_oom_score: 0
+
+containerd_debug_level: "info"
+containerd_max_container_log_line_size: -1
+
+containerd_limit_proc_num: "infinity"
+containerd_limit_core: "infinity"
+# NOTE(fitbeard): EL9 family distros set an astronomically large value for open
+#                 files (1073741816 vs 65536). So, if you are running on a rpm-based
+#                 OS that sets an extremely high open files limit, then you need to set
+#                 ulimit nofile to a more reasonable value.
+containerd_limit_open_file_num: "{{ '1048576' if ansible_facts['os_family'] == 'RedHat' else 'infinity' }}"
+containerd_limit_mem_lock: "infinity"
+
+containerd_http_proxy: "{{ http_proxy | default('') }}"
+containerd_https_proxy: "{{ https_proxy | default('') }}"
+containerd_no_proxy: "{{ no_proxy | default('') }}"
+
+# NOTE(jrosser): If you need to override the default containerd snapshotter, for example
+# when the underlying filesystem does not support overlayfs, set it here
+containerd_snapshotter: ""

@@ -1,0 +1,34 @@
+- name: Update hosts file with K8s cluster info
+  hosts: localhost
+  connection: local
+  become: true
+  roles:
+    - role: cilium_setup
+      tags: cilium
+    - role: k8s_hosts_update
+      tags: k8s
+
+
+      
+- name: Configure servers
+  hosts: servers
+  become: true
+  roles:
+    - role: apparmor_setup
+      tags: apparmor
+    - role: netplan_config
+      tags: netplan
+    - role: ssh_and_hostname
+      tags: ssh
+    - role: inotify_limits
+      tags: inotify
+    - role: istio_modules
+      tags: istio
+
+
+- name: Install Cilium CNI
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  collections:
+    - kubernetes.core

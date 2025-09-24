@@ -1,0 +1,6 @@
+kubernetes_hostname: 192.168.0.118
+kubernetes_keepalived_vip: 192.168.0.118
+kubernetes_keepalived_vrid: 42
+kubernetes_keepalived_interface: ens18
+kubeconfig_path_local: "/etc/kubernetes/admin.conf"
+kubeconfig: /etc/kubernetes/admin.conf

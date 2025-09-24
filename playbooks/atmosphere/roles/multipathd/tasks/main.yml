@@ -1,0 +1,52 @@
+# Ensure cache is fresh after adding the PPA
+- name: Add backports PPA
+  ansible.builtin.apt_repository:
+    repo: "{{ multipathd_repository }}"
+    state: present
+    update_cache: yes
+  when: ansible_distribution == 'Ubuntu' and ansible_distribution_release == 'jammy'
+
+# (Optional) Unhold in case these were previously held
+- name: Unhold multipath packages if held
+  ansible.builtin.command: apt-mark unhold multipath-tools kpartx
+  register: unhold_out
+  changed_when: "'unhold' in unhold_out.stdout or 'was already not held' in unhold_out.stdout"
+  failed_when: false
+
+# Pin both packages to the PPA so APT doesn’t mix repos
+- name: Pin multipath packages to the PPA
+  ansible.builtin.copy:
+    dest: /etc/apt/preferences.d/99-multipath-ppa.pref
+    mode: "0644"
+    content: |
+      Package: multipath-tools kpartx
+      Pin: origin "ppa.launchpad.net"
+      Pin-Priority: 1001
+
+# Update cache so pin is applied
+- name: apt update
+  ansible.builtin.apt:
+    update_cache: yes
+    cache_valid_time: 0
+
+# Install both in one transaction (from the PPA)
+- name: Install multipath packages
+  ansible.builtin.apt:
+    name:
+      - multipath-tools
+      - kpartx
+    state: latest
+    force_apt_get: yes
+  notify:
+    - Restart "multipathd"
+
+# Keep your template step
+- name: Install the configuration file
+  ansible.builtin.template:
+    src: multipath.conf.j2
+    dest: /etc/multipath.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Restart "multipathd"

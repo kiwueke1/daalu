@@ -1,0 +1,523 @@
+Running step: openstack
+[OpenStack] Running playbook: openstack.yml
+[OpenStack] Inventory: /home/kez/Documents/python_projects/daalu/daalu/cloud-config/inventory/hosts.ini
+[1;35m[WARNING]: Found variable using reserved name: tags[0m
+
+PLAY [Deploy OpenStack] ********************************************************
+
+TASK [Gathering Facts] *********************************************************
+[1;35mcore/2.17/reference_appendices/interpreter_discovery.html for more information.[0m
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [Include defaults role] ***************************************************
+[0;36mincluded: defaults for openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org[0m
+
+TASK [openstack_helm_endpoints : Retrieve list of all the needed endpoints] ****
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstack_helm_endpoints : Show openstack_helm_endpoints_list] ***********
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => {[0m
+[0;32m    "msg": "Configuring oslo.messaging for: ['oslo_cache']"[0m
+[0;32m}[0m
+
+TASK [Create RabbitMQ cluster] *************************************************
+[0;36mskipping: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstack_helm_endpoints : Grab RabbitMQ cluster secret] *****************
+[0;36mskipping: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstack_helm_endpoints : Cache fact with RabbitMQ cluster credentials] ***
+[0;36mskipping: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstack_helm_endpoints : Grab Percona XtraDB cluster secret] ***********
+[0;36mskipping: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstack_helm_endpoints : Cache fact with Percona XtraDB password] ******
+[0;36mskipping: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstack_helm_endpoints : Reset value for OpenStack_Helm endpoints] *****
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstack_helm_endpoints : Generate OpenStack-Helm endpoints] ************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => (item=oslo_cache)[0m
+
+TASK [openstack_helm_endpoints : Clean-up facts] *******************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.package : Update state for rsync] ********************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.kubernetes.upload_helm_chart : Include help chart upload method tasks] ***
+[0;36mincluded: /home/kez/.ansible/collections/ansible_collections/vexxhost/kubernetes/roles/upload_helm_chart/tasks/synchronize.yml for openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org[0m
+
+TASK [vexxhost.kubernetes.upload_helm_chart : Ensure parent directory exists] ***
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.kubernetes.upload_helm_chart : Ensure destination directory exists] ***
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.kubernetes.upload_helm_chart : Upload Helm chart] ***************
+[0;35m[DEPRECATION WARNING]: The connection's stdin object is deprecated. Call [0m
+[0;35mdisplay.prompt_until(msg) instead. This feature will be removed in version [0m
+[0;35m2.19. Deprecation warnings can be disabled by setting [0m
+[0;35mdeprecation_warnings=False in ansible.cfg.[0m
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [memcached : Deploy Helm chart] *******************************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [memcached : Apply manifests for monitoring] ******************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [Ensure Argo CD is installed and list apps] *******************************
+[0;36mincluded: common for openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org[0m
+
+TASK [common : Check if Argo CD is installed (argocd-server deployment)] *******
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org -> localhost][0m
+
+TASK [common : Print Argo CD installation status] ******************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org -> localhost] => {[0m
+[0;32m    "msg": "✅ Argo CD is installed and reachable in the cluster."[0m
+[0;32m}[0m
+
+TASK [common : Get all Argo CD Applications] ***********************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org -> localhost][0m
+
+TASK [common : Set fact with Argo CD application names] ************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org -> localhost][0m
+
+TASK [memcached : Onboard current service to Argo CD if needed] ****************
+[0;36mincluded: /home/kez/Documents/python_projects/daalu/daalu/playbooks/atmosphere/playbooks/roles/memcached/tasks/argocd_onboard.yml for openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org[0m
+
+TASK [memcached : Check if Memcached is already added to Argo CD] **************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org -> localhost] => {[0m
+[0;32m    "msg": "Memcached already onboarded to Argo CD"[0m
+[0;32m}[0m
+
+TASK [memcached : Wait for Argo CD CRDs to be available] ***********************
+[0;36mskipping: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [memcached : Download Argo CD app manifest via GitHub v3 API] *************
+[0;36mskipping: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [memcached : Write Argo CD app manifest to file] **************************
+[0;36mskipping: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [memcached : Apply Memcached Argo CD app] *********************************
+[0;36mskipping: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstacksdk : Install openstacksdk] *************************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstacksdk : Create openstack config directory] ************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstacksdk : Generate cloud config file] *******************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [Include defaults role] ***************************************************
+[0;36mincluded: defaults for openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org[0m
+
+TASK [openstack_helm_endpoints : Retrieve list of all the needed endpoints] ****
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstack_helm_endpoints : Show openstack_helm_endpoints_list] ***********
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => {[0m
+[0;32m    "msg": "Configuring oslo.messaging for: ['identity', 'oslo_cache', 'oslo_db', 'oslo_messaging']"[0m
+[0;32m}[0m
+
+TASK [Create RabbitMQ cluster] *************************************************
+[0;36mincluded: rabbitmq for openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org[0m
+
+TASK [rabbitmq : Verify state of current RabbitMQ cluster] *********************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [rabbitmq : Print diff of RabbitMQ cluster spec] **************************
+[0;36mskipping: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [rabbitmq : Wait for confirmation of RabbitMQ cluster spec] ***************
+[0;36mskipping: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [rabbitmq : Enable all feature flags for upgrade] *************************
+[0;36mskipping: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [rabbitmq : Deploy cluster] ***********************************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstack_helm_endpoints : Grab RabbitMQ cluster secret] *****************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstack_helm_endpoints : Cache fact with RabbitMQ cluster credentials] ***
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstack_helm_endpoints : Grab Percona XtraDB cluster secret] ***********
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstack_helm_endpoints : Cache fact with Percona XtraDB password] ******
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstack_helm_endpoints : Reset value for OpenStack_Helm endpoints] *****
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstack_helm_endpoints : Generate OpenStack-Helm endpoints] ************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => (item=identity)[0m
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => (item=oslo_cache)[0m
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => (item=oslo_db)[0m
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => (item=oslo_messaging)[0m
+
+TASK [openstack_helm_endpoints : Clean-up facts] *******************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.kubernetes.upload_helm_chart : Include help chart upload method tasks] ***
+[0;36mincluded: /home/kez/.ansible/collections/ansible_collections/vexxhost/kubernetes/roles/upload_helm_chart/tasks/synchronize.yml for openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org[0m
+
+TASK [vexxhost.kubernetes.upload_helm_chart : Ensure parent directory exists] ***
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.kubernetes.upload_helm_chart : Ensure destination directory exists] ***
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.kubernetes.upload_helm_chart : Upload Helm chart] ***************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [keystone : Create Keycloak realms] ***************************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => (item=atmosphere)[0m
+
+TASK [keystone : Setup Keycloak Authentication Required Actions (MFA)] *********
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => (item=atmosphere)[0m
+
+TASK [keystone : Create ConfigMap with all OpenID connect configurations] ******
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [keystone : Create Keycloak clients] **************************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => (item=None)[0m
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [keystone : Gather facts] *************************************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [keystone : Deploy Helm chart] ********************************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [Create Ingress] **********************************************************
+[0;36mincluded: openstack_helm_ingress for openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org[0m
+
+TASK [openstack_helm_ingress : Create certificate] *****************************
+[0;36mskipping: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstack_helm_ingress : Set fact with wildcard certificate] *************
+[0;36mskipping: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstack_helm_ingress : Add ClusterIssuer annotations] ******************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [Create Ingress identity] *************************************************
+[0;36mincluded: ingress for openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org[0m
+
+TASK [ingress : Create Ingress identity] ***************************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [ingress : Add MetalLB Helm repo] *****************************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [ingress : Update Helm repos] *********************************************
+[0;33mchanged: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [ingress : Deploy MetalLB using Helm] *************************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [ingress : Wait for MetalLB pods to be ready] *****************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [ingress : Copy metallb-config.yaml to remote host] ***********************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [ingress : Apply MetalLB IPAddressPool and L2Advertisement from config file] ***
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [ingress : Patch ingress service to type LoadBalancer] ********************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [keystone : Validate if ingress is reachable] *****************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [keystone : Wait until identity service ready] ****************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [keystone : Print Keystone domain variables] ******************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => {[0m
+[0;32m    "msg": {[0m
+[0;32m        "atmosphere_identity_admin_password": "undefined",[0m
+[0;32m        "atmosphere_identity_admin_project": "undefined",[0m
+[0;32m        "atmosphere_identity_admin_user": "undefined",[0m
+[0;32m        "keystone_domains": [[0m
+[0;32m            {[0m
+[0;32m                "keycloak_admin_client_id": "admin-cli",[0m
+[0;32m                "keycloak_admin_password": "Chikezie101000?",[0m
+[0;32m                "keycloak_admin_user": "admin",[0m
+[0;32m                "keycloak_client_id": "keystone",[0m
+[0;32m                "keycloak_client_secret": "Chikezie101000?",[0m
+[0;32m                "keycloak_realm": "atmosphere",[0m
+[0;32m                "keycloak_scopes": "openid email profile",[0m
+[0;32m                "keycloak_server_internal_url": "http://keycloak.auth-system.svc",[0m
+[0;32m                "keycloak_server_url": "https://kc.daalu.io",[0m
+[0;32m                "keycloak_user_realm_name": "master",[0m
+[0;32m                "label": "Atmosphere",[0m
+[0;32m                "name": "atmosphere"[0m
+[0;32m            }[0m
+[0;32m        ],[0m
+[0;32m        "openstack_auth": "undefined"[0m
+[0;32m    }[0m
+[0;32m}[0m
+
+TASK [keystone : Create Keystone domains] **************************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => (item=atmosphere)[0m
+
+TASK [keystone : Create Keystone identity providers] ***************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => (item=atmosphere)[0m
+
+TASK [keystone : Create Keystone federation mappings] **************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => (item=atmosphere)[0m
+
+TASK [keystone : Create Keystone federation protocols] *************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => (item=atmosphere)[0m
+
+TASK [Ensure Argo CD is installed and list apps] *******************************
+[0;36mincluded: common for openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org[0m
+
+TASK [common : Check if Argo CD is installed (argocd-server deployment)] *******
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org -> localhost][0m
+
+TASK [common : Print Argo CD installation status] ******************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org -> localhost] => {[0m
+[0;32m    "msg": "✅ Argo CD is installed and reachable in the cluster."[0m
+[0;32m}[0m
+
+TASK [common : Get all Argo CD Applications] ***********************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org -> localhost][0m
+
+TASK [common : Set fact with Argo CD application names] ************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org -> localhost][0m
+
+TASK [keystone : Onboard current service to Argo CD if needed] *****************
+[0;36mincluded: /home/kez/Documents/python_projects/daalu/daalu/playbooks/atmosphere/playbooks/roles/keystone/tasks/argocd_onboard.yml for openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org[0m
+
+TASK [keystone : Check if Keystone is already added to Argo CD] ****************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org -> localhost] => {[0m
+[0;32m    "msg": "Keystone already onboarded to Argo CD"[0m
+[0;32m}[0m
+
+TASK [keystone : Wait for Argo CD CRDs to be available] ************************
+[0;36mskipping: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [keystone : Download Argo CD app manifest via GitHub v3 API] **************
+[0;36mskipping: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [keystone : Write Argo CD app manifest to file] ***************************
+[0;36mskipping: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [keystone : Apply Keystone Argo CD app] ***********************************
+[0;36mskipping: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.directory : Create directory (/etc/nerdctl)] *********
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.package : Update state for tar] **********************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.directory : Create directory (/var/lib/downloads)] ***
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.download_artifact : Gather facts explicitly] *********
+[0;36mskipping: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.download_artifact : Starting download of file] *******
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => {[0m
+[0;32m    "msg": "https://github.com/containerd/nerdctl/releases/download/v1.7.4/nerdctl-1.7.4-linux-amd64.tar.gz"[0m
+[0;32m}[0m
+
+TASK [vexxhost.containers.download_artifact : Download item] *******************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.download_artifact : Extract archive] *****************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.nerdctl : Create nerdctl config] *********************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstack_cli : Uninstall OpenStack client system packages] **************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstack_cli : Uninstall Ubuntu Cloud Archive keyring] ******************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstack_cli : Remove Ubuntu Cloud Archive repository] ******************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [Generate OpenStack-Helm endpoints] ***************************************
+[0;36mincluded: openstack_helm_endpoints for openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org[0m
+
+TASK [Include defaults role] ***************************************************
+[0;36mincluded: defaults for openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org[0m
+
+TASK [openstack_helm_endpoints : Retrieve list of all the needed endpoints] ****
+[0;36mskipping: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstack_helm_endpoints : Show openstack_helm_endpoints_list] ***********
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => {[0m
+[0;32m    "msg": "Configuring oslo.messaging for: ['identity']"[0m
+[0;32m}[0m
+
+TASK [Create RabbitMQ cluster] *************************************************
+[0;36mskipping: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstack_helm_endpoints : Grab RabbitMQ cluster secret] *****************
+[0;36mskipping: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstack_helm_endpoints : Cache fact with RabbitMQ cluster credentials] ***
+[0;36mskipping: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstack_helm_endpoints : Grab Percona XtraDB cluster secret] ***********
+[0;36mskipping: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstack_helm_endpoints : Cache fact with Percona XtraDB password] ******
+[0;36mskipping: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstack_helm_endpoints : Reset value for OpenStack_Helm endpoints] *****
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstack_helm_endpoints : Generate OpenStack-Helm endpoints] ************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => (item=identity)[0m
+
+TASK [openstack_helm_endpoints : Clean-up facts] *******************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstack_cli : Generate openrc file] ************************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstack_cli : Generate openstack aliases] ******************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [Include defaults role] ***************************************************
+[0;36mincluded: defaults for openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org[0m
+
+TASK [openstack_helm_endpoints : Retrieve list of all the needed endpoints] ****
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstack_helm_endpoints : Show openstack_helm_endpoints_list] ***********
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => {[0m
+[0;32m    "msg": "Configuring oslo.messaging for: ['identity', 'oslo_db', 'oslo_messaging', 'key_manager', 'oslo_cache']"[0m
+[0;32m}[0m
+
+TASK [Create RabbitMQ cluster] *************************************************
+[0;36mincluded: rabbitmq for openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org[0m
+
+TASK [rabbitmq : Verify state of current RabbitMQ cluster] *********************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [rabbitmq : Print diff of RabbitMQ cluster spec] **************************
+[0;36mskipping: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [rabbitmq : Wait for confirmation of RabbitMQ cluster spec] ***************
+[0;36mskipping: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [rabbitmq : Enable all feature flags for upgrade] *************************
+[0;36mskipping: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [rabbitmq : Deploy cluster] ***********************************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstack_helm_endpoints : Grab RabbitMQ cluster secret] *****************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstack_helm_endpoints : Cache fact with RabbitMQ cluster credentials] ***
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstack_helm_endpoints : Grab Percona XtraDB cluster secret] ***********
+[0;36mskipping: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstack_helm_endpoints : Cache fact with Percona XtraDB password] ******
+[0;36mskipping: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstack_helm_endpoints : Reset value for OpenStack_Helm endpoints] *****
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstack_helm_endpoints : Generate OpenStack-Helm endpoints] ************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => (item=identity)[0m
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => (item=oslo_db)[0m
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => (item=oslo_messaging)[0m
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => (item=key_manager)[0m
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => (item=oslo_cache)[0m
+
+TASK [openstack_helm_endpoints : Clean-up facts] *******************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.kubernetes.upload_helm_chart : Include help chart upload method tasks] ***
+[0;36mincluded: /home/kez/.ansible/collections/ansible_collections/vexxhost/kubernetes/roles/upload_helm_chart/tasks/synchronize.yml for openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org[0m
+
+TASK [vexxhost.kubernetes.upload_helm_chart : Ensure parent directory exists] ***
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.kubernetes.upload_helm_chart : Ensure destination directory exists] ***
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.kubernetes.upload_helm_chart : Upload Helm chart] ***************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [barbican : Deploy Helm chart] ********************************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [Create Ingress] **********************************************************
+[0;36mincluded: openstack_helm_ingress for openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org[0m
+
+TASK [openstack_helm_ingress : Create certificate] *****************************
+[0;36mskipping: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstack_helm_ingress : Set fact with wildcard certificate] *************
+[0;36mskipping: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [openstack_helm_ingress : Add ClusterIssuer annotations] ******************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [Create Ingress key-manager] **********************************************
+[0;36mincluded: ingress for openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org[0m
+
+TASK [ingress : Create Ingress key-manager] ************************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [ingress : Add MetalLB Helm repo] *****************************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [ingress : Update Helm repos] *********************************************
+[0;33mchanged: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [ingress : Deploy MetalLB using Helm] *************************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [ingress : Wait for MetalLB pods to be ready] *****************************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [ingress : Copy metallb-config.yaml to remote host] ***********************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [ingress : Apply MetalLB IPAddressPool and L2Advertisement from config file] ***
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [ingress : Patch ingress service to type LoadBalancer] ********************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [barbican : Create creator role] ******************************************
+[0;31mfatal: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org]: FAILED! => {"changed": false, "module_stderr": "Shared connection to 192.168.0.175 closed.\r\n", "module_stdout": "Failed to discover available identity versions when contacting https://identity.daalu.io. Attempting to parse version from URL.\r\nTraceback (most recent call last):\r\n  File \"/usr/lib/python3/dist-packages/urllib3/connectionpool.py\", line 700, in urlopen\r\n    httplib_response = self._make_request(\r\n  File \"/usr/lib/python3/dist-packages/urllib3/connectionpool.py\", line 383, in _make_request\r\n    self._validate_conn(conn)\r\n  File \"/usr/lib/python3/dist-packages/urllib3/connectionpool.py\", line 1017, in _validate_conn\r\n    conn.connect()\r\n  File \"/usr/lib/python3/dist-packages/urllib3/connection.py\", line 411, in connect\r\n    self.sock = ssl_wrap_socket(\r\n  File \"/usr/lib/python3/dist-packages/urllib3/util/ssl_.py\", line 449, in ssl_wrap_socket\r\n    ssl_sock = _ssl_wrap_socket_impl(\r\n  File \"/usr/lib/python3/dist-packages/urllib3/util/ssl_.py\", line 493, in _ssl_wrap_socket_impl\r\n    return ssl_context.wrap_socket(sock, server_hostname=server_hostname)\r\n  File \"/usr/lib/python3.10/ssl.py\", line 513, in wrap_socket\r\n    return self.sslsocket_class._create(\r\n  File \"/usr/lib/python3.10/ssl.py\", line 1100, in _create\r\n    self.do_handshake()\r\n  File \"/usr/lib/python3.10/ssl.py\", line 1371, in do_handshake\r\n    self._sslobj.do_handshake()\r\nssl.SSLCertVerificationError: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1007)\r\n\r\nDuring handling of the above exception, another exception occurred:\r\n\r\nTraceback (most recent call last):\r\n  File \"/usr/lib/python3/dist-packages/requests/adapters.py\", line 439, in send\r\n    resp = conn.urlopen(\r\n  File \"/usr/lib/python3/dist-packages/urllib3/connectionpool.py\", line 756, in urlopen\r\n    retries = retries.increment(\r\n  File \"/usr/lib/python3/dist-packages/urllib3/util/retry.py\", line 576, in increment\r\n    raise MaxRetryError(_pool, url, error or ResponseError(cause))\r\nurllib3.exceptions.MaxRetryError: HTTPSConnectionPool(host='identity.daalu.io', port=443): Max retries exceeded with url: / (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1007)')))\r\n\r\nDuring handling of the above exception, another exception occurred:\r\n\r\nTraceback (most recent call last):\r\n  File \"/usr/local/lib/python3.10/dist-packages/keystoneauth1/session.py\", line 1161, in _send_request\r\n    resp = self.session.request(method, url, **kwargs)\r\n  File \"/usr/lib/python3/dist-packages/requests/sessions.py\", line 544, in request\r\n    resp = self.send(prep, **send_kwargs)\r\n  File \"/usr/lib/python3/dist-packages/requests/sessions.py\", line 657, in send\r\n    r = adapter.send(request, **kwargs)\r\n  File \"/usr/lib/python3/dist-packages/requests/adapters.py\", line 514, in send\r\n    raise SSLError(e, request=request)\r\nrequests.exceptions.SSLError: HTTPSConnectionPool(host='identity.daalu.io', port=443): Max retries exceeded with url: / (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1007)')))\r\n\r\nDuring handling of the above exception, another exception occurred:\r\n\r\nTraceback (most recent call last):\r\n  File \"/usr/local/lib/python3.10/dist-packages/keystoneauth1/identity/generic/base.py\", line 135, in _do_create_plugin\r\n    disc = self.get_discovery(\r\n  File \"/usr/local/lib/python3.10/dist-packages/keystoneauth1/identity/base.py\", line 703, in get_discovery\r\n    return discover.get_discovery(\r\n  File \"/usr/local/lib/python3.10/dist-packages/keystoneauth1/discover.py\", line 1746, in get_discovery\r\n    disc = Discover(session, url, authenticated=authenticated)\r\n  File \"/usr/local/lib/python3.10/dist-packages/keystoneauth1/discover.py\", line 583, in __init__\r\n    self._data = get_version_data(\r\n  File \"/usr/local/lib/python3.10/dist-packages/keystoneauth1/discover.py\", line 112, in get_version_data\r\n    resp = session.get(url, headers=headers, authenticated=authenticated)\r\n  File \"/usr/local/lib/python3.10/dist-packages/keystoneauth1/session.py\", line 1312, in get\r\n    return self.request(url, 'GET', **kwargs)\r\n  File \"/usr/local/lib/python3.10/dist-packages/keystoneauth1/session.py\", line 1049, in request\r\n    resp = send(**kwargs)\r\n  File \"/usr/local/lib/python3.10/dist-packages/keystoneauth1/session.py\", line 1164, in _send_request\r\n    raise exceptions.SSLError(msg)\r\nkeystoneauth1.exceptions.connection.SSLError: SSL exception connecting to https://identity.daalu.io: HTTPSConnectionPool(host='identity.daalu.io', port=443): Max retries exceeded with url: / (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1007)')))\r\n\r\nDuring handling of the above exception, another exception occurred:\r\n\r\nTraceback (most recent call last):\r\n  File \"/home/kez/.ansible/tmp/ansible-tmp-1758589385.884983-188495-104420299669183/AnsiballZ_identity_role.py\", line 107, in <module>\r\n    _ansiballz_main()\r\n  File \"/home/kez/.ansible/tmp/ansible-tmp-1758589385.884983-188495-104420299669183/AnsiballZ_identity_role.py\", line 99, in _ansiballz_main\r\n    invoke_module(zipped_mod, temp_path, ANSIBALLZ_PARAMS)\r\n  File \"/home/kez/.ansible/tmp/ansible-tmp-1758589385.884983-188495-104420299669183/AnsiballZ_identity_role.py\", line 47, in invoke_module\r\n    runpy.run_module(mod_name='ansible_collections.openstack.cloud.plugins.modules.identity_role', init_globals=dict(_module_fqn='ansible_collections.openstack.cloud.plugins.modules.identity_role', _modlib_path=modlib_path),\r\n  File \"/usr/lib/python3.10/runpy.py\", line 224, in run_module\r\n    return _run_module_code(code, init_globals, run_name, mod_spec)\r\n  File \"/usr/lib/python3.10/runpy.py\", line 96, in _run_module_code\r\n    _run_code(code, mod_globals, init_globals,\r\n  File \"/usr/lib/python3.10/runpy.py\", line 86, in _run_code\r\n    exec(code, run_globals)\r\n  File \"/tmp/ansible_openstack.cloud.identity_role_payload_acpbr_1c/ansible_openstack.cloud.identity_role_payload.zip/ansible_collections/openstack/cloud/plugins/modules/identity_role.py\", line 137, in <module>\r\n  File \"/tmp/ansible_openstack.cloud.identity_role_payload_acpbr_1c/ansible_openstack.cloud.identity_role_payload.zip/ansible_collections/openstack/cloud/plugins/modules/identity_role.py\", line 133, in main\r\n  File \"/tmp/ansible_openstack.cloud.identity_role_payload_acpbr_1c/ansible_openstack.cloud.identity_role_payload.zip/ansible_collections/openstack/cloud/plugins/module_utils/openstack.py\", line 417, in __call__\r\n  File \"/tmp/ansible_openstack.cloud.identity_role_payload_acpbr_1c/ansible_openstack.cloud.identity_role_payload.zip/ansible_collections/openstack/cloud/plugins/modules/identity_role.py\", line 104, in run\r\n  File \"/tmp/ansible_openstack.cloud.identity_role_payload_acpbr_1c/ansible_openstack.cloud.identity_role_payload.zip/ansible_collections/openstack/cloud/plugins/module_utils/resource.py\", line 40, in __init__\r\n  File \"/usr/local/lib/python3.10/dist-packages/openstack/service_description.py\", line 91, in __get__\r\n    proxy = self._make_proxy(instance)\r\n  File \"/usr/local/lib/python3.10/dist-packages/openstack/service_description.py\", line 289, in _make_proxy\r\n    found_version = temp_adapter.get_api_major_version()\r\n  File \"/usr/local/lib/python3.10/dist-packages/keystoneauth1/adapter.py\", line 404, in get_api_major_version\r\n    return self.session.get_api_major_version(auth or self.auth, **kwargs)\r\n  File \"/usr/local/lib/python3.10/dist-packages/keystoneauth1/session.py\", line 1470, in get_api_major_version\r\n    return auth.get_api_major_version(self, **kwargs)\r\n  File \"/usr/local/lib/python3.10/dist-packages/keystoneauth1/identity/base.py\", line 573, in get_api_major_version\r\n    data = get_endpoint_data(discover_versions=discover_versions)\r\n  File \"/usr/local/lib/python3.10/dist-packages/keystoneauth1/identity/base.py\", line 296, in get_endpoint_data\r\n    service_catalog = self.get_access(session).service_catalog\r\n  File \"/usr/local/lib/python3.10/dist-packages/keystoneauth1/identity/base.py\", line 139, in get_access\r\n    self.auth_ref = self.get_auth_ref(session)\r\n  File \"/usr/local/lib/python3.10/dist-packages/keystoneauth1/identity/generic/base.py\", line 220, in get_auth_ref\r\n    plugin = self._do_create_plugin(session)\r\n  File \"/usr/local/lib/python3.10/dist-packages/keystoneauth1/identity/generic/base.py\", line 162, in _do_create_plugin\r\n    raise exceptions.DiscoveryFailure(\r\nkeystoneauth1.exceptions.discovery.DiscoveryFailure: Could not find versioned identity endpoints when attempting to authenticate. Please check that your auth_url is correct. SSL exception connecting to https://identity.daalu.io: HTTPSConnectionPool(host='identity.daalu.io', port=443): Max retries exceeded with url: / (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1007)')))\r\n", "msg": "MODULE FAILURE\nSee stdout/stderr for the exact error", "rc": 1}[0m
+
+PLAY RECAP *********************************************************************
+[0;31mopenstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org[0m : [0;32mok=117 [0m [0;33mchanged=2   [0m unreachable=0    [0;31mfailed=1   [0m [0;36mskipped=32  [0m rescued=0    ignored=0   
+Traceback (most recent call last):
+  File "/home/kez/Documents/python_projects/daalu/daalu/main_with_tags.py", line 109, in <module>
+    deploy_all(tags)
+  File "/home/kez/Documents/python_projects/daalu/daalu/main_with_tags.py", line 73, in deploy_all
+    steps[tag].deploy(str(inventory))
+  File "/home/kez/Documents/python_projects/daalu/daalu/src/daalu/openstack/deployer.py", line 12, in deploy
+    return self.run("openstack.yml", inventory, tags, extra_vars)
+  File "/home/kez/Documents/python_projects/daalu/daalu/src/daalu/core/deployer.py", line 33, in run
+    raise RuntimeError(f"{self.name} deployment failed: {rc.status}")
+RuntimeError: OpenStack deployment failed: failed

@@ -1,0 +1,27 @@
+Running step: cluster_api
+[ClusterAPI] Applying /home/kez/Documents/python_projects/daalu/daalu/playbooks/cluster-api/openstack-cluster-api-secret.yaml ...
+secret/openstack-infra-proxmox-secret configured
+[ClusterAPI] Applying /home/kez/Documents/python_projects/daalu/daalu/playbooks/cluster-api/openstack-cluster-api.yaml ...
+Traceback (most recent call last):
+  File "/home/kez/Documents/python_projects/daalu/daalu/main_with_tags.py", line 109, in <module>
+    deploy_all(tags)
+  File "/home/kez/Documents/python_projects/daalu/daalu/main_with_tags.py", line 73, in deploy_all
+    steps[tag].deploy(str(inventory))
+  File "/home/kez/Documents/python_projects/daalu/daalu/src/daalu/bootstrap/cluster_api_deployer.py", line 26, in deploy
+    raise RuntimeError(f"[ClusterAPI] Failed to apply {manifest}:\n{result.stderr}")
+RuntimeError: [ClusterAPI] Failed to apply /home/kez/Documents/python_projects/daalu/daalu/playbooks/cluster-api/openstack-cluster-api.yaml:
+resource mapping not found for name: "openstack-infra" namespace: "default" from "/home/kez/Documents/python_projects/daalu/daalu/playbooks/cluster-api/openstack-cluster-api.yaml": no matches for kind "Cluster" in version "cluster.x-k8s.io/v1beta1"
+ensure CRDs are installed first
+resource mapping not found for name: "openstack-infra" namespace: "default" from "/home/kez/Documents/python_projects/daalu/daalu/playbooks/cluster-api/openstack-cluster-api.yaml": no matches for kind "ProxmoxCluster" in version "infrastructure.cluster.x-k8s.io/v1alpha1"
+ensure CRDs are installed first
+resource mapping not found for name: "openstack-infra-control-plane" namespace: "default" from "/home/kez/Documents/python_projects/daalu/daalu/playbooks/cluster-api/openstack-cluster-api.yaml": no matches for kind "KubeadmControlPlane" in version "controlplane.cluster.x-k8s.io/v1beta1"
+ensure CRDs are installed first
+resource mapping not found for name: "openstack-infra-control-plane" namespace: "default" from "/home/kez/Documents/python_projects/daalu/daalu/playbooks/cluster-api/openstack-cluster-api.yaml": no matches for kind "ProxmoxMachineTemplate" in version "infrastructure.cluster.x-k8s.io/v1alpha1"
+ensure CRDs are installed first
+resource mapping not found for name: "openstack-infra-workers" namespace: "default" from "/home/kez/Documents/python_projects/daalu/daalu/playbooks/cluster-api/openstack-cluster-api.yaml": no matches for kind "MachineDeployment" in version "cluster.x-k8s.io/v1beta1"
+ensure CRDs are installed first
+resource mapping not found for name: "openstack-infra-worker" namespace: "default" from "/home/kez/Documents/python_projects/daalu/daalu/playbooks/cluster-api/openstack-cluster-api.yaml": no matches for kind "ProxmoxMachineTemplate" in version "infrastructure.cluster.x-k8s.io/v1alpha1"
+ensure CRDs are installed first
+resource mapping not found for name: "openstack-infra-worker" namespace: "default" from "/home/kez/Documents/python_projects/daalu/daalu/playbooks/cluster-api/openstack-cluster-api.yaml": no matches for kind "KubeadmConfigTemplate" in version "bootstrap.cluster.x-k8s.io/v1beta1"
+ensure CRDs are installed first
+

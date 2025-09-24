@@ -1,0 +1,11 @@
+[1;35m[WARNING]: Found variable using reserved name: tags[0m
+[0;31mERROR! 'delegate_to' is not a valid attribute for a IncludeRole[0m
+[0;31m[0m
+[0;31mThe error appears to be in '/home/kez/Documents/python_projects/daalu/daalu/playbooks/atmosphere/playbooks/roles/jenkins/tasks/main.yml': line 40, column 3, but may[0m
+[0;31mbe elsewhere in the file depending on the exact syntax problem.[0m
+[0;31m[0m
+[0;31mThe offending line appears to be:[0m
+[0;31m[0m
+[0;31m[0m
+[0;31m- name: Ensure Argo CD is installed and list apps[0m
+[0;31m  ^ here[0m

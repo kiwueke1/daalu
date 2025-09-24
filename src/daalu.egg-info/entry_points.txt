@@ -1,0 +1,2 @@
+[console_scripts]
+daalu-deploy = daalu.main:deploy_all

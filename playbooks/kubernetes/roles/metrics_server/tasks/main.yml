@@ -1,0 +1,25 @@
+- name: Add metrics-server Helm repo
+  community.kubernetes.helm_repository:
+    name: metrics-server
+    repo_url: https://kubernetes-sigs.github.io/metrics-server/
+
+- name: Create kube-system namespace if it does not exist
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: kube-system
+
+- name: Install metrics-server Helm chart
+  community.kubernetes.helm:
+    name: metrics-server
+    chart_ref: metrics-server/metrics-server
+    release_namespace: kube-system
+    create_namespace: false
+    wait: true
+    values:
+      args:
+        - --kubelet-insecure-tls
+        - --kubelet-preferred-address-types=InternalIP,Hostname,ExternalIP

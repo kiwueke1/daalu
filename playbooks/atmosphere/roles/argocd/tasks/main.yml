@@ -1,0 +1,115 @@
+---
+# Install Argo CD using deployKF-style Kustomize overlay
+
+# 1) Ensure namespace
+- name: Ensure Argo CD namespace exists
+  delegate_to: localhost
+  run_once: true
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ argocd_namespace }}"
+    kubeconfig: "{{ argocd_local_kubeconfig }}"
+
+# 2) Verify kustomize dir exists and has kustomization.yaml
+- name: Check argocd_kustomize_dir exists
+  delegate_to: localhost
+  run_once: true
+  ansible.builtin.stat:
+    path: "{{ argocd_kustomize_dir }}"
+  register: _kustomize_dir
+
+- name: Fail if argocd_kustomize_dir is missing
+  delegate_to: localhost
+  run_once: true
+  ansible.builtin.fail:
+    msg: "argocd_kustomize_dir not found: {{ argocd_kustomize_dir }}"
+  when: not _kustomize_dir.stat.exists
+
+- name: Check kustomization.yaml exists
+  delegate_to: localhost
+  run_once: true
+  ansible.builtin.stat:
+    path: "{{ argocd_kustomize_dir }}/kustomization.yaml"
+  register: _kustomization_yaml
+
+- name: Fail if kustomization.yaml is missing
+  delegate_to: localhost
+  run_once: true
+  ansible.builtin.fail:
+    msg: "kustomization.yaml not found in {{ argocd_kustomize_dir }}"
+  when: not _kustomization_yaml.stat.exists
+
+# 3) Render manifests with kubectl kustomize
+- name: Render Argo CD manifests via kubectl kustomize
+  delegate_to: localhost
+  run_once: true
+  ansible.builtin.command: >
+    kubectl kustomize {{ argocd_kustomize_dir }}
+  register: _argocd_rendered
+  changed_when: false
+
+# 4) Apply rendered manifests
+- name: Apply Argo CD manifests
+  delegate_to: localhost
+  run_once: true
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ _argocd_rendered.stdout | from_yaml_all | list }}"
+    kubeconfig: "{{ argocd_local_kubeconfig }}"
+    namespace: "{{ argocd_namespace }}"
+
+
+# 5) Check argocd-server deployment
+- name: Get argocd-server deployment
+  delegate_to: localhost
+  run_once: true
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: argocd-server
+    namespace: "{{ argocd_namespace }}"
+    kubeconfig: "{{ argocd_local_kubeconfig }}"
+  register: argocd_server_dep
+  until:
+    - argocd_server_dep.resources | length > 0
+    - (argocd_server_dep.resources[0].status.availableReplicas | default(0)) >= 1
+  retries: 30
+  delay: 10
+
+
+- name: Patch argocd-server service to type LoadBalancer
+  delegate_to: localhost
+  run_once: true
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: argocd-server
+        namespace: "{{ argocd_namespace }}"
+      spec:
+        type: LoadBalancer
+    kubeconfig: "{{ argocd_local_kubeconfig }}"
+
+# 6) CLI login (admin secret + service discovery)
+#- name: Log into Argo CD CLI
+#  ansible.builtin.include_tasks: argocd_cli_login.yml
+
+# 7) Optionally add your Git repo (SSH)
+#- name: Add Git repository to Argo CD via SSH key
+#  delegate_to: localhost
+#  run_once: true
+#  when: argocd_repo_url is defined and argocd_repo_ssh_private_key_path is defined
+#  ansible.builtin.command: >
+#    {{ argocd_cli_path }} repo add {{ argocd_repo_url }}
+#    --type git
+#    --ssh-private-key-path {{ argocd_repo_ssh_private_key_path }}
+#  environment:
+#    KUBECONFIG: "{{ argocd_local_kubeconfig }}"
+#  register: _repo_add
+#  changed_when: "'repository added' in (_repo_add.stdout | default('')) or 'already exists' in (_repo_add.stdout | default(''))"

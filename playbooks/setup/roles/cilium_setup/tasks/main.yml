@@ -1,0 +1,131 @@
+---
+- name: Create temporary directory for kubeconfig
+  file:
+    path: /var/lib/tmp
+    state: directory
+    mode: '0777'
+  delegate_to: localhost
+  run_once: true
+
+- name: Create temporary directory for kubeconfig
+  file:
+    path: /etc/kubernetes
+    state: directory
+    mode: '0777'
+  delegate_to: localhost
+  run_once: true
+
+- name: Generate kubeconfig on local machine
+  shell: clusterctl get kubeconfig openstack-infra > /var/lib/tmp/kubeconfig
+  delegate_to: localhost
+  run_once: true
+
+- name: Generate kubeconfig on local machine
+  shell: clusterctl get kubeconfig openstack-infra > /etc/kubernetes/admin.conf
+  delegate_to: localhost
+  run_once: true
+
+- name: Get control plane endpoint
+  shell: |
+    kubectl --kubeconfig /etc/kubernetes/admin.conf get nodes -l node-role.kubernetes.io/control-plane -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}'
+  register: control_plane_ip
+  delegate_to: localhost
+  run_once: true
+
+- name: Add Cilium helm repository
+  kubernetes.core.helm_repository:
+    name: cilium
+    repo_url: https://helm.cilium.io/
+  delegate_to: localhost
+  run_once: true
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+- name: Install Cilium using Helm
+  kubernetes.core.helm:
+    kubeconfig: /etc/kubernetes/admin.conf
+    name: cilium
+    chart_ref: cilium/cilium
+    release_namespace: kube-system
+    create_namespace: true
+    values:
+      ipam:
+        mode: kubernetes
+      kubeProxyReplacement: true
+      k8sServiceHost: "{{ control_plane_ip.stdout }}"
+      k8sServicePort: 6443
+      hostServices:
+        enabled: true
+      externalIPs:
+        enabled: true
+      nodePort:
+        enabled: true
+      hostPort:
+        enabled: true
+      image:
+        pullPolicy: IfNotPresent
+      operator:
+        replicas: 1
+      prometheus:
+        enabled: true
+      hubble:
+        enabled: true
+        relay:
+          enabled: true
+        ui:
+          enabled: true
+  delegate_to: localhost
+  run_once: true
+  environment:
+    KUBECONFIG: /var/lib/tmp/kubeconfig
+
+- name: Get Cilium pod status
+  shell: kubectl --kubeconfig /var/lib/tmp/kubeconfig get pods -n kube-system -l k8s-app=cilium -o wide
+  register: pod_status_check
+  delegate_to: localhost
+  run_once: true
+
+- name: Debug pod status
+  debug:
+    var: pod_status_check.stdout_lines
+
+- name: Wait for Cilium pods to be ready
+  shell: |
+    kubectl --kubeconfig /var/lib/tmp/kubeconfig get pods -n kube-system -l k8s-app=cilium -o json | \
+    jq -r '.items | map(select(.status.phase=="Running" and (.status.containerStatuses | all(.ready==true)))) | length'
+  register: ready_pods
+  until: ready_pods.stdout | int >= 5  # We expect 5 pods based on the previous output
+  retries: 30
+  delay: 10
+  delegate_to: localhost
+  run_once: true
+
+- name: Install Cilium CLI
+  get_url:
+    url: https://github.com/cilium/cilium-cli/releases/latest/download/cilium-linux-amd64.tar.gz
+    dest: /tmp/cilium.tar.gz
+  delegate_to: localhost
+  run_once: true
+
+- name: Extract Cilium CLI
+  unarchive:
+    src: /tmp/cilium.tar.gz
+    dest: /usr/local/bin/
+    remote_src: yes
+  become: true
+  delegate_to: localhost
+  run_once: true
+
+- name: Run Cilium status check
+  shell: timeout 30s cilium status
+  delegate_to: localhost
+  run_once: true
+  register: cilium_status
+  changed_when: false
+  ignore_errors: true  # We'll still see the status in the debug output
+
+- name: Display Cilium status
+  debug:
+    var: cilium_status.stdout_lines
+  delegate_to: localhost
+  run_once: true

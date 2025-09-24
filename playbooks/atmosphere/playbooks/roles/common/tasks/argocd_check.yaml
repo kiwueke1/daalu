@@ -1,0 +1,46 @@
+- name: Check if Argo CD is installed (argocd-server deployment)
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    namespace: argocd
+    name: argocd-server
+    kubeconfig: "/var/lib/tmp/kubeconfig"
+  register: argocd_server_deployment
+  failed_when: false
+  delegate_to: localhost
+  run_once: true
+
+- name: Print Argo CD installation status
+  ansible.builtin.debug:
+    msg: >-
+      {{
+        '✅ Argo CD is installed and reachable in the cluster.'
+        if (argocd_server_deployment.resources | default([])) | length > 0
+        else '❌ Argo CD is NOT installed or NOT reachable in the cluster.'
+      }}
+  delegate_to: localhost
+  run_once: true
+
+#- name: Fail if Argo CD is not installed
+#  ansible.builtin.fail:
+#    msg: "Argo CD is not installed or not reachable in the cluster."
+#  when: argocd_server_deployment.resources | length == 0
+#  delegate_to: localhost
+#  run_once: true
+
+- name: Get all Argo CD Applications
+  kubernetes.core.k8s_info:
+    api_version: argoproj.io/v1alpha1
+    kind: Application
+    namespace: "{{ argocd_namespace | default('argocd') }}"
+    kubeconfig: "/var/lib/tmp/kubeconfig"
+  register: argocd_applications_raw
+  delegate_to: localhost
+  run_once: true
+
+- name: Set fact with Argo CD application names
+  ansible.builtin.set_fact:
+    argocd_apps_list: >-
+      {{ argocd_applications_raw.resources | map(attribute='metadata.name') | list }}
+  delegate_to: localhost
+  run_once: true

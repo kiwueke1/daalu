@@ -1,0 +1,75 @@
+---
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+  become: true
+
+- name: Enable required repositories
+  apt_repository:
+    repo: "{{ item }}"
+    state: present
+  loop:
+    - "deb http://archive.ubuntu.com/ubuntu {{ ansible_distribution_release }} main universe"
+    - "deb http://archive.ubuntu.com/ubuntu {{ ansible_distribution_release }}-updates main universe"
+    - "deb http://security.ubuntu.com/ubuntu {{ ansible_distribution_release }}-security main universe"
+  become: true
+
+- name: Install required packages
+  apt:
+    name:
+      - apparmor
+      - apparmor-utils
+      - python3-pip
+      - python3-setuptools
+    state: present
+  become: true
+
+- name: Ensure AppArmor service is enabled and running
+  systemd:
+    name: apparmor
+    enabled: yes
+    state: started
+  become: true
+
+- name: Install Kubernetes Python client
+  pip:
+    name: kubernetes
+    executable: pip3
+  become: true
+
+- name: Create temporary directory for kubeconfig
+  file:
+    path: ~/tmp
+    state: directory
+    mode: '0700'
+  delegate_to: localhost
+  run_once: true
+
+- name: Generate kubeconfig on local machine
+  shell: clusterctl get kubeconfig openstack-infra > ~/tmp/kubeconfig
+  delegate_to: localhost
+  run_once: true
+
+- name: Read kubeconfig content
+  slurp:
+    src: ~/tmp/kubeconfig
+  register: kubeconfig_content
+  delegate_to: localhost
+  run_once: true
+
+- name: Ensure .kube directory exists on kubernetes nodes
+  file:
+    path: "/home/{{ ansible_user }}/.kube"
+    state: directory
+    mode: '0700'
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+
+- name: Copy kubeconfig to kubernetes nodes
+  copy:
+    content: "{{ kubeconfig_content['content'] | b64decode }}"
+    dest: "/home/{{ ansible_user }}/.kube/config"
+    mode: '0600'
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"

@@ -1,0 +1,54 @@
+Running sub-tag 'jenkins' inside 'infrastructure' playbook...
+[Infrastructure] Running playbook: infrastructure.yml
+[Infrastructure] Inventory: /home/kez/Documents/python_projects/daalu/daalu/cloud-config/inventory/hosts.ini
+[Infrastructure] Tags: jenkins
+[1;35m[WARNING]: Found variable using reserved name: tags[0m
+
+PLAY [Deploy Infrastructure] ***************************************************
+
+TASK [Gathering Facts] *********************************************************
+[1;35mcore/2.17/reference_appendices/interpreter_discovery.html for more information.[0m
+[0;32mok: [openstack-infra-control-plane-q2mhs.kez-ironcloud.duckdns.org][0m
+[1;35mcore/2.17/reference_appendices/interpreter_discovery.html for more information.[0m
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+[1;35mcore/2.17/reference_appendices/interpreter_discovery.html for more information.[0m
+[0;32mok: [openstack-infra-control-plane-nn9tr.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.containers.package : Update state for rsync] ********************
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-control-plane-nn9tr.kez-ironcloud.duckdns.org][0m
+[0;32mok: [openstack-infra-control-plane-q2mhs.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.kubernetes.upload_helm_chart : Include help chart upload method tasks] ***
+[0;36mincluded: /home/kez/.ansible/collections/ansible_collections/vexxhost/kubernetes/roles/upload_helm_chart/tasks/synchronize.yml for openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org, openstack-infra-control-plane-nn9tr.kez-ironcloud.duckdns.org, openstack-infra-control-plane-q2mhs.kez-ironcloud.duckdns.org[0m
+
+TASK [vexxhost.kubernetes.upload_helm_chart : Ensure parent directory exists] ***
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.kubernetes.upload_helm_chart : Ensure destination directory exists] ***
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [vexxhost.kubernetes.upload_helm_chart : Upload Helm chart] ***************
+[0;35m[DEPRECATION WARNING]: The connection's stdin object is deprecated. Call [0m
+[0;35mdisplay.prompt_until(msg) instead. This feature will be removed in version [0m
+[0;35m2.19. Deprecation warnings can be disabled by setting [0m
+[0;35mdeprecation_warnings=False in ansible.cfg.[0m
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+
+TASK [jenkins : Create Jenkins Service Account and RBAC] ***********************
+[0;31mfatal: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org -> localhost]: FAILED! => {"changed": false, "msg": "Failed to create object: b'{\"kind\":\"Status\",\"apiVersion\":\"v1\",\"metadata\":{},\"status\":\"Failure\",\"message\":\"namespaces \\\\\"devops-tools\\\\\" not found\",\"reason\":\"NotFound\",\"details\":{\"name\":\"devops-tools\",\"kind\":\"namespaces\"},\"code\":404}\\n'", "reason": "Not Found"}[0m
+
+PLAY RECAP *********************************************************************
+[0;31mopenstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org[0m : [0;32mok=6   [0m changed=0    unreachable=0    [0;31mfailed=1   [0m skipped=0    rescued=0    ignored=0   
+[0;32mopenstack-infra-control-plane-nn9tr.kez-ironcloud.duckdns.org[0m : [0;32mok=3   [0m changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+[0;32mopenstack-infra-control-plane-q2mhs.kez-ironcloud.duckdns.org[0m : [0;32mok=3   [0m changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+Traceback (most recent call last):
+  File "/home/kez/Documents/python_projects/daalu/daalu/main.py", line 114, in <module>
+    deploy_all(tags)
+  File "/home/kez/Documents/python_projects/daalu/daalu/main.py", line 84, in deploy_all
+    steps[parent].deploy(str(inventory), tags=[tag])
+  File "/home/kez/Documents/python_projects/daalu/daalu/src/daalu/infrastructure/deployer.py", line 12, in deploy
+    return self.run("infrastructure.yml", inventory, tags, extra_vars)
+  File "/home/kez/Documents/python_projects/daalu/daalu/src/daalu/core/deployer.py", line 33, in run
+    raise RuntimeError(f"{self.name} deployment failed: {rc.status}")
+RuntimeError: Infrastructure deployment failed: failed

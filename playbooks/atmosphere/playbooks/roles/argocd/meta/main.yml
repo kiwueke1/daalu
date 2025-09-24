@@ -1,0 +1,12 @@
+galaxy_info:
+  author: Your Name or Org
+  description: Install Argo CD using deployKF-style Kustomize overlay (with plugin)
+  license: Apache-2.0
+  min_ansible_version: "5.5.0"
+  standalone: false
+  platforms:
+    - name: Ubuntu
+      versions: [focal, jammy]
+
+dependencies:
+  - role: defaults

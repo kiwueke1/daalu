@@ -1,0 +1,52 @@
+# Copyright (c) 2024 VEXXHOST, Inc.
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Create Thanos object store secret
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ atmosphere_kubeconfig }}"
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: thanos-objstore
+        namespace: "{{ thanos_helm_release_namespace }}"
+      stringData:
+        objstore.yml: |
+          type: s3
+          config:
+            bucket: "{{ thanos_s3_bucket }}"
+            endpoint: "{{ thanos_s3_endpoint }}"
+            access_key: "{{ thanos_s3_access_key }}"
+            secret_key: "{{ thanos_s3_secret_key }}"
+            insecure: true
+
+- name: Wait for secret to be available
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Secret
+    name: thanos-objstore
+    namespace: "{{ thanos_helm_release_namespace }}"
+    kubeconfig: "{{ atmosphere_kubeconfig }}"
+  register: thanos_secret
+  until: thanos_secret.resources is defined and (thanos_secret.resources | length > 0)
+  retries: 10
+  delay: 5
+
+- name: Deploy Helm chart
+  run_once: true
+  kubernetes.core.helm:
+    name: "{{ thanos_helm_release_name }}"
+    chart_ref: "{{ thanos_helm_chart_ref }}"
+    release_namespace: "{{ thanos_helm_release_namespace }}"
+    create_namespace: true
+    kubeconfig: "{{ atmosphere_kubeconfig }}"
+    values: "{{ _thanos_helm_values | combine(thanos_helm_values, recursive=True) }}"
+
+- name: Ensure Argo CD is installed and list apps
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: argocd_check
+
+- name: Onboard current service to Argo CD if needed
+  ansible.builtin.include_tasks: argocd_onboard.yml

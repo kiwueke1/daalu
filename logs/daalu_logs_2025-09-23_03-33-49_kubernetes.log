@@ -1,0 +1,154 @@
+Running step: kubernetes
+[Kubernetes] Running playbook: kubernetes.yml
+[Kubernetes] Inventory: /home/kez/Documents/python_projects/daalu/daalu/cloud-config/inventory/hosts.ini
+[1;35m[WARNING]: Found variable using reserved name: tags[0m
+
+PLAY [all] *********************************************************************
+
+TASK [Gathering Facts] *********************************************************
+[1;35mcore/2.17/reference_appendices/interpreter_discovery.html for more information.[0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org][0m
+[1;35mcore/2.17/reference_appendices/interpreter_discovery.html for more information.[0m
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org][0m
+[1;35mcore/2.17/reference_appendices/interpreter_discovery.html for more information.[0m
+[0;32mok: [openstack-infra-control-plane-q2mhs.kez-ironcloud.duckdns.org][0m
+[1;35mcore/2.17/reference_appendices/interpreter_discovery.html for more information.[0m
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+[1;35mcore/2.17/reference_appendices/interpreter_discovery.html for more information.[0m
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org][0m
+[1;35mcore/2.17/reference_appendices/interpreter_discovery.html for more information.[0m
+[0;32mok: [openstack-infra-control-plane-nn9tr.kez-ironcloud.duckdns.org][0m
+[1;35mcore/2.17/reference_appendices/interpreter_discovery.html for more information.[0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org][0m
+
+TASK [sysctl : Configure sysctl values] ****************************************
+[0;32mok: [openstack-infra-control-plane-q2mhs.kez-ironcloud.duckdns.org] => (item={'name': 'fs.aio-max-nr', 'value': 1048576})[0m
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => (item={'name': 'fs.aio-max-nr', 'value': 1048576})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org] => (item={'name': 'fs.aio-max-nr', 'value': 1048576})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org] => (item={'name': 'fs.aio-max-nr', 'value': 1048576})[0m
+[0;32mok: [openstack-infra-control-plane-nn9tr.kez-ironcloud.duckdns.org] => (item={'name': 'fs.aio-max-nr', 'value': 1048576})[0m
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.tcp_timestamps', 'value': 0})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.tcp_timestamps', 'value': 0})[0m
+[0;32mok: [openstack-infra-control-plane-q2mhs.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.tcp_timestamps', 'value': 0})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.tcp_timestamps', 'value': 0})[0m
+[0;32mok: [openstack-infra-control-plane-nn9tr.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.tcp_timestamps', 'value': 0})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.tcp_sack', 'value': 1})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.tcp_sack', 'value': 1})[0m
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.tcp_sack', 'value': 1})[0m
+[0;32mok: [openstack-infra-control-plane-q2mhs.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.tcp_sack', 'value': 1})[0m
+[0;32mok: [openstack-infra-control-plane-nn9tr.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.tcp_sack', 'value': 1})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.netdev_budget', 'value': 1000})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.netdev_budget', 'value': 1000})[0m
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.netdev_budget', 'value': 1000})[0m
+[0;32mok: [openstack-infra-control-plane-q2mhs.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.netdev_budget', 'value': 1000})[0m
+[0;32mok: [openstack-infra-control-plane-nn9tr.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.netdev_budget', 'value': 1000})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.netdev_max_backlog', 'value': 250000})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.netdev_max_backlog', 'value': 250000})[0m
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.netdev_max_backlog', 'value': 250000})[0m
+[0;32mok: [openstack-infra-control-plane-q2mhs.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.netdev_max_backlog', 'value': 250000})[0m
+[0;32mok: [openstack-infra-control-plane-nn9tr.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.netdev_max_backlog', 'value': 250000})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.rmem_max', 'value': 4194304})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.rmem_max', 'value': 4194304})[0m
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.rmem_max', 'value': 4194304})[0m
+[0;32mok: [openstack-infra-control-plane-q2mhs.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.rmem_max', 'value': 4194304})[0m
+[0;32mok: [openstack-infra-control-plane-nn9tr.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.rmem_max', 'value': 4194304})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.wmem_max', 'value': 4194304})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.wmem_max', 'value': 4194304})[0m
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.wmem_max', 'value': 4194304})[0m
+[0;32mok: [openstack-infra-control-plane-q2mhs.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.wmem_max', 'value': 4194304})[0m
+[0;32mok: [openstack-infra-control-plane-nn9tr.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.wmem_max', 'value': 4194304})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.rmem_default', 'value': 4194304})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.rmem_default', 'value': 4194304})[0m
+[0;32mok: [openstack-infra-control-plane-q2mhs.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.rmem_default', 'value': 4194304})[0m
+[0;32mok: [openstack-infra-control-plane-nn9tr.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.rmem_default', 'value': 4194304})[0m
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.rmem_default', 'value': 4194304})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.wmem_default', 'value': 4194304})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.wmem_default', 'value': 4194304})[0m
+[0;32mok: [openstack-infra-control-plane-q2mhs.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.wmem_default', 'value': 4194304})[0m
+[0;32mok: [openstack-infra-control-plane-nn9tr.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.wmem_default', 'value': 4194304})[0m
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.wmem_default', 'value': 4194304})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.optmem_max', 'value': 4194304})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.optmem_max', 'value': 4194304})[0m
+[0;32mok: [openstack-infra-control-plane-q2mhs.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.optmem_max', 'value': 4194304})[0m
+[0;32mok: [openstack-infra-control-plane-nn9tr.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.optmem_max', 'value': 4194304})[0m
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.optmem_max', 'value': 4194304})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.tcp_rmem', 'value': '4096 87380 4194304'})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.tcp_rmem', 'value': '4096 87380 4194304'})[0m
+[0;32mok: [openstack-infra-control-plane-q2mhs.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.tcp_rmem', 'value': '4096 87380 4194304'})[0m
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.tcp_rmem', 'value': '4096 87380 4194304'})[0m
+[0;32mok: [openstack-infra-control-plane-nn9tr.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.tcp_rmem', 'value': '4096 87380 4194304'})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.tcp_wmem', 'value': '4096 65536 4194304'})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.tcp_wmem', 'value': '4096 65536 4194304'})[0m
+[0;32mok: [openstack-infra-control-plane-q2mhs.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.tcp_wmem', 'value': '4096 65536 4194304'})[0m
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.tcp_wmem', 'value': '4096 65536 4194304'})[0m
+[0;32mok: [openstack-infra-control-plane-nn9tr.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.tcp_wmem', 'value': '4096 65536 4194304'})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.tcp_low_latency', 'value': 1})[0m
+[0;32mok: [openstack-infra-control-plane-q2mhs.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.tcp_low_latency', 'value': 1})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.tcp_low_latency', 'value': 1})[0m
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.tcp_low_latency', 'value': 1})[0m
+[0;32mok: [openstack-infra-control-plane-nn9tr.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.tcp_low_latency', 'value': 1})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.tcp_adv_win_scale', 'value': 1})[0m
+[0;32mok: [openstack-infra-control-plane-q2mhs.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.tcp_adv_win_scale', 'value': 1})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.tcp_adv_win_scale', 'value': 1})[0m
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.tcp_adv_win_scale', 'value': 1})[0m
+[0;32mok: [openstack-infra-control-plane-nn9tr.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.tcp_adv_win_scale', 'value': 1})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.neigh.default.gc_thresh1', 'value': 128})[0m
+[0;32mok: [openstack-infra-control-plane-q2mhs.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.neigh.default.gc_thresh1', 'value': 128})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.neigh.default.gc_thresh1', 'value': 128})[0m
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.neigh.default.gc_thresh1', 'value': 128})[0m
+[0;32mok: [openstack-infra-control-plane-nn9tr.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.neigh.default.gc_thresh1', 'value': 128})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.neigh.default.gc_thresh2', 'value': 28872})[0m
+[0;32mok: [openstack-infra-control-plane-q2mhs.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.neigh.default.gc_thresh2', 'value': 28872})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.neigh.default.gc_thresh2', 'value': 28872})[0m
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.neigh.default.gc_thresh2', 'value': 28872})[0m
+[0;32mok: [openstack-infra-control-plane-nn9tr.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.neigh.default.gc_thresh2', 'value': 28872})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.neigh.default.gc_thresh3', 'value': 32768})[0m
+[0;32mok: [openstack-infra-control-plane-q2mhs.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.neigh.default.gc_thresh3', 'value': 32768})[0m
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.neigh.default.gc_thresh3', 'value': 32768})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.neigh.default.gc_thresh3', 'value': 32768})[0m
+[0;32mok: [openstack-infra-control-plane-nn9tr.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.neigh.default.gc_thresh3', 'value': 32768})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv6.neigh.default.gc_thresh1', 'value': 128})[0m
+[0;32mok: [openstack-infra-control-plane-q2mhs.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv6.neigh.default.gc_thresh1', 'value': 128})[0m
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv6.neigh.default.gc_thresh1', 'value': 128})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv6.neigh.default.gc_thresh1', 'value': 128})[0m
+[0;32mok: [openstack-infra-control-plane-nn9tr.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv6.neigh.default.gc_thresh1', 'value': 128})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv6.neigh.default.gc_thresh2', 'value': 28872})[0m
+[0;32mok: [openstack-infra-control-plane-q2mhs.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv6.neigh.default.gc_thresh2', 'value': 28872})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv6.neigh.default.gc_thresh2', 'value': 28872})[0m
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv6.neigh.default.gc_thresh2', 'value': 28872})[0m
+[0;32mok: [openstack-infra-control-plane-nn9tr.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv6.neigh.default.gc_thresh2', 'value': 28872})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-94g9g.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv6.neigh.default.gc_thresh3', 'value': 32768})[0m
+[0;32mok: [openstack-infra-control-plane-q2mhs.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv6.neigh.default.gc_thresh3', 'value': 32768})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-822pp.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv6.neigh.default.gc_thresh3', 'value': 32768})[0m
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv6.neigh.default.gc_thresh3', 'value': 32768})[0m
+[0;32mok: [openstack-infra-control-plane-nn9tr.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv6.neigh.default.gc_thresh3', 'value': 32768})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org] => (item={'name': 'fs.aio-max-nr', 'value': 1048576})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org] => (item={'name': 'fs.aio-max-nr', 'value': 1048576})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.tcp_timestamps', 'value': 0})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.tcp_timestamps', 'value': 0})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.tcp_sack', 'value': 1})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org] => (item={'name': 'net.ipv4.tcp_sack', 'value': 1})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.netdev_budget', 'value': 1000})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.netdev_budget', 'value': 1000})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.netdev_max_backlog', 'value': 250000})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.netdev_max_backlog', 'value': 250000})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.rmem_max', 'value': 4194304})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.rmem_max', 'value': 4194304})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.wmem_max', 'value': 4194304})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.wmem_max', 'value': 4194304})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.rmem_default', 'value': 4194304})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.rmem_default', 'value': 4194304})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.wmem_default', 'value': 4194304})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.wmem_default', 'value': 4194304})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-kc8jm.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.optmem_max', 'value': 4194304})[0m
+[0;32mok: [openstack-infra-workers-sc4sh-xvgnx.kez-ironcloud.duckdns.org] => (item={'name': 'net.core.optmem_max', 'value': 4194304})[0m
+Traceback (most recent call last):
+  File "/home/kez/Documents/python_projects/daalu/daalu/main.py", line 113, in <module>
+    deploy_all(tags)
+  File "/home/kez/Documents/python_projects/daalu/daalu/main.py", line 77, in deploy_all
+    steps[tag].deploy(str(inventory))
+  File "/home/kez/Documents/python_projects/daalu/daalu/src/daalu/kubernetes/deployer.py", line 13, in deploy
+    return self.run("kubernetes.yml", inventory, tags, extra_vars)
+  File "/home/kez/Documents/python_projects/daalu/daalu/src/daalu/core/deployer.py", line 33, in run
+    raise RuntimeError(f"{self.name} deployment failed: {rc.status}")
+RuntimeError: Kubernetes deployment failed: canceled

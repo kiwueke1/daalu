@@ -1,0 +1,1 @@
+{"event": "verbose", "uuid": "e95cce24-2a51-43a1-9eab-d390cd98855a", "counter": 50, "stdout": "\u001b[1;35m/usr/bin/python3.10, but future installation of another Python interpreter\u001b[0m", "start_line": 43, "end_line": 44, "runner_ident": "d91ef580-d257-41bb-9991-56e7352e8fda", "created": "2025-09-23T03:33:53.711602+00:00"}

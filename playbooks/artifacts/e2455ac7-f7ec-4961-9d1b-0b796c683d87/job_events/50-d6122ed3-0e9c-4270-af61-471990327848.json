@@ -1,0 +1,1 @@
+{"event": "verbose", "uuid": "d6122ed3-0e9c-4270-af61-471990327848", "counter": 50, "stdout": "  --become-password-file BECOME_PASSWORD_FILE, --become-pass-file BECOME_PASSWORD_FILE", "start_line": 49, "end_line": 50, "runner_ident": "e2455ac7-f7ec-4961-9d1b-0b796c683d87", "created": "2025-09-22T03:31:45.641805+00:00"}

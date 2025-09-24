@@ -1,0 +1,25 @@
+Running sub-tag 'jenkins' inside 'infrastructure' playbook...
+[Infrastructure] Running playbook: infrastructure.yml
+[Infrastructure] Inventory: /home/kez/Documents/python_projects/daalu/daalu/cloud-config/inventory/hosts.ini
+[Infrastructure] Tags: jenkins
+[1;35m[WARNING]: Found variable using reserved name: tags[0m
+[0;31mERROR! 'delegate_to' is not a valid attribute for a IncludeRole[0m
+[0;31m[0m
+[0;31mThe error appears to be in '/home/kez/Documents/python_projects/daalu/daalu/playbooks/atmosphere/playbooks/roles/jenkins/tasks/main.yml': line 40, column 3, but may[0m
+[0;31mbe elsewhere in the file depending on the exact syntax problem.[0m
+[0;31m[0m
+[0;31mThe offending line appears to be:[0m
+[0;31m[0m
+[0;31m[0m
+[0;31m- name: Ensure Argo CD is installed and list apps[0m
+[0;31m  ^ here[0m
+Traceback (most recent call last):
+  File "/home/kez/Documents/python_projects/daalu/daalu/main.py", line 114, in <module>
+    deploy_all(tags)
+  File "/home/kez/Documents/python_projects/daalu/daalu/main.py", line 84, in deploy_all
+    steps[parent].deploy(str(inventory), tags=[tag])
+  File "/home/kez/Documents/python_projects/daalu/daalu/src/daalu/infrastructure/deployer.py", line 12, in deploy
+    return self.run("infrastructure.yml", inventory, tags, extra_vars)
+  File "/home/kez/Documents/python_projects/daalu/daalu/src/daalu/core/deployer.py", line 33, in run
+    raise RuntimeError(f"{self.name} deployment failed: {rc.status}")
+RuntimeError: Infrastructure deployment failed: failed

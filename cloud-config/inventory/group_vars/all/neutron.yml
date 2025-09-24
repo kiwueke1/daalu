@@ -1,0 +1,28 @@
+neutron_networks:
+  - external: true
+    mtu_size: 1500
+    name: provider
+    port_security_enabled: true
+    provider_network_type: flat
+    provider_physical_network: provider
+    shared: true
+    subnets:
+      - allocation_pool_start: 10.10.11.0
+        allocation_pool_end: 10.10.11.240
+        cidr: 10.10.8.0/22
+        enable_dhcp: true
+        gateway_ip: 10.10.10.1
+        name: provider-subnet
+
+
+neutron_helm_values:
+  conf:
+    plugins:
+      ml2_conf:
+        ml2_type_flat:
+          flat_networks: provider
+      openvswitch_agent:
+        ovs:
+          bridge_mappings: provider:br-ex
+
+

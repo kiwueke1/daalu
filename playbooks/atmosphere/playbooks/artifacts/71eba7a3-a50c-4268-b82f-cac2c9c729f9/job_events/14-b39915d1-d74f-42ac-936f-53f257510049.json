@@ -1,0 +1,1 @@
+{"event": "verbose", "uuid": "b39915d1-d74f-42ac-936f-53f257510049", "counter": 14, "stdout": "\u001b[1;35m[WARNING]: Platform linux on host openstack-infra-control-plane-bl5vb.kez-\u001b[0m", "start_line": 11, "end_line": 12, "runner_ident": "71eba7a3-a50c-4268-b82f-cac2c9c729f9", "created": "2025-09-23T13:32:33.425939+00:00"}

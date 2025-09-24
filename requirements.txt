@@ -1,0 +1,4 @@
+jmespath
+docker-image-py
+netaddr
+passlib

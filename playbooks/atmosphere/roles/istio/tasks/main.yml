@@ -1,0 +1,93 @@
+# Main tasks: upload & install base, istiod, gateways, then argocd_check + onboard
+# Copyright (c) 2025
+# SPDX-License-Identifier: Apache-2.0
+
+# === Ensure base directory exists ===
+- name: Ensure /usr/local/src/istio directory exists
+  ansible.builtin.file:
+    path: /usr/local/src/istio
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+# === Upload charts to remote host (once each) ===
+- name: Upload Istio Base chart
+  run_once: true
+  ansible.builtin.include_role:
+    name: vexxhost.kubernetes.upload_helm_chart
+  vars:
+    upload_helm_chart_src: "{{ istio_base_chart_path }}"
+    upload_helm_chart_dest: "{{ istio_charts_ref }}/base"
+
+- name: Upload Istiod chart
+  run_once: true
+  ansible.builtin.include_role:
+    name: vexxhost.kubernetes.upload_helm_chart
+  vars:
+    upload_helm_chart_src: "{{ istio_istiod_chart_path }}"
+    upload_helm_chart_dest: "{{ istio_charts_ref }}/istiod"
+
+- name: Upload Istio Gateway chart
+  run_once: true
+  ansible.builtin.include_role:
+    name: vexxhost.kubernetes.upload_helm_chart
+  vars:
+    upload_helm_chart_src: "{{ istio_gateway_chart_path }}"
+    upload_helm_chart_dest: "{{ istio_charts_ref }}/gateway"
+
+# === Install charts ===
+- name: Install Istio Base (CRDs)
+  run_once: true
+  kubernetes.core.helm:
+    name: "{{ istio_base_release_name }}"
+    chart_ref: "{{ istio_charts_ref }}/base/base"
+    release_namespace: "{{ istio_base_namespace }}"
+    create_namespace: true
+    kubeconfig: "{{ istio_helm_kubeconfig }}"
+    values: "{{ istio_base_values }}"
+    wait: "{{ istio_helm_wait }}"
+    timeout: "{{ istio_helm_timeout }}"
+
+- name: Install Istiod (control plane)
+  run_once: true
+  kubernetes.core.helm:
+    name: "{{ istio_istiod_release_name }}"
+    chart_ref: "{{ istio_charts_ref }}/istiod/istiod"
+    release_namespace: "{{ istio_istiod_namespace }}"
+    create_namespace: true
+    kubeconfig: "{{ istio_helm_kubeconfig }}"
+    values: "{{ istio_istiod_values }}"
+    wait: "{{ istio_helm_wait }}"
+    timeout: "{{ istio_helm_timeout }}"
+
+- name: Install Istio Gateways
+  run_once: true
+  vars:
+    gw_values_merged: "{{ istio_gateway_values_default | combine(item['values'] | default({}), recursive=True) }}"
+  loop: "{{ istio_gateways }}"
+  loop_control:
+    label: "{{ item.name }}"
+  kubernetes.core.helm:
+    name: "{{ item.name }}"
+    chart_ref: "{{ istio_charts_ref }}/gateway/gateway"
+    release_namespace: "{{ item.namespace }}"
+    create_namespace: true
+    kubeconfig: "{{ istio_helm_kubeconfig }}"
+    values: "{{ gw_values_merged }}"
+    wait: "{{ istio_helm_wait }}"
+    timeout: "{{ istio_helm_timeout }}"
+
+
+# === Configure traffic objects ===
+- name: Configure Istio traffic objects (Gateway, VS, DR) for applications
+  ansible.builtin.include_tasks: app_traffic.yml
+
+# === ArgoCD integration ===
+- name: Ensure Argo CD is installed and list apps
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: argocd_check
+
+- name: Onboard Istio components to Argo CD if needed
+  ansible.builtin.include_tasks: argocd_onboard.yml

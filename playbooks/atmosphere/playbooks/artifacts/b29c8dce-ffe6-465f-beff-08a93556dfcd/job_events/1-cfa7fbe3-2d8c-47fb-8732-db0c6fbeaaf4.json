@@ -1,0 +1,1 @@
+{"event": "verbose", "uuid": "cfa7fbe3-2d8c-47fb-8732-db0c6fbeaaf4", "counter": 1, "stdout": "\u001b[1;35m[WARNING]: Found variable using reserved name: tags\u001b[0m", "start_line": 0, "end_line": 1, "runner_ident": "b29c8dce-ffe6-465f-beff-08a93556dfcd", "created": "2025-09-23T01:07:05.200824+00:00"}

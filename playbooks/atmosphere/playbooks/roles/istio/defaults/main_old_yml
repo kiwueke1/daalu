@@ -1,0 +1,95 @@
+# Default variables (chart paths, namespaces, values, gateways)
+# SPDX-License-Identifier: Apache-2.0
+
+# Where your local Istio charts live (adjust to your path)
+istio_charts_base_path: "../../charts/istio/"
+
+# Kubeconfig used by helm module
+istio_helm_kubeconfig: "{{ kubeconfig_path | default('/etc/kubernetes/admin.conf') }}"
+
+# Chart paths (local) — actual folders under istio_charts_base_path
+istio_base_chart_path: "{{ istio_charts_base_path }}/base"
+istio_istiod_chart_path: "{{ istio_charts_base_path }}/istiod"
+istio_gateway_chart_path: "{{ istio_charts_base_path }}/gateway"
+
+# On-host destination paths (where upload_helm_chart puts them)
+istio_base_chart_ref: "/usr/local/src/istio/base"
+istio_istiod_chart_ref: "/usr/local/src/istio/istiod"
+istio_gateway_chart_ref: "/usr/local/src/istio/gateway"
+istio_charts_ref: "/usr/local/src/istio"
+
+
+# Release names/namespaces
+istio_base_release_name: istio-base
+istio_base_namespace: istio-system  # CRDs are cluster-scoped; namespace is conventional
+
+istio_istiod_release_name: istiod
+istio_istiod_namespace: istio-system
+
+# Gateways to deploy (ingress by default, add egress or custom gateways if needed)
+istio_gateways:
+  - name: istio-ingress
+    namespace: istio-ingress
+    values:
+      service:
+        type: LoadBalancer
+      labels:
+        istio: ingressgateway
+  # - name: istio-egress
+  #   namespace: istio-egress
+  #   values:
+  #     service:
+  #       type: ClusterIP
+  #     labels:
+  #       istio: egressgateway
+
+# Values for each component (merged under the hood)
+istio_base_values: {}
+istio_istiod_values: {}
+# Optional global defaults merged into each gateway's values
+istio_gateway_values_default: {}
+
+# Helm install behavior
+istio_helm_wait: true
+istio_helm_timeout: 600s
+
+# Optional Argo CD onboarding (set your token via extra vars or vault)
+github_token: ""
+istio_argocd_repo_owner: "kiwueke1"
+istio_argocd_repo_name: "argocd-infrastructure-app"
+# Map release name -> relative path of Argo CD Application manifest
+istio_argocd_apps:
+  base: "apps/istio/base.yaml"
+  istiod: "apps/istio/istiod.yaml"
+  # Example gateway entries:
+  # "istio-ingress": "apps/istio/ingress.yaml"
+  # "istio-egress":  "apps/istio/egress.yaml"
+
+# === Istio traffic objects (Gateway, VirtualService, DestinationRule) ===
+# Add more items later (prometheus.daalu.io, horizon-dashboard.daalu.io, etc.)
+istio_applications:
+  - name: keycloak
+    hostnames:
+      - {{ keycloak_host }}
+    traffic_namespace: istio-ingress
+    original_svc_namespace: auth-system   # Namespace for Gateway/VS/DR and keycloak Service
+
+    gateway:
+      name: gateway
+      namespace: istio-ingress
+      selector:
+        istio: ingress   # must match your ingress gateway Deployment labels
+      tls:
+        mode: SIMPLE
+        credentialName: keycloak-kc-daalu-io-tls  # cert-manager TLS secret name
+      http_redirect_port_80_to_443: true
+
+    service:
+      name: keycloak
+      port: 8080
+      subset: ""               # optional (use e.g. "v1" if you define subsets)
+
+    destinationrule:
+      trafficPolicy:
+        tls:
+          mode: DISABLE

@@ -1,0 +1,60 @@
+# Onboarding tasks for Argo CD applications
+# Checks existing Argo CD apps (in argocd_apps_list from common:argocd_check)
+# and applies Application manifests for any missing Istio components.
+
+- name: Wait for Argo CD CRDs to be available
+  kubernetes.core.k8s_info:
+    api_version: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    name: applications.argoproj.io
+    kubeconfig: "/etc/kubernetes/admin.conf"
+  register: argocd_crd
+  until: argocd_crd.resources is defined and (argocd_crd.resources | length > 0)
+  retries: 30
+  delay: 10
+  delegate_to: localhost
+  run_once: true
+
+# Build dictionary: base + istiod
+- name: Base + Istiod Argo CD apps
+  ansible.builtin.set_fact:
+    _istio_argocd_targets:
+      "{{ {
+           istio_base_release_name: istio_argocd_apps.get('base', None),
+           istio_istiod_release_name: istio_argocd_apps.get('istiod', None)
+         } }}"
+
+# Add gateways from istio_gateways
+- name: Add gateways Argo CD apps
+  ansible.builtin.set_fact:
+    _istio_argocd_targets: "{{ _istio_argocd_targets | combine({ item.name: istio_argocd_apps.get(item.name, None) }) }}"
+  loop: "{{ istio_gateways }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+# Filter only apps with a configured manifest path
+- name: Filter only apps with configured manifest path
+  ansible.builtin.set_fact:
+    _istio_argocd_targets: >-
+      {{
+        _istio_argocd_targets
+        | dict2items
+        | rejectattr('value', 'equalto', None)
+        | items2dict(key_name='key', value_name='value')
+      }}
+
+# Report already-onboarded apps
+- name: Report already-onboarded apps
+  ansible.builtin.debug:
+    msg: "Already onboarded: {{ (argocd_apps_list | map('lower') | list) | intersect(_istio_argocd_targets.keys() | map('lower') | list) | join(', ') }}"
+  delegate_to: localhost
+  run_once: true
+
+# Onboard missing apps
+# Onboard missing apps
+- name: Onboard Istio Argo CD applications
+  ansible.builtin.include_tasks: onboard_app.yml
+  loop: "{{ _istio_argocd_targets | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when: item.key | lower not in (argocd_apps_list | map('lower') | list)

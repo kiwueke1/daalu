@@ -1,0 +1,1 @@
+{"event": "verbose", "uuid": "13ecfc20-393b-4546-8bbe-6e7c5d27a96f", "counter": 65, "stdout": "  --step                one-step-at-a-time: confirm each task before running", "start_line": 64, "end_line": 65, "runner_ident": "e2455ac7-f7ec-4961-9d1b-0b796c683d87", "created": "2025-09-22T03:31:45.645391+00:00"}

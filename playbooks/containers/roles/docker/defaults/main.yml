@@ -1,0 +1,39 @@
+# Copyright (c) 2023 VEXXHOST, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may
+# not use this file except in compliance with the License. You may obtain
+# a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations
+# under the License.
+
+docker_versions: "{{ docker_archive_checksums['amd64'].keys() | list | community.general.version_sort }}"
+docker_version: "{{ docker_versions | last }}"
+
+docker_archive_checksums:
+  amd64:
+    24.0.9: 692ecfc28333485d184f628b74c25b2894cee9495a51a5418ba60ef95bf733ca
+  arm64:
+    24.0.9: 7e999590330a15469de20ac37051407d222ea73c71c10c05d61666d42c5922d1
+
+docker_download_url: "https://download.docker.com/linux/static/stable/{{ ansible_facts['architecture'] | lower }}/docker-{{ docker_version }}.tgz" # noqa: yaml[line-length]
+
+docker_download_dest: "{{ download_artifact_work_directory }}/docker-{{ docker_version }}.tgz"
+docker_archive_checksum: "{{ docker_archive_checksums[download_artifact_goarch][docker_version] }}"
+
+# NOTE(mnaser): This is to accomodate for the uninstallation of the old packages
+#               that shipped with the operating system
+docker_package_name: docker-ce
+docker_cfg_dir: /etc/docker
+docker_cfg_file: "{{ docker_cfg_dir }}/daemon.json"
+docker_storage_dir: /var/lib/docker
+docker_state_dir: /run/docker
+
+docker_http_proxy: "{{ http_proxy | default('') }}"
+docker_https_proxy: "{{ https_proxy | default('') }}"
+docker_no_proxy: "{{ no_proxy | default('') }}"

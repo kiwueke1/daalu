@@ -1,0 +1,33 @@
+Running sub-tag 'jenkins' inside 'infrastructure' playbook...
+[Infrastructure] Running playbook: infrastructure.yml
+[Infrastructure] Inventory: /home/kez/Documents/python_projects/daalu/daalu/cloud-config/inventory/hosts.ini
+[Infrastructure] Tags: jenkins
+[1;35m[WARNING]: Found variable using reserved name: tags[0m
+
+PLAY [Deploy Infrastructure] ***************************************************
+
+TASK [Gathering Facts] *********************************************************
+[1;35mcore/2.17/reference_appendices/interpreter_discovery.html for more information.[0m
+[0;32mok: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org][0m
+[1;35mcore/2.17/reference_appendices/interpreter_discovery.html for more information.[0m
+[0;32mok: [openstack-infra-control-plane-q2mhs.kez-ironcloud.duckdns.org][0m
+[1;35mcore/2.17/reference_appendices/interpreter_discovery.html for more information.[0m
+[0;32mok: [openstack-infra-control-plane-nn9tr.kez-ironcloud.duckdns.org][0m
+
+TASK [jenkins : Deploy Jenkins Helm chart] *************************************
+[0;31mfatal: [openstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org]: FAILED! => {"changed": false, "command": "/usr/bin/helm show chart /usr/local/src/jenkins", "msg": "Failure when executing Helm command. Exited 1.\nstdout: \nstderr: Error: path \"/usr/local/src/jenkins\" not found\n", "stderr": "Error: path \"/usr/local/src/jenkins\" not found\n", "stderr_lines": ["Error: path \"/usr/local/src/jenkins\" not found"], "stdout": "", "stdout_lines": []}[0m
+
+PLAY RECAP *********************************************************************
+[0;31mopenstack-infra-control-plane-bl5vb.kez-ironcloud.duckdns.org[0m : [0;32mok=1   [0m changed=0    unreachable=0    [0;31mfailed=1   [0m skipped=0    rescued=0    ignored=0   
+[0;32mopenstack-infra-control-plane-nn9tr.kez-ironcloud.duckdns.org[0m : [0;32mok=1   [0m changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+[0;32mopenstack-infra-control-plane-q2mhs.kez-ironcloud.duckdns.org[0m : [0;32mok=1   [0m changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+Traceback (most recent call last):
+  File "/home/kez/Documents/python_projects/daalu/daalu/main.py", line 114, in <module>
+    deploy_all(tags)
+  File "/home/kez/Documents/python_projects/daalu/daalu/main.py", line 84, in deploy_all
+    steps[parent].deploy(str(inventory), tags=[tag])
+  File "/home/kez/Documents/python_projects/daalu/daalu/src/daalu/infrastructure/deployer.py", line 12, in deploy
+    return self.run("infrastructure.yml", inventory, tags, extra_vars)
+  File "/home/kez/Documents/python_projects/daalu/daalu/src/daalu/core/deployer.py", line 33, in run
+    raise RuntimeError(f"{self.name} deployment failed: {rc.status}")
+RuntimeError: Infrastructure deployment failed: failed

@@ -1,0 +1,5 @@
+ansible-runner
+click
+docker-image-py
+jmespath
+netaddr

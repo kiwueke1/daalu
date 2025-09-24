@@ -1,0 +1,24 @@
+[controllers]
+{% for entry in hosts_entries if 'control-plane' in entry.hostname %}
+{{ entry.hostname }}.kez-ironcloud.duckdns.org ansible_host={{ entry.ip }}
+{% endfor %}
+
+[computes]
+{% for entry in hosts_entries if 'workers' in entry.hostname %}
+{{ entry.hostname }}.kez-ironcloud.duckdns.org ansible_host={{ entry.ip }}
+{% endfor %}
+
+[cephs]
+{% for entry in hosts_entries if 'workers' in entry.hostname %}
+{{ entry.hostname }}.kez-ironcloud.duckdns.org ansible_host={{ entry.ip }}
+{% endfor %}
+
+[all:vars]
+ansible_user=kez
+ansible_password=admin10
+ansible_ssh_private_key_file=/home/kez/.ssh/openstack-key
+ansible_become=true
+ansible_become_method=sudo
+ansible_become_password=admin10
+ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+

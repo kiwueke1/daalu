@@ -1,0 +1,198 @@
+_argocd_helm_values:
+  ########################################
+  ## Global
+  ########################################
+  global:
+    image:
+      tag: latest
+
+    ## PodSecurityContext
+    ##
+    securityContext:
+      ## NOTE: this is required because we use a PVC for plugin assets but run as a non-root user,
+      ##       which can result in permission errors for some types of StorageClass
+      fsGroup: 999
+
+  ########################################
+  ## Argo CD Server
+  ########################################
+  server:
+    ingress:
+      enabled: true
+
+  ########################################
+  ## Configs
+  ########################################
+  configs:
+    ## ConfigManagementPlugins
+    ##
+    cmp:
+      create: true
+      plugins:
+
+        ## the "deploykf" plugin definition
+        ##
+        deploykf:
+          parameters:
+            static:
+              - name: output_kustomize_path
+                title: OUTPUT - KUSTOMIZE PATH
+                tooltip: the path under 'deploykf generate --output-dir' at which to run 'kusomtize build'
+                collectionType: string
+
+              - name: output_helm_path
+                title: OUTPUT - HELM PATH
+                tooltip: the path under 'deploykf generate --output-dir' at which to run 'helm template'
+                collectionType: string
+              - name: output_helm_values_files
+                title: OUTPUT - HELM VALUES FILES
+                tooltip: a list of paths under 'output_helm_path' with values files to use with 'helm template'
+                collectionType: array
+
+              - name: source_version
+                title: SOURCE VERSION
+                tooltip: the '--source-version' to use with with the 'deploykf generate' command (mutually exclusive with `source_path`)
+                collectionType: string
+              - name: source_path
+                title: SOURCE PATH
+                tooltip: the '--source-path' to use with the 'deploykf generate' command (mutually exclusive with `source_version`)
+                collectionType: string
+
+              - name: values_files
+                title: VALUES FILES
+                tooltip: a list of paths (under the configured repo path) of '--values' files to use with 'deploykf generate'
+                collectionType: array
+              - name: values
+                title: VALUES
+                tooltip: a string containing the contents of a '--values' file to use with 'deploykf generate'
+                collectionType: string
+          init:
+            command:
+              - "/bin/bash"
+              - "-c"
+            args:
+              - |
+                set -eo pipefail
+                ## validation and deploykf generate logic ...
+                # (full init script from your snippet goes here unchanged)
+          generate:
+            command:
+              - "/bin/bash"
+              - "-c"
+            args:
+              - |
+                set -eo pipefail
+                ## render manifests with kubectl kustomize or helm template ...
+                # (full generate script from your snippet goes here unchanged)
+
+  ########################################
+  ## ArgoCD Repo Server
+  ########################################
+  repoServer:
+
+    ## Extra Init Containers
+    ##
+    initContainers:
+
+      - name: deploykf-plugin-setup--kubectl
+        image: docker.io/bitnami/kubectl:1.26.10
+        command: ["/bin/sh","-c"]
+        args:
+          - |
+            echo "copying 'kubectl' binary to shared volume..."
+            cp -f "$(which kubectl)" /tools/kubectl
+        volumeMounts:
+          - name: deploykf-plugin-tools
+            mountPath: /tools
+
+      - name: deploykf-plugin-setup--helm
+        image: docker.io/alpine/helm:3.12.3
+        command: ["/bin/sh","-c"]
+        args:
+          - |
+            echo "copying 'helm' binary to shared volume..."
+            cp -f "$(which helm)" /tools/helm
+        volumeMounts:
+          - name: deploykf-plugin-tools
+            mountPath: /tools
+
+      - name: deploykf-plugin-setup--deploykf
+        image: ghcr.io/deploykf/cli:0.1.2
+        command: ["/bin/sh","-c"]
+        args:
+          - |
+            echo "copying 'deploykf' binary to shared volume..."
+            cp -f "$(which deploykf)" /tools/deploykf
+        volumeMounts:
+          - name: deploykf-plugin-tools
+            mountPath: /tools
+
+    ## Extra Containers
+    ##
+    extraContainers:
+      - name: deploykf-plugin
+        image: docker.io/buildpack-deps:bookworm-curl
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 999
+        command: ["/var/run/argocd/argocd-cmp-server"]
+        args: ["--loglevel","info"]
+        env:
+          - name: HELM_CACHE_HOME
+            value: "/helm-working-dir"
+          - name: HELM_CONFIG_HOME
+            value: "/helm-working-dir"
+          - name: HELM_DATA_HOME
+            value: "/helm-working-dir"
+        volumeMounts:
+          - name: var-files
+            mountPath: /var/run/argocd
+          - name: plugins
+            mountPath: /home/argocd/cmp-server/plugins
+          - name: deploykf-plugin-tools
+            mountPath: /usr/local/bin
+          - name: argocd-cmp-cm
+            mountPath: /home/argocd/cmp-server/config/plugin.yaml
+            subPath: deploykf.yaml
+          - name: deploykf-plugin-assets
+            mountPath: /.deploykf/assets
+          - name: helm-working-dir
+            mountPath: /helm-working-dir
+
+    ## Extra Volumes
+    ##
+    volumes:
+      - name: argocd-cmp-cm
+        configMap:
+          name: argocd-cmp-cm
+      - name: deploykf-plugin-tools
+        emptyDir: {}
+      - name: deploykf-plugin-assets
+        persistentVolumeClaim:
+          claimName: argocd-deploykf-plugin-assets
+
+  ########################################
+  ## Extra Resources
+  ########################################
+  extraObjects:
+
+    - |
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: argocd-deploykf-plugin-assets
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
+        #storageClassName: "" 
+
+argocd_helm_release_name: argocd
+argocd_helm_release_namespace: argocd
+argocd_helm_kubeconfig: ~/.kube/config
+argocd_repo_url: git@github.com:kiwueke1/argocd-infrastructure-app.git
+argocd_repo_username: kiwueke1
+argocd_repo_ssh_private_key_path: ~/.ssh/openstack-key
+

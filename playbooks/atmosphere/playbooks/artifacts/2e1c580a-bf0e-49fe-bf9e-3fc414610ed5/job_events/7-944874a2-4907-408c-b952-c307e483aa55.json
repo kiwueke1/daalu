@@ -1,0 +1,1 @@
+{"event": "verbose", "uuid": "944874a2-4907-408c-b952-c307e483aa55", "counter": 7, "stdout": "\u001b[1;35ms/daalu/daalu/playbooks/atmosphere/playbooks/roles/jenkins/tasks/main.yml, line\u001b[0m", "start_line": 6, "end_line": 7, "runner_ident": "2e1c580a-bf0e-49fe-bf9e-3fc414610ed5", "created": "2025-09-24T03:13:15.005777+00:00"}

@@ -1,0 +1,1 @@
+{"event": "verbose", "uuid": "7e9dda46-ca79-4fd9-8f8f-bcaf2a531089", "counter": 2, "stdout": "\u001b[1;35m[WARNING]: While constructing a mapping from /home/kez/Documents/python_project\u001b[0m", "start_line": 1, "end_line": 2, "runner_ident": "bd6567d3-b049-4e5d-97d0-7fed85c3c294", "created": "2025-09-24T03:01:41.965265+00:00"}

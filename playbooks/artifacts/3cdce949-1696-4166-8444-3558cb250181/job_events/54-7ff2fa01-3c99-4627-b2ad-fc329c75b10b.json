@@ -1,0 +1,1 @@
+{"event": "verbose", "uuid": "7ff2fa01-3c99-4627-b2ad-fc329c75b10b", "counter": 54, "stdout": "  --flush-cache         clear the fact cache for every host in inventory", "start_line": 53, "end_line": 54, "runner_ident": "3cdce949-1696-4166-8444-3558cb250181", "created": "2025-09-22T00:51:08.596757+00:00"}

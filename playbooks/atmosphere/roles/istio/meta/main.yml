@@ -1,0 +1,30 @@
+galaxy_info:
+  author: VEXXHOST, Inc.
+  description: Ansible role for Istio (base, istiod, gateways) via local Helm charts
+  license: Apache-2.0
+  min_ansible_version: 5.5.0
+  standalone: false
+  platforms:
+    - name: EL
+      versions: ["8", "9"]
+    - name: Ubuntu
+      versions: [focal, jammy]
+
+dependencies:
+  - role: defaults
+
+  # Upload charts onto the host so helm can install from local path
+  - role: vexxhost.kubernetes.upload_helm_chart
+    vars:
+      upload_helm_chart_src: "{{ istio_base_chart_path }}"
+      upload_helm_chart_dest: "{{ istio_base_chart_ref }}"
+
+  - role: vexxhost.kubernetes.upload_helm_chart
+    vars:
+      upload_helm_chart_src: "{{ istio_istiod_chart_path }}"
+      upload_helm_chart_dest: "{{ istio_istiod_chart_ref }}"
+
+  - role: vexxhost.kubernetes.upload_helm_chart
+    vars:
+      upload_helm_chart_src: "{{ istio_gateway_chart_path }}"
+      upload_helm_chart_dest: "{{ istio_gateway_chart_ref }}"

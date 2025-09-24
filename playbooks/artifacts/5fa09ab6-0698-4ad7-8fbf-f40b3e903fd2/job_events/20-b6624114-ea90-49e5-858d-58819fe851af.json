@@ -1,0 +1,1 @@
+{"event": "verbose", "uuid": "b6624114-ea90-49e5-858d-58819fe851af", "counter": 20, "stdout": "ansible-playbook: error: unrecognized arguments: /home/kez/Documents/python_projects/daalu/daalu/playbooks/atmosphere/playbooks/kubernetes.yml", "start_line": 19, "end_line": 20, "runner_ident": "5fa09ab6-0698-4ad7-8fbf-f40b3e903fd2", "created": "2025-09-21T23:32:37.172822+00:00"}

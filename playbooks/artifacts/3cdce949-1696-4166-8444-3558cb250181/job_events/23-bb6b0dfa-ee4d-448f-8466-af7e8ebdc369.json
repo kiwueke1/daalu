@@ -1,0 +1,1 @@
+{"event": "verbose", "uuid": "bb6b0dfa-ee4d-448f-8466-af7e8ebdc369", "counter": 23, "stdout": "                        [-u REMOTE_USER] [-c CONNECTION] [-T TIMEOUT]", "start_line": 22, "end_line": 23, "runner_ident": "3cdce949-1696-4166-8444-3558cb250181", "created": "2025-09-22T00:51:08.589939+00:00"}

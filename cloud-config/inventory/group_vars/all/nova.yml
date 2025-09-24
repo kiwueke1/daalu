@@ -1,0 +1,21 @@
+nova_flavors:
+- disk: 1
+  name: m1.tiny
+  ram: 512
+  vcpus: 1
+- disk: 20
+  name: m1.small
+  ram: 2048
+  vcpus: 1
+- disk: 40
+  name: m1.medium
+  ram: 4096
+  vcpus: 2
+- disk: 80
+  name: m1.large
+  ram: 8192
+  vcpus: 4
+- disk: 160
+  name: m1.xlarge
+  ram: 16384
+  vcpus: 8

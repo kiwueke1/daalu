@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: Apache-2.0
+
+jenkins_helm_release_name: jenkins
+jenkins_helm_chart_path: "../../../../charts/jenkins/"
+jenkins_helm_chart_ref: /usr/local/src/jenkins
+jenkins_helm_release_namespace: "devops-tools"
+jenkins_helm_kubeconfig: "/etc/kubernetes/mgmt_config"
+jenkins_helm_values: {}
+
+_jenkins_helm_values:
+  controller:
+    serviceType: LoadBalancer
+    nodePort: 32000
+    installPlugins:
+      - kubernetes:latest
+      - workflow-aggregator:latest
+      - git:latest
+      - configuration-as-code:latest
+  persistence:
+    enabled: true
+    storageClass: general
+    size: 10Gi
+  serviceAccount:
+    create: false
+    name: jenkins

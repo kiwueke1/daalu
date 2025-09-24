@@ -1,0 +1,1 @@
+{"event": "verbose", "uuid": "ccaf8d17-5c14-4faa-8051-28f46b1f1319", "counter": 18, "stdout": "\u001b[1;35m[WARNING]: Platform linux on host openstack-infra-workers-sc4sh-822pp.kez-\u001b[0m", "start_line": 11, "end_line": 12, "runner_ident": "d91ef580-d257-41bb-9991-56e7352e8fda", "created": "2025-09-23T03:33:51.869042+00:00"}
