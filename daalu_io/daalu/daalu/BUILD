@@ -56,6 +56,7 @@ gazelle_python_manifest(
 py_library(
     name = "daalu",
     srcs = glob(["src/daalu/**/*.py"]),
+    imports = ["src"],
     visibility = ["//visibility:public"],
     deps = [
         "@pip//pydantic",
