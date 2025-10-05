@@ -1,1 +1,0 @@
-{"event": "verbose", "uuid": "671e3c2b-dfd1-453f-b052-4cba2cc06f99", "counter": 70, "stdout": "\u001b[1;35m[WARNING]: The default idempotency check can fail to report changes in certain\u001b[0m", "start_line": 63, "end_line": 64, "runner_ident": "2e1c580a-bf0e-49fe-bf9e-3fc414610ed5", "created": "2025-09-24T03:13:26.761376+00:00"}

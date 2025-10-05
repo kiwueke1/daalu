@@ -1,8 +1,0 @@
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: px-pure-secret
-  namespace: portworx
-stringData:
-  pure.json: '{{ portworx_pure_json | to_json }}'

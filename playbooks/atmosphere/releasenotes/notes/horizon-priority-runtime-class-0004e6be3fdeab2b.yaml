@@ -1,4 +1,0 @@
----
-features:
-  - The Horizon role now allows users to configure the ``priorityClassName`` and
-    the ``runtimeClassName`` for all of the different components of the service.

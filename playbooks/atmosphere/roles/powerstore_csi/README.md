@@ -1,1 +1,0 @@
-# `powerstore_csi`

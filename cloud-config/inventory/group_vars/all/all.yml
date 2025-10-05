@@ -1,3 +1,0 @@
-cluster_issuer_acme_email: "kaiwueke@gmail.com"
-cluster_issuer_type: self-signed
-kubeconfig: /etc/kubernetes/admin.conf

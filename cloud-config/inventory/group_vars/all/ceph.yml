@@ -1,3 +1,0 @@
-ceph_mon_fsid: 35fa2097-517c-5cf8-a54f-ac56bdc3b9d4
-ceph_mon_public_network: 10.10.0.0/16
-ceph_control_plane_group: cephs

@@ -1,7 +1,0 @@
-metallb_helm_release_name: metallb
-metallb_helm_chart_path: "../../../charts/metallb/"
-metallb_helm_chart_ref: /usr/local/src/metallb
-metallb_helm_release_namespace: metallb-system
-metallb_helm_kubeconfig: "/home/kez/.kube/mgmt_config"
-metallb_helm_values: {}
-metallb_config_src: ../vars/metallb-config.yml

@@ -1,4 +1,0 @@
----
-features:
-  - The Keystone role now supports configuring multi-factor authentication for
-    the users within the Atmosphere realm.

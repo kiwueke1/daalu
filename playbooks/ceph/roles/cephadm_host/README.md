@@ -1,1 +1,0 @@
-# `cephadm_host`

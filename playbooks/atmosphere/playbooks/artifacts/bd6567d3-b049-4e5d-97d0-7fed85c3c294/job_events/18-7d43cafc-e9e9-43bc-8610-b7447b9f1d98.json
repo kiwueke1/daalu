@@ -1,1 +1,0 @@
-{"event": "verbose", "uuid": "7d43cafc-e9e9-43bc-8610-b7447b9f1d98", "counter": 18, "stdout": "\u001b[0;31m- name: Upload Jenkins Helm chart (run upload_helm_chart role on localhost)\u001b[0m", "start_line": 17, "end_line": 18, "runner_ident": "bd6567d3-b049-4e5d-97d0-7fed85c3c294", "created": "2025-09-24T03:01:41.970259+00:00"}

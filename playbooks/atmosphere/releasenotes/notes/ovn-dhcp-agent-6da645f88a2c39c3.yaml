@@ -1,5 +1,0 @@
----
-features:
-  - |
-    Neutron now supports using the built-in DHCP agent when using OVN (Open Virtual Network)
-    for cases when DHCP relay is necessary.

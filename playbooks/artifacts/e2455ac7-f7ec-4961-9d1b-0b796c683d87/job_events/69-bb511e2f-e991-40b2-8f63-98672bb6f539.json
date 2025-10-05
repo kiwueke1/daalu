@@ -1,1 +1,0 @@
-{"event": "verbose", "uuid": "bb511e2f-e991-40b2-8f63-98672bb6f539", "counter": 69, "stdout": "  --vault-password-file VAULT_PASSWORD_FILES, --vault-pass-file VAULT_PASSWORD_FILES", "start_line": 68, "end_line": 69, "runner_ident": "e2455ac7-f7ec-4961-9d1b-0b796c683d87", "created": "2025-09-22T03:31:45.646400+00:00"}

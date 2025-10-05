@@ -1,6 +1,0 @@
----
-features:
-  - |
-    Introduced the ability to specify a prefix for image names. This allows for
-    easier integration with image proxies and caching mechanisms, eliminating
-    the need to maintain separate inventory overrides for each image.
