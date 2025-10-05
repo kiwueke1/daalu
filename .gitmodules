@@ -1,0 +1,3 @@
+[submodule "daalu_io/daalu/github.com/aspect-build/aspect-workflows-template"]
+	path = daalu_io/daalu/github.com/aspect-build/aspect-workflows-template
+	url = https://github.com/aspect-build/aspect-workflows-template.git
