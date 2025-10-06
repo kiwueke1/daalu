@@ -1,9 +1,10 @@
 "Define execution or target platforms, see https://bazel.build/extending/platforms"
+
 platform(
     name = "linux_aarch64",
     constraint_values = [
         "@platforms//os:linux",
-        "@platforms//cpu:aarch64"
+        "@platforms//cpu:aarch64",
     ],
 )
 

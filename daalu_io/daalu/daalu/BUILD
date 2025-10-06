@@ -1,24 +1,35 @@
-"""Targets in the repository root"""
+load("@aspect_rules_py//py:defs.bzl", "py_library", "py_test")
 
+# gazelle:resolve py daalu //src/daalu:daalu
+# gazelle:resolve py daalu.config //src/daalu:daalu
+# gazelle:resolve py daalu.config.loader //src/daalu:daalu
+# gazelle:resolve py daalu.helm //src/daalu:daalu
+
+
+#####################################
+#Targets in the repository root
+#####################################
 # We prefer BUILD instead of BUILD.bazel
 # gazelle:build_file_name BUILD
 
-exports_files([
-    ".shellcheckrc",
-], visibility = ["//:__subpackages__"])
-
 load("@gazelle//:def.bzl", "gazelle")
-
-# gazelle:prefix github.com/example/project
-
-gazelle(name = "gazelle", gazelle = "@multitool//tools/gazelle")
-
 load("@pip//:requirements.bzl", "all_whl_requirements")
 load("@rules_python_gazelle_plugin//manifest:defs.bzl", "gazelle_python_manifest")
 load("@rules_python_gazelle_plugin//modules_mapping:def.bzl", "modules_mapping")
 
-# ✅ Fix: py_library and py_test must now be loaded explicitly
-load("@rules_python//python:defs.bzl", "py_library", "py_test")
+exports_files(
+    [
+        ".shellcheckrc",
+    ],
+    visibility = ["//:__subpackages__"],
+)
+
+# gazelle:prefix github.com/example/project
+
+gazelle(
+    name = "gazelle",
+    gazelle = "@multitool//tools/gazelle",
+)
 
 exports_files(
     ["pyproject.toml"],
@@ -54,23 +65,32 @@ gazelle_python_manifest(
 )
 
 py_library(
-    name = "daalu",
-    srcs = glob(["src/daalu/**/*.py"]),
+    name = "daalu_root",
+    srcs = [],  # No Python sources here; just re-export dependencies
+    deps = ["//src/daalu:daalu"],
     imports = ["src"],
     visibility = ["//visibility:public"],
-    deps = [
-        "@pip//pydantic",
-        "@pip//pyyaml",
-    ],
 )
 
+# Your loader test
 py_test(
     name = "test_loader",
     srcs = ["tests/config/test_loader.py"],
     deps = [
-        ":daalu",
+        ":daalu_root",
         "@pip//pydantic",
         "@pip//pyyaml",
-        "@pip//pytest",   # if your test uses pytest
+        "@pip//pytest",
+    ],
+)
+
+py_test(
+    name = "test_helm_cli_runner",
+    srcs = ["tests/helm/test_cli_runner.py"],
+    deps = [
+        ":daalu_root",           # use root library instead of subpackages
+        "@pip//pytest",
+        "@pip//pydantic",
+        "@pip//pyyaml",
     ],
 )

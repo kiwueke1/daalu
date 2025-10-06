@@ -21,4 +21,3 @@ filegroup(
     name = "runtime_reqs",
     srcs = ["runtime.txt"],
 )
-
