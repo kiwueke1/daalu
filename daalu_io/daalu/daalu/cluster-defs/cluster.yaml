@@ -1,0 +1,24 @@
+environment: dev
+context: my-workload-ctx     # kubectl context or leave null and pass --context in CLI
+
+repos: []                    # local charts don't need repos
+
+releases:
+  - name: ingress
+    namespace: ingress-nginx
+    chart: "${WORKSPACE_ROOT}/helm-charts/ingress-nginx"
+    values:
+      files: ["${WORKSPACE_ROOT}/helm-values/ingress-nginx.yaml"]
+    create_namespace: true
+    atomic: true
+    wait: true
+    timeout_seconds: 900
+    dependencies: []
+
+  - name: keystone
+    namespace: openstack
+    chart: "${WORKSPACE_ROOT}/helm-charts/keystone"
+    values:
+      files: ["${WORKSPACE_ROOT}/helm-values/keystone.yaml"]
+    dependencies: ["ingress"]
+

@@ -1,4 +1,3 @@
-# src/daalu/helm/cli_runner.py
 from __future__ import annotations
 
 import subprocess
@@ -32,16 +31,43 @@ class HelmCliRunner(IHelm):
             cmd += ["--kube-context", self.kube_context]
         return cmd
 
-    def _run(self, argv: List[str], allow_rc: set[int] | None = None, capture: bool = False) -> subprocess.CompletedProcess:
+    def _run(
+        self,
+        argv: List[str],
+        allow_rc: set[int] | None = None,
+        capture: bool = False,
+        stream: bool = False,
+    ) -> subprocess.CompletedProcess:
+        """
+        Run a helm command.
+        If `stream=True`, stream live stdout/stderr to the console (useful for --debug).
+        If `capture=True`, capture and return output instead.
+        """
         allow_rc = allow_rc or {0}
-        if capture:
-            cp = subprocess.run(argv, check=False, text=True, capture_output=True, env=self.env or None)
+
+        if stream:
+            # Stream stdout/stderr live so we can see "ready.go:274" etc.
+            process = subprocess.Popen(argv, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=self.env or None)
+            stdout_lines = []
+            for line in iter(process.stdout.readline, ""):
+                print(line, end="")  # stream to console immediately
+                stdout_lines.append(line)
+            process.wait()
+            cp = subprocess.CompletedProcess(argv, process.returncode, "".join(stdout_lines), "")
         else:
-            cp = subprocess.run(argv, check=False, env=self.env or None)
+            cp = subprocess.run(
+                argv,
+                check=False,
+                text=True,
+                capture_output=capture,
+                env=self.env or None,
+            )
+
         if cp.returncode not in allow_rc:
             stderr = getattr(cp, "stderr", "") or ""
             raise HelmError(f"helm failed (rc={cp.returncode}) for {argv!r}\n{stderr}")
         return cp
+
 
     def _values_args(self, rel: ReleaseSpec) -> list[str]:
         args: list[str] = []
@@ -58,16 +84,24 @@ class HelmCliRunner(IHelm):
 
     # ------------------------- IHelm methods -------------------------
 
-    def add_repo(self, repo: RepoSpec) -> None:
+    def add_repo(self, repo: RepoSpec, debug: bool = False) -> None:
         argv = self._base() + ["repo", "add", repo.name, str(repo.url)]
         if repo.username and repo.password:
             argv += ["--username", repo.username, "--password", repo.password]
-        self._run(argv)
+        if debug:
+            argv.append("--debug")
+        # Stream live output when debug is enabled
+        self._run(argv, capture=False, stream=debug)
 
-    def update_repos(self) -> None:
-        self._run(self._base() + ["repo", "update"])
+    def update_repos(self, debug: bool = False) -> None:
+        argv = self._base() + ["repo", "update"]
+        if debug:
+            argv.append("--debug")
+        # Stream live output when debug is enabled
+        self._run(argv, capture=False, stream=debug)
 
-    def upgrade_install(self, rel: ReleaseSpec) -> None:
+
+    def upgrade_install(self, rel: ReleaseSpec, debug: bool = False) -> None:
         argv = (
             self._base()
             + ["upgrade", "--install", rel.name, rel.chart, "-n", rel.namespace]
@@ -82,25 +116,43 @@ class HelmCliRunner(IHelm):
         if rel.wait:
             argv += ["--wait", "--timeout", f"{rel.timeout_seconds}s"]
         if rel.install_crds:
-            argv += ["--install-crds"]  # supported by some charts; harmless if ignored
+            argv += ["--install-crds"]
+        if debug:
+            argv.append("--debug")
 
-        self._run(argv)
+        # stream=True ensures we see Helm’s debug logs in real time
+        self._run(argv, capture=False, stream=debug)
 
-    def uninstall(self, release_name: str, namespace: str) -> None:
+
+    def uninstall(self, release_name: str, namespace: str, debug: bool = False) -> None:
         argv = self._base() + ["uninstall", release_name, "-n", namespace]
-        self._run(argv)
+        if debug:
+            argv.append("--debug")
+        # Stream output live if debugging
+        self._run(argv, capture=False, stream=debug)
 
-    def diff(self, rel: ReleaseSpec) -> str:
+    def diff(self, rel: ReleaseSpec, debug: bool = False) -> str:
         # helm-diff returns rc=2 when changes are detected; treat 0 and 2 as success.
         argv = (
             self._base()
             + ["diff", "upgrade", rel.name, rel.chart, "-n", rel.namespace]
             + self._values_args(rel)
         )
-        cp = self._run(argv, allow_rc={0, 2}, capture=True)
-        # If diff plugin isn’t installed, helm exits non-zero → handled by _run.
-        return cp.stdout
+        if debug:
+            argv.append("--debug")
 
-    def lint(self, rel: ReleaseSpec) -> None:
+        # Stream if debug mode, otherwise capture for return
+        if debug:
+            cp = self._run(argv, allow_rc={0, 2}, capture=False, stream=True)
+            return ""  # streamed output already printed
+        else:
+            cp = self._run(argv, allow_rc={0, 2}, capture=True)
+            return cp.stdout
+
+    def lint(self, rel: ReleaseSpec, debug: bool = False) -> None:
         argv = self._base() + ["lint", rel.chart] + self._values_args(rel)
-        self._run(argv)
+        if debug:
+            argv.append("--debug")
+        # Stream output if debugging
+        self._run(argv, capture=False, stream=debug)
+

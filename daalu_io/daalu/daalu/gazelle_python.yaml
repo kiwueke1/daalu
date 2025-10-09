@@ -7,6 +7,7 @@
 manifest:
   modules_mapping:
     annotated_types: annotated_types
+    click: click
     colorama: colorama
     copier: copier
     dunamai: dunamai
@@ -14,7 +15,9 @@ manifest:
     iniconfig: iniconfig
     jinja2: jinja2
     jinja2_ansible_filters: jinja2_ansible_filters
+    markdown_it: markdown_it_py
     markupsafe: markupsafe
+    mdurl: mdurl
     packaging: packaging
     pathspec: pathspec
     platformdirs: platformdirs
@@ -27,6 +30,9 @@ manifest:
     pygments: pygments
     pytest: pytest
     questionary: questionary
+    rich: rich
+    shellingham: shellingham
+    typer: typer
     typing_extensions: typing_extensions
     typing_inspection: typing_inspection
     wcwidth: wcwidth

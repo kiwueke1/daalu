@@ -20,3 +20,17 @@ py_library(
         "@pip//pyyaml",
     ],
 )
+
+load("@aspect_rules_py//py:defs.bzl", "py_binary")
+
+py_binary(
+    name = "cli_app",
+    srcs = ["cli/app.py"],
+    deps = [
+        ":daalu",           # main library in src/daalu
+        "@pip//typer",
+        "@pip//pydantic",
+        "@pip//pyyaml",
+    ],
+    data = ["//:cluster-defs"]
+)

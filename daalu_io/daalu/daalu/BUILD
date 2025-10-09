@@ -94,3 +94,37 @@ py_test(
         "@pip//pyyaml",
     ],
 )
+
+py_test(
+    name = "test_observers",
+    srcs = ["tests/observers/test_observers.py"],
+    deps = [
+        ":daalu_root", 
+        "@pip//pytest",
+    ],
+)
+
+# tests/deploy/BUILD.bazel
+py_test(
+    name = "test_planner",
+    srcs = ["tests/deploy/test_planner.py"],
+    deps = [
+        ":daalu_root",
+        "@pip//pytest",
+    ],
+)
+
+py_test(
+    name = "test_executor",
+    srcs = ["tests/deploy/test_executor.py"],
+    deps = [
+        ":daalu_root",
+        "@pip//pytest",
+    ],
+)
+
+filegroup(
+    name = "cluster-defs",
+    srcs = glob(["cluster-defs/**"]),
+    visibility = ["//visibility:public"],
+)
