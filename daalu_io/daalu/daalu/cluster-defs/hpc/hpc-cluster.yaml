@@ -1,0 +1,93 @@
+name: ai-train
+namespace: default
+mgmt_context: kind-kind
+workload_context: ai-train-ctx
+
+cluster_api:
+  # --- Core cluster parameters ---
+  cluster_name: ai-train
+  namespace: default
+  kubernetes_version: v1.32.4
+
+  # --- Networking ---
+  pod_cidr: 192.168.0.0/24
+  pod_subnet: 10.20.0.0/16
+  control_plane_vip: 192.168.0.210
+  allowed_nodes: [pve-2, pve-3]
+  dns_servers: [8.8.8.8, 8.8.4.4]
+  ip_range: 192.168.0.170-192.168.0.180
+  gateway: 192.168.0.1
+  prefix: 24
+  vip_interface: ens18
+  cert_sans: ["192.168.0.210","kubernetes","localhost"]
+  network_bridge: vmbr0
+  source_node: pve-2
+  template_id: 10001
+  kube_vip_image: ghcr.io/kube-vip/kube-vip:v0.7.1
+
+  # --- Resource sizing ---
+  control_plane_replicas: 3
+  worker_replicas: 4
+  control_plane_disk_gb: 300
+  worker_disk_gb: 300
+  control_plane_memory_mib: 76000
+  worker_memory_mib: 50000
+  control_plane_cores: 12
+  worker_cores: 4
+  control_plane_sockets: 2
+  worker_sockets: 2
+
+  # --- Access and credentials ---
+  builder_password: admin10
+  ssh_public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFN65XT1iOqLGjTGwOHqKf4VtgOebCJzpbD80hGFvdts kez@ironcloud"
+
+  # --- Proxmox backend integration ---
+  proxmox_secret_name: ai-train-proxmox-secret
+  proxmox_url: "https://192.168.0.34:8006"
+  proxmox_token: "root@pam!capi"
+  proxmox_secret: "97ecfc71-b6ff-4b83-9c17-c3ebe5c58baa"
+
+# --- GPU Node definitions (for HPC workloads) ---
+nodes:
+  - name: gpu-1
+    cpus: 32
+    memory_gb: 256
+    gpus: 4
+    gpu_model: "A100-40GB"
+    rdma: false
+    nvme_count: 2
+  - name: gpu-2
+    cpus: 32
+    memory_gb: 256
+    gpus: 4
+    gpu_model: "A100-40GB"
+    rdma: false
+    nvme_count: 2
+
+# --- Networking within cluster ---
+net:
+  cni: cilium
+  multus: true
+  sriov: false
+  rdma: false
+  pod_cidr: 10.244.0.0/16
+  svc_cidr: 10.96.0.0/12
+
+# --- Storage tiers ---
+storage:
+  local_nvme: true
+  ceph: true
+  minio: true
+
+# --- Scheduler ---
+scheduler:
+  volcano: true
+  ray: false
+  slurm: false
+
+# --- Runtime components (GPU stack) ---
+runtime:
+  nfd: true
+  nvidia_gpu_operator: true
+  dcgm_exporter: true
+  kubectl_context: ai-train-ctx

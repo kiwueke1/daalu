@@ -4,11 +4,15 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 import uuid
 
+
+# ---------------------------------------------------------------------
+# Base context and helper
+# ---------------------------------------------------------------------
 @dataclass(frozen=True)
 class BaseEvent:
     ts: str           # ISO timestamp
     run_id: str       # correlates all events in a single deploy invocation
-    env: str          # dev/staging/prod
+    env: str          # dev/staging/prod/setup/mgmt
     context: Optional[str]  # kube-context
 
     def dict(self) -> Dict[str, Any]:
@@ -24,8 +28,9 @@ def new_ctx(env: str, context: Optional[str]) -> Dict[str, Any]:
     }
 
 
-# ----- Planner -----
-
+# ---------------------------------------------------------------------
+# Planner
+# ---------------------------------------------------------------------
 @dataclass(frozen=True)
 class PlanComputed(BaseEvent):
     order: List[str]
@@ -35,8 +40,9 @@ class PlanFailed(BaseEvent):
     error: str
 
 
-# ----- Repos -----
-
+# ---------------------------------------------------------------------
+# Repository lifecycle
+# ---------------------------------------------------------------------
 @dataclass(frozen=True)
 class RepoAdded(BaseEvent):
     name: str
@@ -47,8 +53,9 @@ class ReposUpdated(BaseEvent):
     pass
 
 
-# ----- Per-release lifecycle -----
-
+# ---------------------------------------------------------------------
+# Release lifecycle (Helm)
+# ---------------------------------------------------------------------
 @dataclass(frozen=True)
 class ReleaseStarted(BaseEvent):
     name: str
@@ -78,8 +85,10 @@ class ReleaseFailed(BaseEvent):
     attempts: int
     error: str
 
-# ----- Waiter -----
 
+# ---------------------------------------------------------------------
+# Waiter lifecycle
+# ---------------------------------------------------------------------
 @dataclass(frozen=True)
 class WaiterStarted(BaseEvent):
     name: str
@@ -96,8 +105,10 @@ class WaiterTimedOut(BaseEvent):
     name: str
     timeout_s: int
 
-# ----- Rollback & Summary -----
 
+# ---------------------------------------------------------------------
+# Rollback & Summary
+# ---------------------------------------------------------------------
 @dataclass(frozen=True)
 class RollbackStarted(BaseEvent):
     name: str
@@ -116,4 +127,89 @@ class DeploySummary(BaseEvent):
     rolled_back: int
 
 
+# ---------------------------------------------------------------------
+# ClusterAPI lifecycle (management cluster)
+# ---------------------------------------------------------------------
+@dataclass(frozen=True)
+class ClusterAPIStarted(BaseEvent):
+    name: str
+    namespace: str
 
+@dataclass(frozen=True)
+class ManifestApplied(BaseEvent):
+    name: str          # manifest filename
+    output: str
+
+@dataclass(frozen=True)
+class ClusterAPIStatusUpdate(BaseEvent):
+    name: str
+    output: str
+
+@dataclass(frozen=True)
+class ClusterAPIReady(BaseEvent):
+    name: str
+    namespace: str
+
+@dataclass(frozen=True)
+class ClusterAPITimedOut(BaseEvent):
+    name: str
+    namespace: str
+    timeout_s: int
+
+@dataclass(frozen=True)
+class ClusterAPIFailed(BaseEvent):
+    name: str
+    error: str
+
+@dataclass(frozen=True)
+class ClusterAPISummary(BaseEvent):
+    name: str
+    status: str          # "OK" or "FAILED"
+    error: Optional[str] = None
+
+
+# ---------------------------------------------------------------------
+# Setup phase lifecycle (setup_manager)
+# ---------------------------------------------------------------------
+@dataclass(frozen=True)
+class SetupStarted(BaseEvent):
+    cluster_name: str
+
+@dataclass(frozen=True)
+class KubeconfigGenerated(BaseEvent):
+    cluster_name: str
+
+@dataclass(frozen=True)
+class ControlPlaneDiscovered(BaseEvent):
+    cluster_name: str
+    ip: str
+
+@dataclass(frozen=True)
+class CiliumInstalled(BaseEvent):
+    cluster_name: str
+    ip: str
+
+@dataclass(frozen=True)
+class CiliumReady(BaseEvent):
+    cluster_name: str
+
+@dataclass(frozen=True)
+class HostsUpdated(BaseEvent):
+    cluster_name: str
+    count: int
+
+@dataclass(frozen=True)
+class NodesLabeled(BaseEvent):
+    cluster_name: str
+    count: int
+
+@dataclass(frozen=True)
+class SetupFailed(BaseEvent):
+    cluster_name: str
+    error: str
+
+@dataclass(frozen=True)
+class SetupSummary(BaseEvent):
+    cluster_name: str
+    status: str
+    error: Optional[str] = None

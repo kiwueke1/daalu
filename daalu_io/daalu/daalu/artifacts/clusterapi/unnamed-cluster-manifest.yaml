@@ -1,0 +1,294 @@
+# ================================
+# Proxmox Access Secret
+# ================================
+apiVersion: v1
+kind: Secret
+metadata:
+  name: openstack-infra-proxmox-secret
+  namespace: default
+type: Opaque
+stringData:
+  url: "https://192.168.0.34:8006"
+  token: "root@pam!capi"
+  secret: "97ecfc71-b6ff-4b83-9c17-c3ebe5c58baa"
+---
+# ================================
+# Cluster definition
+# ================================
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: Cluster
+metadata:
+  name: auto-openstack-infra
+  namespace: default
+spec:
+  clusterNetwork:
+    pods:
+      cidrBlocks:
+        - 192.168.0.0/24
+  controlPlaneRef:
+    apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+    kind: KubeadmControlPlane
+    name: auto-openstack-infra-control-plane
+  infrastructureRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+    kind: ProxmoxCluster
+    name: auto-openstack-infra
+---
+# ================================
+# ProxmoxCluster
+# ================================
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+kind: ProxmoxCluster
+metadata:
+  name: auto-openstack-infra
+  namespace: default
+spec:
+  credentialsRef:
+    name: openstack-infra-proxmox-secret
+    namespace: default
+  allowedNodes:
+  
+  - pve-2
+  
+  - pve-3
+  
+  controlPlaneEndpoint:
+    host: 192.168.0.199
+    port: 6443
+  dnsServers:
+  
+  - 8.8.8.8
+  
+  - 8.8.4.4
+  
+  ipv4Config:
+    addresses:
+    - 192.168.0.170-192.168.0.180
+    gateway: 192.168.0.1
+    prefix: 24
+---
+# ================================
+# KubeadmControlPlane
+# ================================
+apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+kind: KubeadmControlPlane
+metadata:
+  name: auto-openstack-infra-control-plane
+  namespace: default
+spec:
+  kubeadmConfigSpec:
+    clusterConfiguration:
+      apiServer:
+        certSANs: ["192.168.0.199", "kubernetes", "localhost"]
+      controlPlaneEndpoint: "192.168.0.199:6443"
+      networking:
+        podSubnet: "10.20.0.0/16"
+    files:
+    - content: |
+        apiVersion: v1
+        kind: Pod
+        metadata:
+          name: kube-vip
+          namespace: kube-system
+        spec:
+          containers:
+          - args: ["manager"]
+            env:
+            - name: cp_enable
+              value: "true"
+            - name: vip_interface
+              value: "ens18"
+            - name: address
+              value: "192.168.0.199"
+            - name: port
+              value: "6443"
+            - name: vip_arp
+              value: "true"
+            - name: vip_leaderelection
+              value: "true"
+            - name: vip_leaseduration
+              value: "15"
+            - name: vip_renewdeadline
+              value: "10"
+            - name: vip_retryperiod
+              value: "2"
+            image: ghcr.io/kube-vip/kube-vip:v0.7.1
+            imagePullPolicy: IfNotPresent
+            name: kube-vip
+            securityContext:
+              capabilities:
+                add: ["NET_ADMIN","NET_RAW"]
+            volumeMounts:
+            - mountPath: /etc/kubernetes/admin.conf
+              name: kubeconfig
+          hostNetwork: true
+          volumes:
+          - hostPath:
+              path: /etc/kubernetes/admin.conf
+              type: FileOrCreate
+            name: kubeconfig
+      owner: root:root
+      path: /etc/kubernetes/manifests/kube-vip.yaml
+    - content: |
+        #!/bin/bash
+        set -e
+        KUBEADM_MINOR="$(kubeadm version -o short | cut -d '.' -f 2)"
+        if [[ "$KUBEADM_MINOR" -lt "29" ]]; then
+          exit 0
+        fi
+        IS_KUBEADM_INIT="false"
+        if [[ -f /run/kubeadm/kubeadm.yaml ]]; then
+          IS_KUBEADM_INIT="true"
+        fi
+        if [[ -f /etc/kubeadm.sh ]] && grep -q -e "kubeadm init" /etc/kubeadm.sh; then
+          IS_KUBEADM_INIT="true"
+        fi
+        if [[ "$IS_KUBEADM_INIT" == "true" ]]; then
+          sed -i 's#path: /etc/kubernetes/admin.conf#path: /etc/kubernetes/super-admin.conf#' \
+            /etc/kubernetes/manifests/kube-vip.yaml
+        fi
+      owner: root:root
+      path: /etc/kube-vip-prepare.sh
+      permissions: "0700"
+    initConfiguration:
+      nodeRegistration:
+        kubeletExtraArgs:
+          provider-id: proxmox://{{ ds.meta_data.instance_id }}
+    joinConfiguration:
+      nodeRegistration:
+        kubeletExtraArgs:
+          provider-id: proxmox://{{ ds.meta_data.instance_id }}
+    preKubeadmCommands:
+    - /etc/kube-vip-prepare.sh
+    - usermod -aG sudo builder || true
+    - echo 'builder ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/90-builder-nopasswd
+    - chmod 0440 /etc/sudoers.d/90-builder-nopasswd
+    - bash -lc "echo 'builder:admin10' | chpasswd"
+    users:
+    - name: builder
+      sudo: ALL=(ALL) NOPASSWD:ALL
+      sshAuthorizedKeys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFN65XT1iOqLGjTGwOHqKf4VtgOebCJzpbD80hGFvdts kez@ironcloud
+  machineTemplate:
+    infrastructureRef:
+      apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+      kind: ProxmoxMachineTemplate
+      name: auto-openstack-infra-control-plane
+  replicas: 3
+  version: v1.32.4
+---
+# ================================
+# ProxmoxMachineTemplate (Control Plane)
+# ================================
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+kind: ProxmoxMachineTemplate
+metadata:
+  name: auto-openstack-infra-control-plane
+  namespace: default
+spec:
+  template:
+    spec:
+      disks:
+        bootVolume:
+          disk: scsi0
+          sizeGb: 100
+      memoryMiB: 26000
+      numCores: 8
+      numSockets: 2
+      format: qcow2
+      full: true
+      network:
+        default:
+          bridge: vmbr0
+          model: virtio
+      sourceNode: pve-2
+      templateID: 10001
+---
+# ================================
+# MachineDeployment (Workers)
+# ================================
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: MachineDeployment
+metadata:
+  name: auto-openstack-infra-workers
+  namespace: default
+spec:
+  clusterName: auto-openstack-infra
+  replicas: 4
+  selector:
+    matchLabels:
+      cluster.x-k8s.io/cluster-name: auto-openstack-infra
+      node-role.kubernetes.io/node: ""
+  template:
+    metadata:
+      labels:
+        cluster.x-k8s.io/cluster-name: auto-openstack-infra
+        node-role.kubernetes.io/node: ""
+    spec:
+      bootstrap:
+        configRef:
+          apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+          kind: KubeadmConfigTemplate
+          name: auto-openstack-infra-worker
+      clusterName: auto-openstack-infra
+      infrastructureRef:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+        kind: ProxmoxMachineTemplate
+        name: auto-openstack-infra-worker
+      version: v1.32.4
+---
+# ================================
+# ProxmoxMachineTemplate (Workers)
+# ================================
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+kind: ProxmoxMachineTemplate
+metadata:
+  name: auto-openstack-infra-worker
+  namespace: default
+spec:
+  template:
+    spec:
+      disks:
+        bootVolume:
+          disk: scsi0
+          sizeGb: 70
+      memoryMiB: 20000
+      numCores: 4
+      numSockets: 2
+      format: qcow2
+      full: true
+      network:
+        default:
+          bridge: vmbr0
+          model: virtio
+      sourceNode: pve-2
+      templateID: 10001
+---
+# ================================
+# KubeadmConfigTemplate (Workers)
+# ================================
+apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+kind: KubeadmConfigTemplate
+metadata:
+  name: auto-openstack-infra-worker
+  namespace: default
+spec:
+  template:
+    spec:
+      joinConfiguration:
+        nodeRegistration:
+          kubeletExtraArgs:
+            provider-id: proxmox://{{ ds.meta_data.instance_id }}
+      preKubeadmCommands:
+      - usermod -aG sudo builder || true
+      - echo 'builder ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/90-builder-nopasswd
+      - chmod 0440 /etc/sudoers.d/90-builder-nopasswd
+      - bash -lc "echo 'builder:admin10' | chpasswd"
+      users:
+      - name: builder
+        sudo: ALL=(ALL) NOPASSWD:ALL
+        sshAuthorizedKeys:
+        - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFN65XT1iOqLGjTGwOHqKf4VtgOebCJzpbD80hGFvdts kez@ironcloud
+# ================================
+# MachineDeployment (HPC)
+# ================================

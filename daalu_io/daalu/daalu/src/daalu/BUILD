@@ -18,6 +18,8 @@ py_library(
     deps = [
         "@pip//pydantic",
         "@pip//pyyaml",
+        "@pip//paramiko",
+        "@pip//jinja2",
     ],
 )
 
@@ -31,6 +33,7 @@ py_binary(
         "@pip//typer",
         "@pip//pydantic",
         "@pip//pyyaml",
+        "@pip//jinja2",
     ],
     data = ["//:cluster-defs"]
 )

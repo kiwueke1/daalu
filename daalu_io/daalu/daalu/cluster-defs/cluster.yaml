@@ -1,5 +1,41 @@
 environment: dev
-context: my-workload-ctx     # kubectl context or leave null and pass --context in CLI
+context: kind-kind    # kubectl context or leave null and pass --context in CLI
+
+cluster_api:
+  cluster_name: auto-openstack-infra
+  namespace: default
+  pod_cidr: 192.168.0.0/24
+  pod_subnet: 10.20.0.0/16
+  control_plane_vip: 192.168.0.199
+  allowed_nodes: [pve-2, pve-3]
+  dns_servers: [8.8.8.8, 8.8.4.4]
+  ip_range: 192.168.0.170-192.168.0.180
+  gateway: 192.168.0.1
+  prefix: 24
+  vip_interface: ens18
+  cert_sans: ["192.168.0.199","kubernetes","localhost"]
+  network_bridge: vmbr0
+  source_node: pve-2
+  template_id: 10001
+  kubernetes_version: v1.32.4
+  kube_vip_image: ghcr.io/kube-vip/kube-vip:v0.7.1
+  control_plane_replicas: 3
+  worker_replicas: 4
+  control_plane_disk_gb: 100
+  worker_disk_gb: 70
+  control_plane_memory_mib: 26000
+  worker_memory_mib: 20000
+  control_plane_cores: 8
+  worker_cores: 4
+  control_plane_sockets: 2
+  worker_sockets: 2
+  builder_password: admin10
+  ssh_public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFN65XT1iOqLGjTGwOHqKf4VtgOebCJzpbD80hGFvdts kez@ironcloud"
+  proxmox_secret_name: openstack-infra-proxmox-secret
+  proxmox_url: "https://192.168.0.34:8006"
+  proxmox_token: "root@pam!capi"
+  proxmox_secret: "97ecfc71-b6ff-4b83-9c17-c3ebe5c58baa"
+
 
 repos: []                    # local charts don't need repos
 

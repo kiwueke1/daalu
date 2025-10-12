@@ -128,3 +128,13 @@ filegroup(
     srcs = glob(["cluster-defs/**"]),
     visibility = ["//visibility:public"],
 )
+
+py_test(
+    name = "test_ceph_manager",
+    srcs = ["tests/bootstrap/test_ceph_manager.py"],
+    deps = [
+        ":daalu_root",
+        "@pip//pytest",
+    ],
+    tags = ["unit"],
+)

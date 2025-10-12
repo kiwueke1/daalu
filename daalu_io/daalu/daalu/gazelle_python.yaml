@@ -7,24 +7,31 @@
 manifest:
   modules_mapping:
     annotated_types: annotated_types
+    bcrypt: bcrypt
+    cffi: cffi
     click: click
     colorama: colorama
     copier: copier
+    cryptography: cryptography
     dunamai: dunamai
     funcy: funcy
     iniconfig: iniconfig
+    invoke: invoke
     jinja2: jinja2
     jinja2_ansible_filters: jinja2_ansible_filters
     markdown_it: markdown_it_py
     markupsafe: markupsafe
     mdurl: mdurl
+    nacl: pynacl
     packaging: packaging
+    paramiko: paramiko
     pathspec: pathspec
     platformdirs: platformdirs
     pluggy: pluggy
     plumbum: plumbum
     prompt_toolkit: prompt_toolkit
     py: pytest
+    pycparser: pycparser
     pydantic: pydantic
     pydantic_core: pydantic_core
     pygments: pygments
