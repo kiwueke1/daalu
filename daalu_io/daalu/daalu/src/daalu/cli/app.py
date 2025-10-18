@@ -5,7 +5,7 @@ from typing import Optional, List
 
 import typer
 import yaml
-
+import time
 
 from daalu.hpc.cli import cli as hpc_cli
 from daalu.config.loader import load_config
@@ -30,6 +30,8 @@ from daalu.cli.helper import (
 from daalu.bootstrap.ceph.manager import CephManager
 from daalu.bootstrap.ceph.models import CephHost, CephConfig
 from daalu.cli.helper import read_group_from_inventory
+from daalu.observers.dispatcher import EventBus
+from daalu.observers.console import ConsoleObserver
 
 
 app = typer.Typer(help="Daalu Deployment CLI")
@@ -96,7 +98,7 @@ def deploy(
         False, "--debug", "-d", help="Enable Helm debug output (passes --debug to helm)"
     ),
     ceph_version: str = typer.Option(
-        "18.2.1", "--ceph-version", help="Ceph version (forms quay.io/ceph/ceph:v<version> if --ceph-image not set)"
+        "17.2.6", "--ceph-version", help="Ceph version (forms quay.io/ceph/ceph:v<version> if --ceph-image not set)"
     ),
     ceph_image: Optional[str] = typer.Option(
         None, "--ceph-image", help="Explicit cephadm image (overrides --ceph-version)"
@@ -111,6 +113,7 @@ def deploy(
     """
     typer.echo(f"Workspace root: {WORKSPACE_ROOT}")
     typer.echo(config)
+    cfg = load_config(config)
 
     observers = [ConsoleObserver()]
 
@@ -120,7 +123,7 @@ def deploy(
 
         # Load config
         cfg = load_config(config)
-        cluster_name = getattr(cfg, "name", "unnamed-cluster")
+        cluster_name = cfg.cluster_api.cluster_name
 
         # Define workspace and artifact path
         artifacts_dir = Path(WORKSPACE_ROOT) / "artifacts" / "clusterapi"
@@ -140,8 +143,8 @@ def deploy(
 
         # Apply it after saving
         manager.deploy_dynamic(cfg)
-        typer.echo("[clusterapi] Waiting 10 seconds for workload kubeconfig to become available...")
-        time.sleep(10)
+        typer.echo("[clusterapi] Waiting 5 seconds for workload kubeconfig to become available...")
+        time.sleep(5)
     else:
         typer.echo("[clusterapi] Skipped.")
 
@@ -159,6 +162,7 @@ def deploy(
 
         inv = inventory_path(WORKSPACE_ROOT)
         pairs = read_hosts_from_inventory(inv)
+        print('pairs from nodes is {pairs}')
         if not pairs:
             typer.echo(f"[nodes] No hosts found in {inv}. Skipping node bootstrap.")
         else:
@@ -199,11 +203,12 @@ def deploy(
 
         inv = inventory_path(WORKSPACE_ROOT)
         ceph_pairs = read_group_from_inventory(inv, "cephs")
+        print(f'ceph pairs is {ceph_pairs}')
         if not ceph_pairs:
             typer.echo(f"[ceph] No [cephs] group found in {inv}; skipping Ceph.")
         else:
             ceph_hosts: List[CephHost] = [
-                CephHost(hostname=h, address=a, username=ssh_username, password=ssh_password, pkey_path=str(ssh_key) if ssh_key else None)
+                CephHost(hostname=h, address=a, username=managed_user, pkey_path=str(ssh_key) if ssh_key else None)
                 for (h, a) in ceph_pairs
             ]
             ceph_cfg = CephConfig(
@@ -216,7 +221,8 @@ def deploy(
                 mgr_count=2,
                 mon_count=None,  # infer min(3, len(hosts))
             )
-            CephManager().deploy(ceph_hosts, ceph_cfg)
+            bus = EventBus(observers=[ConsoleObserver()])
+            CephManager(bus=bus).deploy(ceph_hosts, ceph_cfg)
             typer.echo("[ceph] Ceph deployment completed.")
     else:
         typer.echo("[ceph] Skipped.")

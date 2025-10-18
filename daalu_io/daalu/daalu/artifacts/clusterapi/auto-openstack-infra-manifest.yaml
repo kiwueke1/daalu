@@ -1,24 +1,38 @@
 # ================================
+# Proxmox Access Secret
+# ================================
+apiVersion: v1
+kind: Secret
+metadata:
+  name: openstack-infra-proxmox-secret
+  namespace: default
+type: Opaque
+stringData:
+  url: "https://192.168.0.34:8006"
+  token: "root@pam!capi"
+  secret: "97ecfc71-b6ff-4b83-9c17-c3ebe5c58baa"
+---
+# ================================
 # Cluster definition
 # ================================
 apiVersion: cluster.x-k8s.io/v1beta1
 kind: Cluster
 metadata:
-  name: {{ cluster_name }}
-  namespace: {{ namespace }}
+  name: auto-openstack-infra
+  namespace: default
 spec:
   clusterNetwork:
     pods:
       cidrBlocks:
-        - {{ pod_cidr }}
+        - 192.168.0.0/24
   controlPlaneRef:
     apiVersion: controlplane.cluster.x-k8s.io/v1beta1
     kind: KubeadmControlPlane
-    name: {{ cluster_name }}-control-plane
+    name: auto-openstack-infra-control-plane
   infrastructureRef:
     apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
     kind: ProxmoxCluster
-    name: {{ cluster_name }}
+    name: auto-openstack-infra
 ---
 # ================================
 # ProxmoxCluster
@@ -26,28 +40,32 @@ spec:
 apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
 kind: ProxmoxCluster
 metadata:
-  name: {{ cluster_name }}
-  namespace: {{ namespace }}
+  name: auto-openstack-infra
+  namespace: default
 spec:
   credentialsRef:
-    name: {{ proxmox_secret_name }}
-    namespace: {{ namespace }}
+    name: openstack-infra-proxmox-secret
+    namespace: default
   allowedNodes:
-  {% for node in allowed_nodes %}
-  - {{ node }}
-  {% endfor %}
+  
+  - pve-2
+  
+  - pve-3
+  
   controlPlaneEndpoint:
-    host: {{ control_plane_vip }}
+    host: 192.168.0.199
     port: 6443
   dnsServers:
-  {% for dns in dns_servers %}
-  - {{ dns }}
-  {% endfor %}
+  
+  - 8.8.8.8
+  
+  - 8.8.4.4
+  
   ipv4Config:
     addresses:
-    - {{ ip_range }}
-    gateway: {{ gateway }}
-    prefix: {{ prefix }}
+    - 192.168.0.170-192.168.0.180
+    gateway: 192.168.0.1
+    prefix: 24
 ---
 # ================================
 # KubeadmControlPlane
@@ -55,19 +73,23 @@ spec:
 apiVersion: controlplane.cluster.x-k8s.io/v1beta1
 kind: KubeadmControlPlane
 metadata:
-  name: {{ cluster_name }}-control-plane
-  namespace: {{ namespace }}
+  name: auto-openstack-infra-control-plane
+  namespace: default
 spec:
   kubeadmConfigSpec:
     clusterConfiguration:
       apiServer:
         certSANs:
-        {% for san in cert_sans %}
-          - "{{ san }}"
-        {% endfor %}
-      controlPlaneEndpoint: "{{ control_plane_vip }}:6443"
+        
+          - "192.168.0.199"
+        
+          - "kubernetes"
+        
+          - "localhost"
+        
+      controlPlaneEndpoint: "192.168.0.199:6443"
       networking:
-        podSubnet: "{{ pod_subnet }}"
+        podSubnet: "10.20.0.0/16"
     files:
     - content: |
         apiVersion: v1
@@ -83,9 +105,9 @@ spec:
                 - name: cp_enable
                   value: "true"
                 - name: vip_interface
-                  value: "{{ vip_interface }}"
+                  value: "ens18"
                 - name: address
-                  value: "{{ control_plane_vip }}"
+                  value: "192.168.0.199"
                 - name: port
                   value: "6443"
                 - name: vip_arp
@@ -98,7 +120,7 @@ spec:
                   value: "10"
                 - name: vip_retryperiod
                   value: "2"
-              image: {{ kube_vip_image }}
+              image: ghcr.io/kube-vip/kube-vip:v0.7.1
               imagePullPolicy: IfNotPresent
               name: kube-vip
               resources: {}
@@ -147,29 +169,29 @@ spec:
     initConfiguration:
       nodeRegistration:
         kubeletExtraArgs:
-          provider-id: proxmox://{{ '{{ ds.meta_data.instance_id }}' }}
+          provider-id: proxmox://{{ ds.meta_data.instance_id }}
     joinConfiguration:
       nodeRegistration:
         kubeletExtraArgs:
-          provider-id: proxmox://{{ '{{ ds.meta_data.instance_id }}' }}
+          provider-id: proxmox://{{ ds.meta_data.instance_id }}
     preKubeadmCommands:
     - /etc/kube-vip-prepare.sh
     - usermod -aG sudo builder || true
     - echo 'builder ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/90-builder-nopasswd
     - chmod 0440 /etc/sudoers.d/90-builder-nopasswd
-    - bash -lc "echo 'builder:{{ builder_password }}' | chpasswd"
+    - bash -lc "echo 'builder:admin10' | chpasswd"
     users:
     - name: builder
       sudo: ALL=(ALL) NOPASSWD:ALL
       sshAuthorizedKeys:
-      - {{ ssh_public_key }}
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFN65XT1iOqLGjTGwOHqKf4VtgOebCJzpbD80hGFvdts kez@ironcloud
   machineTemplate:
     infrastructureRef:
       apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
       kind: ProxmoxMachineTemplate
-      name: {{ cluster_name }}-control-plane
-  replicas: {{ control_plane_replicas }}
-  version: {{ kubernetes_version }}
+      name: auto-openstack-infra-control-plane
+  replicas: 3
+  version: v1.32.4
 ---
 # ================================
 # ProxmoxMachineTemplate (Control Plane)
@@ -177,26 +199,26 @@ spec:
 apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
 kind: ProxmoxMachineTemplate
 metadata:
-  name: {{ cluster_name }}-control-plane
-  namespace: {{ namespace }}
+  name: auto-openstack-infra-control-plane
+  namespace: default
 spec:
   template:
     spec:
       disks:
         bootVolume:
           disk: scsi0
-          sizeGb: {{ control_plane_disk_gb }}
-      memoryMiB: {{ control_plane_memory_mib }}
-      numCores: {{ control_plane_cores }}
-      numSockets: {{ control_plane_sockets }}
+          sizeGb: 300
+      memoryMiB: 62000
+      numCores: 8
+      numSockets: 2
       format: qcow2
       full: true
       network:
         default:
-          bridge: {{ network_bridge }}
+          bridge: vmbr0
           model: virtio
-      sourceNode: {{ source_node }}
-      templateID: {{ template_id }}
+      sourceNode: pve-2
+      templateID: 10001
 ---
 # ================================
 # MachineDeployment (Workers)
@@ -204,32 +226,32 @@ spec:
 apiVersion: cluster.x-k8s.io/v1beta1
 kind: MachineDeployment
 metadata:
-  name: {{ cluster_name }}-workers
-  namespace: {{ namespace }}
+  name: auto-openstack-infra-workers
+  namespace: default
 spec:
-  clusterName: {{ cluster_name }}
-  replicas: {{ worker_replicas }}
+  clusterName: auto-openstack-infra
+  replicas: 3
   selector:
     matchLabels:
-      cluster.x-k8s.io/cluster-name: {{ cluster_name }}
+      cluster.x-k8s.io/cluster-name: auto-openstack-infra
       node-role.kubernetes.io/node: ""
   template:
     metadata:
       labels:
-        cluster.x-k8s.io/cluster-name: {{ cluster_name }}
+        cluster.x-k8s.io/cluster-name: auto-openstack-infra
         node-role.kubernetes.io/node: ""
     spec:
       bootstrap:
         configRef:
           apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
           kind: KubeadmConfigTemplate
-          name: {{ cluster_name }}-worker
-      clusterName: {{ cluster_name }}
+          name: auto-openstack-infra-worker
+      clusterName: auto-openstack-infra
       infrastructureRef:
         apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
         kind: ProxmoxMachineTemplate
-        name: {{ cluster_name }}-worker
-      version: {{ kubernetes_version }}
+        name: auto-openstack-infra-worker
+      version: v1.32.4
 ---
 # ================================
 # ProxmoxMachineTemplate (Workers)
@@ -237,26 +259,26 @@ spec:
 apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
 kind: ProxmoxMachineTemplate
 metadata:
-  name: {{ cluster_name }}-worker
-  namespace: {{ namespace }}
+  name: auto-openstack-infra-worker
+  namespace: default
 spec:
   template:
     spec:
       disks:
         bootVolume:
           disk: scsi0
-          sizeGb: {{ worker_disk_gb }}
-      memoryMiB: {{ worker_memory_mib }}
-      numCores: {{ worker_cores }}
-      numSockets: {{ worker_sockets }}
+          sizeGb: 300
+      memoryMiB: 40000
+      numCores: 4
+      numSockets: 2
       format: qcow2
       full: true
       network:
         default:
-          bridge: {{ network_bridge }}
+          bridge: vmbr0
           model: virtio
-      sourceNode: {{ source_node }}
-      templateID: {{ template_id }}
+      sourceNode: pve-2
+      templateID: 10001
 ---
 # ================================
 # KubeadmConfigTemplate (Workers)
@@ -264,60 +286,25 @@ spec:
 apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
 kind: KubeadmConfigTemplate
 metadata:
-  name: {{ cluster_name }}-worker
-  namespace: {{ namespace }}
+  name: auto-openstack-infra-worker
+  namespace: default
 spec:
   template:
     spec:
       joinConfiguration:
         nodeRegistration:
           kubeletExtraArgs:
-            provider-id: proxmox://{{ '{{ ds.meta_data.instance_id }}' }}
+            provider-id: proxmox://{{ ds.meta_data.instance_id }}
       preKubeadmCommands:
       - usermod -aG sudo builder || true
       - echo 'builder ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/90-builder-nopasswd
       - chmod 0440 /etc/sudoers.d/90-builder-nopasswd
-      - bash -lc "echo 'builder:{{ builder_password }}' | chpasswd"
+      - bash -lc "echo 'builder:admin10' | chpasswd"
       users:
       - name: builder
         sudo: ALL=(ALL) NOPASSWD:ALL
         sshAuthorizedKeys:
-        - {{ ssh_public_key }}
+        - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFN65XT1iOqLGjTGwOHqKf4VtgOebCJzpbD80hGFvdts kez@ironcloud
 # ================================
 # MachineDeployment (HPC)
 # ================================
-{% if gpu_node_pools %}
-# --- GPU Node Pools ---
-{% for gpu in gpu_node_pools %}
----
-apiVersion: cluster.x-k8s.io/v1beta1
-kind: MachineDeployment
-metadata:
-  name: {{ cluster_name }}-{{ gpu.name }}
-  namespace: {{ namespace }}
-spec:
-  clusterName: {{ cluster_name }}
-  replicas: 1
-  selector:
-    matchLabels:
-      node-pool: {{ gpu.node_pool }}
-  template:
-    metadata:
-      labels:
-        node-pool: {{ gpu.node_pool }}
-        {% for k, v in gpu.labels.items() %}
-        {{ k }}: "{{ v }}"
-        {% endfor %}
-    spec:
-      clusterName: {{ cluster_name }}
-      bootstrap:
-        configRef:
-          apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
-          kind: KubeadmConfigTemplate
-          name: {{ cluster_name }}-{{ gpu.name }}-bootstrap
-      infrastructureRef:
-        apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
-        kind: MachineTemplate
-        name: {{ cluster_name }}-{{ gpu.name }}-infra
-{% endfor %}
-{% endif %}

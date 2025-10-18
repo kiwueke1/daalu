@@ -79,7 +79,14 @@ spec:
   kubeadmConfigSpec:
     clusterConfiguration:
       apiServer:
-        certSANs: ["192.168.0.199", "kubernetes", "localhost"]
+        certSANs:
+        
+          - "192.168.0.199"
+        
+          - "kubernetes"
+        
+          - "localhost"
+        
       controlPlaneEndpoint: "192.168.0.199:6443"
       networking:
         podSubnet: "10.20.0.0/16"
@@ -92,35 +99,44 @@ spec:
           namespace: kube-system
         spec:
           containers:
-          - args: ["manager"]
-            env:
-            - name: cp_enable
-              value: "true"
-            - name: vip_interface
-              value: "ens18"
-            - name: address
-              value: "192.168.0.199"
-            - name: port
-              value: "6443"
-            - name: vip_arp
-              value: "true"
-            - name: vip_leaderelection
-              value: "true"
-            - name: vip_leaseduration
-              value: "15"
-            - name: vip_renewdeadline
-              value: "10"
-            - name: vip_retryperiod
-              value: "2"
-            image: ghcr.io/kube-vip/kube-vip:v0.7.1
-            imagePullPolicy: IfNotPresent
-            name: kube-vip
-            securityContext:
-              capabilities:
-                add: ["NET_ADMIN","NET_RAW"]
-            volumeMounts:
-            - mountPath: /etc/kubernetes/admin.conf
-              name: kubeconfig
+            - args:
+                - manager
+              env:
+                - name: cp_enable
+                  value: "true"
+                - name: vip_interface
+                  value: "ens18"
+                - name: address
+                  value: "192.168.0.199"
+                - name: port
+                  value: "6443"
+                - name: vip_arp
+                  value: "true"
+                - name: vip_leaderelection
+                  value: "true"
+                - name: vip_leaseduration
+                  value: "15"
+                - name: vip_renewdeadline
+                  value: "10"
+                - name: vip_retryperiod
+                  value: "2"
+              image: ghcr.io/kube-vip/kube-vip:v0.7.1
+              imagePullPolicy: IfNotPresent
+              name: kube-vip
+              resources: {}
+              securityContext:
+                capabilities:
+                  add:
+                    - NET_ADMIN
+                    - NET_RAW
+              volumeMounts:
+                - mountPath: /etc/kubernetes/admin.conf
+                  name: kubeconfig
+          hostAliases:
+            - ip: 127.0.0.1
+              hostnames:
+                - localhost
+                - kubernetes
           hostNetwork: true
           volumes:
           - hostPath:
@@ -191,8 +207,8 @@ spec:
       disks:
         bootVolume:
           disk: scsi0
-          sizeGb: 100
-      memoryMiB: 26000
+          sizeGb: 300
+      memoryMiB: 56000
       numCores: 8
       numSockets: 2
       format: qcow2
@@ -251,8 +267,8 @@ spec:
       disks:
         bootVolume:
           disk: scsi0
-          sizeGb: 70
-      memoryMiB: 20000
+          sizeGb: 300
+      memoryMiB: 40000
       numCores: 4
       numSockets: 2
       format: qcow2

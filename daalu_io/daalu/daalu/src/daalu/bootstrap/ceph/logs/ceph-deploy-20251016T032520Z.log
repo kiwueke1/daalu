@@ -1,0 +1,111 @@
+# Ceph deployment log started 20251016T032520Z UTC
+
+[2025-10-16T03:25:20Z] $ sudo -S bash -lc 'command -v docker || command -v podman'
+/usr/bin/docker
+[2025-10-16T03:25:21Z] [exit 0]
+
+[2025-10-16T03:25:21Z] $ bash -lc 'command -v cephadm || echo MISSING'
+/usr/local/bin/cephadm
+[2025-10-16T03:25:21Z] [exit 0]
+
+[2025-10-16T03:25:21Z] $ sudo -S bash -lc '(podman pull quay.io/ceph/ceph:v17.2.6 || docker pull quay.io/ceph/ceph:v17.2.6) || true'
+bash: line 1: podman: command not found
+v17.2.6: Pulling from ceph/ceph
+Digest: sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+Status: Image is up to date for quay.io/ceph/ceph:v17.2.6
+[2025-10-16T03:25:22Z] [exit 0]
+
+[2025-10-16T03:25:22Z] $ bash -lc 'sudo cephadm shell -- ceph status >/dev/null 2>&1 || test -f /etc/ceph/ceph.conf'
+[2025-10-16T03:25:36Z] [exit 0]
+
+[2025-10-16T03:25:36Z] [cephadm] Detected existing Ceph cluster on auto-openstack-infra-workers-kbd4x-gtd4h (192.168.0.173); skipping bootstrap.
+[2025-10-16T03:25:36Z] $ sudo -S bash -lc 'cat /etc/ceph/ceph.pub'
+ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCpKlfp7hl0WcsSC4HIGhq+0YF+QMn3Iqa9DHrkDoSFj0RcltAkai0kTZdUHelM/5vnWIByLKCRVtP5dnyg9VETASNuodYncH6RKsc4qjK5R3OOGt3jvFLVwgYvAHm1G1F1gUmT0D/0fhIjQnn7GVd98gG6Cgt68zk7NTn7N3HoOF0TlS0KSF/0QKdwu1fmtujOXpP1QS8KwfWoZNBhfzgA1DDcINABw++X4Xv8Hxe5HuVhQVBJuaxy6uej6wasgCtmFXsuKAdC10lt/yaaSCyGEHJALgi/ZzXHf+X4JG/rzz85LXkTBrYsfAk2U+TLVKMB1pCmV+cjNQcpB4+vZ/8xRmGm7SGcrj9WahL00eZ9FLJLu1ioQqcLEsiTFlpBZdKz3MBEd5o0nl+CrEX4X2PV7zDNr4PBUrxXc865tkSkTZ7FOj00mBo8c4VgaWR+byUEP0xDDMPKefDUd7mKw9NSi7IsX9YPpUQWFFadonbIr+Du0SyeU8KKYKY78uKj+Ls= ceph-ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee
+[2025-10-16T03:25:36Z] [exit 0]
+
+[2025-10-16T03:25:36Z] $ sudo -S bash -lc 'mkdir -p /root/.ssh && echo "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCpKlfp7hl0WcsSC4HIGhq+0YF+QMn3Iqa9DHrkDoSFj0RcltAkai0kTZdUHelM/5vnWIByLKCRVtP5dnyg9VETASNuodYncH6RKsc4qjK5R3OOGt3jvFLVwgYvAHm1G1F1gUmT0D/0fhIjQnn7GVd98gG6Cgt68zk7NTn7N3HoOF0TlS0KSF/0QKdwu1fmtujOXpP1QS8KwfWoZNBhfzgA1DDcINABw++X4Xv8Hxe5HuVhQVBJuaxy6uej6wasgCtmFXsuKAdC10lt/yaaSCyGEHJALgi/ZzXHf+X4JG/rzz85LXkTBrYsfAk2U+TLVKMB1pCmV+cjNQcpB4+vZ/8xRmGm7SGcrj9WahL00eZ9FLJLu1ioQqcLEsiTFlpBZdKz3MBEd5o0nl+CrEX4X2PV7zDNr4PBUrxXc865tkSkTZ7FOj00mBo8c4VgaWR+byUEP0xDDMPKefDUd7mKw9NSi7IsX9YPpUQWFFadonbIr+Du0SyeU8KKYKY78uKj+Ls= ceph-ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee" >> /root/.ssh/authorized_keys'
+[2025-10-16T03:25:37Z] [exit 0]
+
+[2025-10-16T03:25:37Z] $ sudo -S bash -lc 'mkdir -p /root/.ssh && echo "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCpKlfp7hl0WcsSC4HIGhq+0YF+QMn3Iqa9DHrkDoSFj0RcltAkai0kTZdUHelM/5vnWIByLKCRVtP5dnyg9VETASNuodYncH6RKsc4qjK5R3OOGt3jvFLVwgYvAHm1G1F1gUmT0D/0fhIjQnn7GVd98gG6Cgt68zk7NTn7N3HoOF0TlS0KSF/0QKdwu1fmtujOXpP1QS8KwfWoZNBhfzgA1DDcINABw++X4Xv8Hxe5HuVhQVBJuaxy6uej6wasgCtmFXsuKAdC10lt/yaaSCyGEHJALgi/ZzXHf+X4JG/rzz85LXkTBrYsfAk2U+TLVKMB1pCmV+cjNQcpB4+vZ/8xRmGm7SGcrj9WahL00eZ9FLJLu1ioQqcLEsiTFlpBZdKz3MBEd5o0nl+CrEX4X2PV7zDNr4PBUrxXc865tkSkTZ7FOj00mBo8c4VgaWR+byUEP0xDDMPKefDUd7mKw9NSi7IsX9YPpUQWFFadonbIr+Du0SyeU8KKYKY78uKj+Ls= ceph-ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee" >> /root/.ssh/authorized_keys'
+[2025-10-16T03:25:37Z] [exit 0]
+
+[2025-10-16T03:25:37Z] $ sudo -S bash -lc 'cephadm shell -- ceph config set global container_image quay.io/ceph/ceph:v17.2.6'
+Inferring fsid ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee
+Inferring config /var/lib/ceph/ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee/mon.auto-openstack-infra-workers-kbd4x-gtd4h/config
+Using ceph image with id '2747c7f13104' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+[2025-10-16T03:25:52Z] [exit 0]
+
+[2025-10-16T03:25:52Z] $ sudo -S bash -lc 'cephadm shell -- ceph orch host add auto-openstack-infra-workers-kbd4x-pkqm7 192.168.0.172'
+Inferring fsid ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee
+Inferring config /var/lib/ceph/ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee/mon.auto-openstack-infra-workers-kbd4x-gtd4h/config
+Using ceph image with id '2747c7f13104' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+Error EINVAL: check-host failed:
+systemctl is present
+lvcreate is present
+Unit chrony.service is enabled and running
+Hostname "auto-openstack-infra-workers-kbd4x-pkqm7" matches what is expected.
+ERROR: No container engine binary found (podman or docker). Try run `apt/dnf/yum/zypper install <container engine>`
+[2025-10-16T03:26:06Z] [exit 22]
+
+[2025-10-16T03:26:06Z] $ sudo -S bash -lc 'cephadm shell -- ceph orch host add auto-openstack-infra-workers-kbd4x-tj5jx 192.168.0.171'
+Inferring fsid ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee
+Inferring config /var/lib/ceph/ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee/mon.auto-openstack-infra-workers-kbd4x-gtd4h/config
+Using ceph image with id '2747c7f13104' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+Error EINVAL: check-host failed:
+systemctl is present
+lvcreate is present
+Unit chrony.service is enabled and running
+Hostname "auto-openstack-infra-workers-kbd4x-tj5jx" matches what is expected.
+ERROR: No container engine binary found (podman or docker). Try run `apt/dnf/yum/zypper install <container engine>`
+[2025-10-16T03:26:21Z] [exit 22]
+
+[2025-10-16T03:26:21Z] $ sudo -S bash -lc 'cephadm shell -- ceph orch apply mon --placement="count:3"'
+Inferring fsid ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee
+Inferring config /var/lib/ceph/ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee/mon.auto-openstack-infra-workers-kbd4x-gtd4h/config
+Using ceph image with id '2747c7f13104' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+Scheduled mon update...
+[2025-10-16T03:26:36Z] [exit 0]
+
+[2025-10-16T03:26:36Z] $ sudo -S bash -lc 'cephadm shell -- ceph orch apply mgr --placement="count:2"'
+Inferring fsid ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee
+Inferring config /var/lib/ceph/ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee/mon.auto-openstack-infra-workers-kbd4x-gtd4h/config
+Using ceph image with id '2747c7f13104' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+Scheduled mgr update...
+[2025-10-16T03:26:50Z] [exit 0]
+
+[2025-10-16T03:26:50Z] $ sudo -S bash -lc 'cephadm shell -- ceph orch apply osd --all-available-devices'
+Inferring fsid ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee
+Inferring config /var/lib/ceph/ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee/mon.auto-openstack-infra-workers-kbd4x-gtd4h/config
+Using ceph image with id '2747c7f13104' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+Scheduled osd.all-available-devices update...
+[2025-10-16T03:27:04Z] [exit 0]
+
+[2025-10-16T03:27:04Z] $ sudo -S bash -lc 'cephadm shell -- ceph -s'
+Inferring fsid ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee
+Inferring config /var/lib/ceph/ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee/mon.auto-openstack-infra-workers-kbd4x-gtd4h/config
+Using ceph image with id '2747c7f13104' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+  cluster:
+    id:     ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee
+    health: HEALTH_WARN
+            OSD count 1 < osd_pool_default_size 3
+ 
+  services:
+    mon: 1 daemons, quorum auto-openstack-infra-workers-kbd4x-gtd4h (age 14m)
+    mgr: auto-openstack-infra-workers-kbd4x-gtd4h.beszfc(active, since 13m)
+    osd: 1 osds: 1 up (since 11m), 1 in (since 11m)
+ 
+  data:
+    pools:   0 pools, 0 pgs
+    objects: 0 objects, 0 B
+    usage:   419 MiB used, 700 GiB / 700 GiB avail
+    pgs:     
+ 
+[2025-10-16T03:27:18Z] [exit 0]
+

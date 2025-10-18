@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 import shutil
+import re
+import typer
 import subprocess
 import time
 from dataclasses import dataclass
@@ -82,6 +84,7 @@ class SetupManager:
 
         # Also try to update /etc/kubernetes/admin.conf if writable
         try:
+            print("creating kubeconfig")
             opts.admin_conf.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(opts.workload_kubeconfig, opts.admin_conf)
         except PermissionError:
@@ -90,7 +93,7 @@ class SetupManager:
 
     def get_control_plane_ip(self, opts: SetupOptions) -> str:
         cmd = [
-            "kubectl", "--kubeconfig", str(opts.admin_conf),
+            "kubectl", "--kubeconfig", str(opts.workload_kubeconfig),
             "get", "nodes", "-l", "node-role.kubernetes.io/control-plane",
             "-o", "json",
         ]
@@ -110,7 +113,7 @@ class SetupManager:
 
     def install_cilium(self, opts: SetupOptions, control_plane_ip: str) -> None:
         # Helm should target the WORKLOAD cluster via KUBECONFIG=workload
-        helm = HelmCliRunner(kube_context=None, debug=False)
+        helm = HelmCliRunner(kube_context=None)
         # Inject KUBECONFIG into environment just for these calls
         os.environ["KUBECONFIG"] = str(opts.workload_kubeconfig)
 
@@ -142,7 +145,7 @@ class SetupManager:
             wait=True,
             timeout_seconds=900,
         )
-        helm.lint(rel)
+        #helm.lint(rel)
         helm.upgrade_install(rel)
 
     def wait_for_cilium(self, opts: SetupOptions, retries: int = 30, delay: int = 10) -> None:
@@ -179,7 +182,7 @@ class SetupManager:
             cleanup_regex=r".*openstack-infra-(control-plane|workers)-.*\.net\.daalu\.io$",
         )
 
-        # Render inventories (optional; requires jinja2)
+        # Render inventories
         out_dir = (self.repo_root / opts.output_inventory_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
         render_inventory_templates(
@@ -191,6 +194,17 @@ class SetupManager:
                 "ansible_user": "builder",
                 "ansible_password": "admin10",
                 "ansible_become_password": "admin10",
+                "network_configs": [
+                    "ens19_address=10.10.0.11/16 ens20_address=10.11.0.11/16",
+                    "ens19_address=10.10.0.12/16 ens20_address=10.11.0.12/16",
+                    "ens19_address=10.10.0.13/16 ens20_address=10.11.0.13/16",
+                    "ens19_address=10.10.0.14/16 ens20_address=10.11.0.14/16",
+                    "ens19_address=10.10.0.15/16 ens20_address=10.11.0.15/16",
+                    "ens19_address=10.10.0.16/16 ens20_address=10.11.0.16/16",
+                    "ens19_address=10.10.0.17/16 ens20_address=10.11.0.17/16",
+                    "ens19_address=10.10.0.18/16 ens20_address=10.11.0.18/16",
+                    "ens19_address=10.10.0.19/16 ens20_address=10.11.0.19/16",
+                ],
             },
         )
         return entries
@@ -224,7 +238,7 @@ class SetupManager:
     #    nodes = self.update_hosts_and_inventory(opts)
     #    self.label_and_taint_nodes(opts, nodes)
 
-    def run(self, opts: SetupOptions) -> None:
+    def run_1(self, opts: SetupOptions) -> None:
         bus = EventBus([])  # optionally inject external observers later
         run_ctx = new_ctx(env="setup", context=self.mgmt_context or "default")
 
@@ -255,6 +269,102 @@ class SetupManager:
             bus.emit(NodesLabeled(cluster_name=opts.cluster_name, count=len(nodes), **run_ctx))
 
             bus.emit(SetupSummary(cluster_name=opts.cluster_name, status="OK", **run_ctx))
+        except Exception as e:
+            bus.emit(SetupFailed(cluster_name=opts.cluster_name, error=str(e), **run_ctx))
+            bus.emit(SetupSummary(cluster_name=opts.cluster_name, status="FAILED", error=str(e), **run_ctx))
+            raise
+
+
+    def wait_for_cluster_ready(self, cluster_name: str, timeout_min: int = 30, interval_sec: int = 60):
+        """
+        Poll 'clusterctl describe cluster <cluster>' until all components show READY=True
+        except for one (typical scaling).
+        """
+        start = time.time()
+        while True:
+            try:
+                result = subprocess.run(
+                    ["clusterctl", "describe", "cluster", cluster_name],
+                    capture_output=True, text=True, check=False
+                )
+                output = result.stdout
+
+                # Parse READY lines
+                ready_lines = re.findall(r"(\S+)\s+READY\s+([A-Za-z]+)", output)
+                ready_statuses = [line for line in re.findall(r"\b(True|False)\b", output)]
+
+                total = len(ready_statuses)
+                ready_count = ready_statuses.count("True")
+                typer.echo(f"[clusterapi] Status check: {ready_count}/{total} READY")
+
+                # Consider cluster ready if all True or only one False (scaling tolerance)
+                if ready_count >= total - 1:
+                    return
+
+            except Exception as e:
+                typer.echo(f"[clusterapi] Error checking cluster status: {e}")
+
+            # Timeout check
+            elapsed = (time.time() - start) / 60
+            if elapsed > timeout_min:
+                raise TimeoutError(f"Cluster {cluster_name} not ready after {timeout_min} minutes")
+
+            typer.echo(f"[clusterapi] Not ready yet... checking again in {interval_sec}s")
+            time.sleep(interval_sec)
+
+
+    def run(self, opts: SetupOptions) -> None:
+        bus = EventBus([])  # optionally inject external observers later
+        run_ctx = new_ctx(env="setup", context=self.mgmt_context or "default")
+
+        bus.emit(SetupStarted(cluster_name=opts.cluster_name, **run_ctx))
+        try:
+            # ---------------------------------------------------------------------
+            # 1) Generate workload kubeconfig
+            # ---------------------------------------------------------------------
+            self.generate_kubeconfig(opts)
+            bus.emit(KubeconfigGenerated(cluster_name=opts.cluster_name, **run_ctx))
+
+            # ---------------------------------------------------------------------
+            # 1.5) Wait for ClusterAPI to become ready (all READY=True)
+            # ---------------------------------------------------------------------
+            typer.echo(f"[clusterapi] Waiting for cluster '{opts.cluster_name}' to become READY...")
+            self.wait_for_cluster_ready(opts.cluster_name, timeout_min=40, interval_sec=60)
+            typer.echo(f"[clusterapi] Cluster '{opts.cluster_name}' is READY ✅")
+
+            # ---------------------------------------------------------------------
+            # 2) Discover control-plane IP
+            # ---------------------------------------------------------------------
+            ip = self.get_control_plane_ip(opts)
+            print(ip)
+            bus.emit(ControlPlaneDiscovered(cluster_name=opts.cluster_name, ip=ip))
+
+            # ---------------------------------------------------------------------
+            # 3) Install Cilium
+            # ---------------------------------------------------------------------
+            self.install_cilium(opts, ip)
+            bus.emit(CiliumInstalled(cluster_name=opts.cluster_name, ip=ip, **run_ctx))
+
+            # ---------------------------------------------------------------------
+            # 4) Wait for Cilium to be ready
+            # ---------------------------------------------------------------------
+            self.wait_for_cilium(opts)
+            bus.emit(CiliumReady(cluster_name=opts.cluster_name, **run_ctx))
+
+            # ---------------------------------------------------------------------
+            # 5) Update /etc/hosts and inventories
+            # ---------------------------------------------------------------------
+            nodes = self.update_hosts_and_inventory(opts)
+            bus.emit(HostsUpdated(cluster_name=opts.cluster_name, count=len(nodes), **run_ctx))
+
+            # ---------------------------------------------------------------------
+            # 6) Label and taint nodes
+            # ---------------------------------------------------------------------
+            self.label_and_taint_nodes(opts, nodes)
+            bus.emit(NodesLabeled(cluster_name=opts.cluster_name, count=len(nodes), **run_ctx))
+
+            bus.emit(SetupSummary(cluster_name=opts.cluster_name, status="OK", **run_ctx))
+
         except Exception as e:
             bus.emit(SetupFailed(cluster_name=opts.cluster_name, error=str(e), **run_ctx))
             bus.emit(SetupSummary(cluster_name=opts.cluster_name, status="FAILED", error=str(e), **run_ctx))

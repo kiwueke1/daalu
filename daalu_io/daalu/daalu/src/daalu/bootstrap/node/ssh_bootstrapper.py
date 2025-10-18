@@ -39,36 +39,87 @@ class SshBootstrapper(NodeBootstrapper):
 
     # ------------------ connection & utils ------------------
 
-    def _connect(self, host: Host) -> _SSHHandles:
-        """
-        Create a Paramiko SSH client + SFTP session.
-        """
+    def _connect(self, host):
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
         pkey = None
         if host.pkey_path:
-            pkey = paramiko.RSAKey.from_private_key_file(str(host.pkey_path))
+            key_path = str(host.pkey_path)
+            try:
+                pkey = paramiko.Ed25519Key.from_private_key_file(key_path)
+            except paramiko.ssh_exception.SSHException:
+                try:
+                    pkey = paramiko.RSAKey.from_private_key_file(key_path)
+                except paramiko.ssh_exception.SSHException:
+                    pkey = paramiko.ECDSAKey.from_private_key_file(key_path)
 
         client.connect(
             hostname=host.address,
-            port=host.port,
             username=host.username,
-            password=host.password if not pkey else None,
+            port=host.port,
+            password=host.password,
             pkey=pkey,
-            timeout=self.connect_timeout,
-            allow_agent=True,
-            look_for_keys=True,
+            look_for_keys=False,
+            allow_agent=False,
         )
 
-        sftp = client.open_sftp()
+        # Try to open an SFTP session, but don't fail if it can't
+        sftp = None
+        try:
+            sftp = client.open_sftp()
+        except Exception:
+            pass
+
         return _SSHHandles(client=client, sftp=sftp)
 
     def _close(self, h: _SSHHandles):
         try:
-            h.sftp.close()
+            if h.sftp:
+                h.sftp.close()
+        except Exception:
+            pass
         finally:
             h.client.close()
+            
+    def _connect_1(self, host):
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+        pkey = None
+        if host.pkey_path:
+            key_path = str(host.pkey_path)
+            try:
+                # Try ED25519 first (most modern)
+                pkey = paramiko.Ed25519Key.from_private_key_file(key_path)
+            except paramiko.ssh_exception.SSHException:
+                try:
+                    # Then try RSA
+                    pkey = paramiko.RSAKey.from_private_key_file(key_path)
+                except paramiko.ssh_exception.SSHException:
+                    try:
+                        # Fallback to ECDSA
+                        pkey = paramiko.ECDSAKey.from_private_key_file(key_path)
+                    except Exception as e:
+                        raise RuntimeError(f"Unsupported private key format for {key_path}: {e}")
+
+        client.connect(
+            hostname=host.address,
+            username=host.username,
+            port=host.port,
+            pkey=pkey,
+            password=host.password,
+            look_for_keys=False,
+            allow_agent=False,
+        )
+        return client
+
+
+    def _close_1(self, h: _SSHHandles):
+        try:
+            h.sftp.close()
+        finally:
+            h.close()
 
     def _run(self, h: _SSHHandles, cmd: str, sudo: bool = False, stdin_data: Optional[str] = None) -> Tuple[int, str, str]:
         """
@@ -147,31 +198,41 @@ class SshBootstrapper(NodeBootstrapper):
 
     def role_apparmor_setup(self, h: _SSHHandles, host: Host, opts: NodeBootstrapOptions):
         """
-        - apt update + repos
-        - install apparmor + tooling and python3-pip
-        - enable & start apparmor
-        - pip3 install kubernetes
-        - copy kubeconfig under /home/{username}/.kube/config
+        - Ensure APT repos are correct (resolves $(lsb_release -cs))
+        - Install apparmor + Python tools
+        - Enable apparmor and install kubernetes Python client
+        - Write kubeconfig for user
         """
+        # Detect codename dynamically
+        rc, codename, _ = self._run(h, "lsb_release -cs", sudo=False)
+        codename = codename.strip() or "jammy"
+
+        # Clean invalid lines
+        self._run(h, "sudo sed -i '/\\$(lsb_release/d' /etc/apt/sources.list", sudo=True)
+
+        # Correct repos
         repos = [
-            'deb http://archive.ubuntu.com/ubuntu $(lsb_release -cs) main universe',
-            'deb http://archive.ubuntu.com/ubuntu $(lsb_release -cs)-updates main universe',
-            'deb http://security.ubuntu.com/ubuntu $(lsb_release -cs)-security main universe',
+            f"deb http://archive.ubuntu.com/ubuntu {codename} main universe",
+            f"deb http://archive.ubuntu.com/ubuntu {codename}-updates main universe",
+            f"deb http://security.ubuntu.com/ubuntu {codename}-security main universe",
         ]
-        self._run(h, "apt-get update -y", sudo=True)
+
         for r in repos:
-            # idempotently ensure repo line exists
             self._append_line(h, r, "/etc/apt/sources.list", sudo=True)
+
+        # Update + install
         self._run(h, "apt-get update -y", sudo=True)
         self._run(h, "DEBIAN_FRONTEND=noninteractive apt-get install -y apparmor apparmor-utils python3-pip python3-setuptools", sudo=True)
         self._run(h, "systemctl enable --now apparmor", sudo=True)
         self._run(h, "pip3 install --upgrade kubernetes", sudo=True)
 
-        # ensure ~/.kube dir & config
+        # Kubeconfig setup
         kube_dir = f"/home/{host.username}/.kube"
         self._ensure_dir(h, kube_dir, mode=0o700, sudo=True)
         content = self._kubeconfig_content(opts)
-        self._put_content(h, content, opts.kubeconfig_remote_path.format(username=host.username), mode=0o600, owner=f"{host.username}:{host.username}", sudo=True)
+        self._put_content(h, content, opts.kubeconfig_remote_path.format(username=host.username),
+                        mode=0o600, owner=f"{host.username}:{host.username}", sudo=True)
+
 
     def role_netplan_config(self, h: _SSHHandles, host: Host, opts: NodeBootstrapOptions):
         """
@@ -210,6 +271,7 @@ class SshBootstrapper(NodeBootstrapper):
         # ~/.ssh and authorized_keys
         ssh_dir = f"/home/{opts.managed_user}/.ssh"
         self._ensure_dir(h, ssh_dir, mode=0o700, sudo=True)
+        self._run(h, f"chown -R {opts.managed_user}:{opts.managed_user} {ssh_dir}", sudo=True)
         if host.authorized_key_path:
             with open(host.authorized_key_path, "r", encoding="utf-8") as f:
                 key = f.read().strip()
@@ -271,6 +333,7 @@ class SshBootstrapper(NodeBootstrapper):
         """
         Connect to each host and run the requested roles.
         """
+        print(f'hosts in bootstrap method is {hosts}')
         for host in hosts:
             h = self._connect(host)
             try:

@@ -1,0 +1,204 @@
+# Ceph deployment log started 20251016T031157Z UTC
+
+[2025-10-16T03:11:57Z] $ sudo -S bash -lc 'command -v docker || command -v podman'
+[2025-10-16T03:11:57Z] [exit 0]
+
+[2025-10-16T03:11:57Z] $ bash -lc 'command -v cephadm || echo MISSING'
+/usr/local/bin/cephadm
+[2025-10-16T03:11:57Z] [exit 0]
+
+[2025-10-16T03:11:57Z] $ sudo -S bash -lc '(podman pull quay.io/ceph/ceph:v17.2.6 || docker pull quay.io/ceph/ceph:v17.2.6) || true'
+bash: line 1: podman: command not found
+v17.2.6: Pulling from ceph/ceph
+67aa808521d2: Pulling fs layer
+9e40b4fa7f36: Pulling fs layer
+67aa808521d2: Verifying Checksum
+67aa808521d2: Download complete
+9e40b4fa7f36: Verifying Checksum
+9e40b4fa7f36: Download complete
+67aa808521d2: Pull complete
+9e40b4fa7f36: Pull complete
+Digest: sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+Status: Downloaded newer image for quay.io/ceph/ceph:v17.2.6
+[2025-10-16T03:12:22Z] [exit 0]
+
+[2025-10-16T03:12:22Z] $ sudo -S bash -lc 'cephadm --image quay.io/ceph/ceph:v17.2.6 bootstrap --mon-ip 192.168.0.173 --initial-dashboard-user admin --initial-dashboard-password admin --skip-monitoring-stack --allow-overwrite'
+Creating directory /etc/ceph for ceph.conf
+Verifying podman|docker is present...
+Verifying lvm2 is present...
+Verifying time synchronization is in place...
+Unit chrony.service is enabled and running
+Repeating the final host check...
+docker (/usr/bin/docker) is present
+systemctl is present
+lvcreate is present
+Unit chrony.service is enabled and running
+Host looks OK
+Cluster fsid: ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee
+Verifying IP 192.168.0.173 port 3300 ...
+Verifying IP 192.168.0.173 port 6789 ...
+Mon IP `192.168.0.173` is in CIDR network `192.168.0.0/24`
+Mon IP `192.168.0.173` is in CIDR network `192.168.0.0/24`
+Internal network (--cluster-network) has not been provided, OSD replication will default to the public_network
+Pulling container image quay.io/ceph/ceph:v17.2.6...
+Ceph version: ceph version 17.2.6 (d7ff0d10654d2280e08f1ab989c7cdf3064446a5) quincy (stable)
+Extracting ceph user uid/gid from container image...
+Creating initial keys...
+Creating initial monmap...
+Creating mon...
+Waiting for mon to start...
+Waiting for mon...
+mon is available
+Assimilating anything we can from ceph.conf...
+Generating new minimal ceph.conf...
+Restarting the monitor...
+Setting public_network to 192.168.0.0/24 in mon config section
+Wrote config to /etc/ceph/ceph.conf
+Wrote keyring to /etc/ceph/ceph.client.admin.keyring
+Creating mgr...
+Verifying port 0.0.0.0:9283 ...
+Verifying port 0.0.0.0:8765 ...
+Waiting for mgr to start...
+Waiting for mgr...
+mgr not available, waiting (1/15)...
+mgr not available, waiting (2/15)...
+mgr not available, waiting (3/15)...
+mgr not available, waiting (4/15)...
+mgr is available
+Enabling cephadm module...
+Waiting for the mgr to restart...
+Waiting for mgr epoch 4...
+mgr epoch 4 is available
+Setting orchestrator backend to cephadm...
+Generating ssh key...
+Wrote public SSH key to /etc/ceph/ceph.pub
+Adding key to root@localhost authorized_keys...
+Adding host auto-openstack-infra-workers-kbd4x-gtd4h...
+Deploying mon service with default placement...
+Deploying mgr service with default placement...
+Deploying crash service with default placement...
+Enabling the dashboard module...
+Waiting for the mgr to restart...
+Waiting for mgr epoch 8...
+mgr epoch 8 is available
+Generating a dashboard self-signed certificate...
+Creating initial admin user...
+Fetching dashboard port number...
+Ceph Dashboard is now available at:
+
+	     URL: https://auto-openstack-infra-workers-kbd4x-gtd4h.net.daalu.io:8443/
+	    User: admin
+	Password: admin
+
+Enabling client.admin keyring and conf on hosts with "admin" label
+Saving cluster configuration to /var/lib/ceph/ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee/config directory
+Enabling autotune for osd_memory_target
+You can access the Ceph CLI as following in case of multi-cluster or non-default config:
+
+	sudo /usr/local/bin/cephadm shell --fsid ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring
+
+Or, if you are only running a single cluster on this host:
+
+	sudo /usr/local/bin/cephadm shell 
+
+Please consider enabling telemetry to help improve Ceph:
+
+	ceph telemetry on
+
+For more information see:
+
+	https://docs.ceph.com/docs/master/mgr/telemetry/
+
+Bootstrap complete.
+[2025-10-16T03:13:49Z] [exit 0]
+
+[2025-10-16T03:13:49Z] $ sudo -S bash -lc 'cat /etc/ceph/ceph.pub'
+ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCpKlfp7hl0WcsSC4HIGhq+0YF+QMn3Iqa9DHrkDoSFj0RcltAkai0kTZdUHelM/5vnWIByLKCRVtP5dnyg9VETASNuodYncH6RKsc4qjK5R3OOGt3jvFLVwgYvAHm1G1F1gUmT0D/0fhIjQnn7GVd98gG6Cgt68zk7NTn7N3HoOF0TlS0KSF/0QKdwu1fmtujOXpP1QS8KwfWoZNBhfzgA1DDcINABw++X4Xv8Hxe5HuVhQVBJuaxy6uej6wasgCtmFXsuKAdC10lt/yaaSCyGEHJALgi/ZzXHf+X4JG/rzz85LXkTBrYsfAk2U+TLVKMB1pCmV+cjNQcpB4+vZ/8xRmGm7SGcrj9WahL00eZ9FLJLu1ioQqcLEsiTFlpBZdKz3MBEd5o0nl+CrEX4X2PV7zDNr4PBUrxXc865tkSkTZ7FOj00mBo8c4VgaWR+byUEP0xDDMPKefDUd7mKw9NSi7IsX9YPpUQWFFadonbIr+Du0SyeU8KKYKY78uKj+Ls= ceph-ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee
+[2025-10-16T03:13:49Z] [exit 0]
+
+[2025-10-16T03:13:49Z] $ sudo -S bash -lc 'mkdir -p /root/.ssh && echo "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCpKlfp7hl0WcsSC4HIGhq+0YF+QMn3Iqa9DHrkDoSFj0RcltAkai0kTZdUHelM/5vnWIByLKCRVtP5dnyg9VETASNuodYncH6RKsc4qjK5R3OOGt3jvFLVwgYvAHm1G1F1gUmT0D/0fhIjQnn7GVd98gG6Cgt68zk7NTn7N3HoOF0TlS0KSF/0QKdwu1fmtujOXpP1QS8KwfWoZNBhfzgA1DDcINABw++X4Xv8Hxe5HuVhQVBJuaxy6uej6wasgCtmFXsuKAdC10lt/yaaSCyGEHJALgi/ZzXHf+X4JG/rzz85LXkTBrYsfAk2U+TLVKMB1pCmV+cjNQcpB4+vZ/8xRmGm7SGcrj9WahL00eZ9FLJLu1ioQqcLEsiTFlpBZdKz3MBEd5o0nl+CrEX4X2PV7zDNr4PBUrxXc865tkSkTZ7FOj00mBo8c4VgaWR+byUEP0xDDMPKefDUd7mKw9NSi7IsX9YPpUQWFFadonbIr+Du0SyeU8KKYKY78uKj+Ls= ceph-ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee" >> /root/.ssh/authorized_keys'
+[2025-10-16T03:13:50Z] [exit 0]
+
+[2025-10-16T03:13:50Z] $ sudo -S bash -lc 'mkdir -p /root/.ssh && echo "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCpKlfp7hl0WcsSC4HIGhq+0YF+QMn3Iqa9DHrkDoSFj0RcltAkai0kTZdUHelM/5vnWIByLKCRVtP5dnyg9VETASNuodYncH6RKsc4qjK5R3OOGt3jvFLVwgYvAHm1G1F1gUmT0D/0fhIjQnn7GVd98gG6Cgt68zk7NTn7N3HoOF0TlS0KSF/0QKdwu1fmtujOXpP1QS8KwfWoZNBhfzgA1DDcINABw++X4Xv8Hxe5HuVhQVBJuaxy6uej6wasgCtmFXsuKAdC10lt/yaaSCyGEHJALgi/ZzXHf+X4JG/rzz85LXkTBrYsfAk2U+TLVKMB1pCmV+cjNQcpB4+vZ/8xRmGm7SGcrj9WahL00eZ9FLJLu1ioQqcLEsiTFlpBZdKz3MBEd5o0nl+CrEX4X2PV7zDNr4PBUrxXc865tkSkTZ7FOj00mBo8c4VgaWR+byUEP0xDDMPKefDUd7mKw9NSi7IsX9YPpUQWFFadonbIr+Du0SyeU8KKYKY78uKj+Ls= ceph-ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee" >> /root/.ssh/authorized_keys'
+[2025-10-16T03:13:50Z] [exit 0]
+
+[2025-10-16T03:13:50Z] $ sudo -S bash -lc 'cephadm shell -- ceph config set global container_image quay.io/ceph/ceph:v17.2.6'
+Inferring fsid ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee
+Inferring config /var/lib/ceph/ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee/mon.auto-openstack-infra-workers-kbd4x-gtd4h/config
+Using ceph image with id '2747c7f13104' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+[2025-10-16T03:14:05Z] [exit 0]
+
+[2025-10-16T03:14:05Z] $ sudo -S bash -lc 'cephadm shell -- ceph orch host add auto-openstack-infra-workers-kbd4x-pkqm7 192.168.0.172'
+Inferring fsid ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee
+Inferring config /var/lib/ceph/ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee/mon.auto-openstack-infra-workers-kbd4x-gtd4h/config
+Using ceph image with id '2747c7f13104' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+Error EINVAL: check-host failed:
+systemctl is present
+lvcreate is present
+Unit chrony.service is enabled and running
+Hostname "auto-openstack-infra-workers-kbd4x-pkqm7" matches what is expected.
+ERROR: No container engine binary found (podman or docker). Try run `apt/dnf/yum/zypper install <container engine>`
+[2025-10-16T03:14:21Z] [exit 22]
+
+[2025-10-16T03:14:21Z] $ sudo -S bash -lc 'cephadm shell -- ceph orch host add auto-openstack-infra-workers-kbd4x-tj5jx 192.168.0.171'
+Inferring fsid ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee
+Inferring config /var/lib/ceph/ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee/mon.auto-openstack-infra-workers-kbd4x-gtd4h/config
+Using ceph image with id '2747c7f13104' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+Error EINVAL: check-host failed:
+systemctl is present
+lvcreate is present
+Unit chrony.service is enabled and running
+Hostname "auto-openstack-infra-workers-kbd4x-tj5jx" matches what is expected.
+ERROR: No container engine binary found (podman or docker). Try run `apt/dnf/yum/zypper install <container engine>`
+[2025-10-16T03:14:37Z] [exit 22]
+
+[2025-10-16T03:14:37Z] $ sudo -S bash -lc 'cephadm shell -- ceph orch apply mon --placement="count:3"'
+Inferring fsid ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee
+Inferring config /var/lib/ceph/ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee/mon.auto-openstack-infra-workers-kbd4x-gtd4h/config
+Using ceph image with id '2747c7f13104' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+Scheduled mon update...
+[2025-10-16T03:14:52Z] [exit 0]
+
+[2025-10-16T03:14:52Z] $ sudo -S bash -lc 'cephadm shell -- ceph orch apply mgr --placement="count:2"'
+Inferring fsid ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee
+Inferring config /var/lib/ceph/ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee/mon.auto-openstack-infra-workers-kbd4x-gtd4h/config
+Using ceph image with id '2747c7f13104' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+Scheduled mgr update...
+[2025-10-16T03:15:06Z] [exit 0]
+
+[2025-10-16T03:15:06Z] $ sudo -S bash -lc 'cephadm shell -- ceph orch apply osd --all-available-devices'
+Inferring fsid ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee
+Inferring config /var/lib/ceph/ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee/mon.auto-openstack-infra-workers-kbd4x-gtd4h/config
+Using ceph image with id '2747c7f13104' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+Scheduled osd.all-available-devices update...
+[2025-10-16T03:15:20Z] [exit 0]
+
+[2025-10-16T03:15:20Z] $ sudo -S bash -lc 'cephadm shell -- ceph -s'
+Inferring fsid ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee
+Inferring config /var/lib/ceph/ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee/mon.auto-openstack-infra-workers-kbd4x-gtd4h/config
+Using ceph image with id '2747c7f13104' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+  cluster:
+    id:     ef3a4066-aa3d-11f0-8c8b-b1348d9b40ee
+    health: HEALTH_WARN
+            OSD count 1 < osd_pool_default_size 3
+ 
+  services:
+    mon: 1 daemons, quorum auto-openstack-infra-workers-kbd4x-gtd4h (age 2m)
+    mgr: auto-openstack-infra-workers-kbd4x-gtd4h.beszfc(active, since 115s)
+    osd: 1 osds: 0 up, 1 in (since 8s)
+ 
+  data:
+    pools:   0 pools, 0 pgs
+    objects: 0 objects, 0 B
+    usage:   0 B used, 0 B / 0 B avail
+    pgs:     
+ 
+[2025-10-16T03:15:35Z] [exit 0]
+

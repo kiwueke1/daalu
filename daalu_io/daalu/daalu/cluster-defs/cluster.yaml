@@ -20,11 +20,11 @@ cluster_api:
   kubernetes_version: v1.32.4
   kube_vip_image: ghcr.io/kube-vip/kube-vip:v0.7.1
   control_plane_replicas: 3
-  worker_replicas: 4
-  control_plane_disk_gb: 100
-  worker_disk_gb: 70
-  control_plane_memory_mib: 26000
-  worker_memory_mib: 20000
+  worker_replicas: 3
+  control_plane_disk_gb: 300
+  worker_disk_gb: 300
+  control_plane_memory_mib: 62000
+  worker_memory_mib: 40000
   control_plane_cores: 8
   worker_cores: 4
   control_plane_sockets: 2

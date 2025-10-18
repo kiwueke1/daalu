@@ -1,0 +1,34 @@
+# Ceph deployment log started 20251016T031806Z UTC
+
+[2025-10-16T03:18:06Z] $ sudo -S bash -lc 'command -v docker || command -v podman'
+/usr/bin/docker
+[2025-10-16T03:18:07Z] [exit 0]
+
+[2025-10-16T03:18:07Z] $ bash -lc 'command -v cephadm || echo MISSING'
+/usr/local/bin/cephadm
+[2025-10-16T03:18:07Z] [exit 0]
+
+[2025-10-16T03:18:07Z] $ sudo -S bash -lc '(podman pull quay.io/ceph/ceph:v17.2.6 || docker pull quay.io/ceph/ceph:v17.2.6) || true'
+bash: line 1: podman: command not found
+v17.2.6: Pulling from ceph/ceph
+Digest: sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+Status: Image is up to date for quay.io/ceph/ceph:v17.2.6
+[2025-10-16T03:18:08Z] [exit 0]
+
+[2025-10-16T03:18:08Z] $ sudo -S bash -lc 'cephadm --image quay.io/ceph/ceph:v17.2.6 bootstrap --mon-ip 192.168.0.173 --initial-dashboard-user admin --initial-dashboard-password admin --skip-monitoring-stack --allow-overwrite'
+Verifying podman|docker is present...
+Verifying lvm2 is present...
+Verifying time synchronization is in place...
+Unit chrony.service is enabled and running
+Repeating the final host check...
+docker (/usr/bin/docker) is present
+systemctl is present
+lvcreate is present
+Unit chrony.service is enabled and running
+Host looks OK
+Cluster fsid: bd334468-aa3e-11f0-8c8b-b1348d9b40ee
+Verifying IP 192.168.0.173 port 3300 ...
+Cannot bind to IP 192.168.0.173 port 3300: [Errno 98] Address already in use
+ERROR: Cannot bind to IP 192.168.0.173 port 3300: [Errno 98] Address already in use
+[2025-10-16T03:18:08Z] [exit 1]
+

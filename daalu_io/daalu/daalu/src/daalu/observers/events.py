@@ -213,3 +213,24 @@ class SetupSummary(BaseEvent):
     cluster_name: str
     status: str
     error: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class CephStarted(BaseEvent):
+    stage: str
+    message: str
+
+@dataclass(frozen=True)
+class CephProgress(BaseEvent):
+    stage: str
+    message: str
+
+@dataclass(frozen=True)
+class CephFailed(BaseEvent):
+    stage: str
+    error: str
+
+@dataclass(frozen=True)
+class CephSucceeded(BaseEvent):
+    stage: str
+    message: str
