@@ -7,6 +7,7 @@ import os
 import posixpath
 import tempfile
 import textwrap
+import base64
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
@@ -56,13 +57,15 @@ class SshBootstrapper(NodeBootstrapper):
 
         client.connect(
             hostname=host.address,
-            username=host.username,
             port=host.port,
-            password=host.password,
+            username=host.username,
             pkey=pkey,
+            password=None,          # IMPORTANT
             look_for_keys=False,
             allow_agent=False,
+            timeout=30,
         )
+
 
         # Try to open an SFTP session, but don't fail if it can't
         sftp = None
@@ -105,14 +108,15 @@ class SshBootstrapper(NodeBootstrapper):
 
         client.connect(
             hostname=host.address,
-            username=host.username,
             port=host.port,
+            username=host.username,
             pkey=pkey,
-            password=host.password,
+            password=None,          # IMPORTANT
             look_for_keys=False,
             allow_agent=False,
+            timeout=30,
         )
-        return client
+
 
 
     def _close_1(self, h: _SSHHandles):
@@ -187,14 +191,55 @@ class SshBootstrapper(NodeBootstrapper):
     # ------------------ roles ------------------
 
     def _kubeconfig_content(self, opts: NodeBootstrapOptions) -> str:
+        # 1) If explicitly provided, always prefer it
         if opts.kubeconfig_content:
             return opts.kubeconfig_content
-        # fallback: clusterctl get kubeconfig <cluster>
-        cp = subprocess.run(
-            ["clusterctl", "get", "kubeconfig", opts.cluster_name],
-            capture_output=True, text=True, check=True,
-        )
-        return cp.stdout
+
+        # 2) Fetch kubeconfig from Cluster API secret (v1beta2-compatible)
+        #
+        # Secret name convention:
+        #   <cluster-name>-kubeconfig
+        #
+        # Namespace:
+        #   MUST be the Cluster API namespace (Metal3 usually uses "metal3")
+        #
+        namespace = getattr(opts, "cluster_namespace", "metal3")
+        secret_name = f"{opts.cluster_name}-kubeconfig"
+
+        cmd = [
+            "kubectl",
+            "get",
+            "secret",
+            secret_name,
+            "-n",
+            namespace,
+            "-o",
+            "jsonpath={.data.value}",
+        ]
+
+        try:
+            cp = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(
+                f"Failed to fetch kubeconfig secret '{secret_name}' "
+                f"in namespace '{namespace}'. "
+                f"Is the control plane ready?"
+            ) from e
+
+        # 3) Decode base64 kubeconfig
+        try:
+            kubeconfig_bytes = base64.b64decode(cp.stdout)
+            return kubeconfig_bytes.decode("utf-8")
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to decode kubeconfig from secret '{secret_name}'"
+            ) from e
+
 
     def role_apparmor_setup(self, h: _SSHHandles, host: Host, opts: NodeBootstrapOptions):
         """
@@ -282,7 +327,9 @@ class SshBootstrapper(NodeBootstrapper):
         self._put_content(h, sudo_line + "\n", f"/etc/sudoers.d/{opts.managed_user}", mode=0o440, sudo=True)
 
         # hostname
-        self._run(h, f"hostnamectl set-hostname {host.hostname}", sudo=True)
+        short_hostname = host.hostname.split(".", 1)[0]
+        self._run(h, f"hostnamectl set-hostname {short_hostname}", sudo=True)
+        #self._run(h, f"hostnamectl set-hostname {host.hostname}", sudo=True)
 
         # ens18 IP and /etc/hosts entry
         code, out, _ = self._run(h, "ip -4 addr show ens18 | awk '/inet /{print $2}' | cut -d/ -f1", sudo=False)

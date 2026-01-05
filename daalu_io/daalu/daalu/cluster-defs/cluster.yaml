@@ -4,9 +4,9 @@ context: kind-kind    # kubectl context or leave null and pass --context in CLI
 cluster_api:
   cluster_name: auto-openstack-infra
   namespace: default
-  pod_cidr: 192.168.0.0/24
-  pod_subnet: 10.20.0.0/16
-  control_plane_vip: 192.168.0.199
+  pod_cidr: 10.201.0.0/16
+  pod_subnet: 10.201.0.0/16
+  control_plane_vip: 192.168.111.249
   allowed_nodes: [pve-2, pve-3]
   dns_servers: [8.8.8.8, 8.8.4.4]
   ip_range: 192.168.0.170-192.168.0.180
@@ -17,10 +17,13 @@ cluster_api:
   network_bridge: vmbr0
   source_node: pve-2
   template_id: 10001
-  kubernetes_version: v1.32.4
+  kubernetes_version: v1.35.0
+  KUBERNETES_VERSION: v1.35.0
   kube_vip_image: ghcr.io/kube-vip/kube-vip:v0.7.1
   control_plane_replicas: 3
+  control_plane_count: 3
   worker_replicas: 3
+  worker_count: 3
   control_plane_disk_gb: 300
   worker_disk_gb: 300
   control_plane_memory_mib: 62000
@@ -29,13 +32,31 @@ cluster_api:
   worker_cores: 4
   control_plane_sockets: 2
   worker_sockets: 2
+  pivot: false
   builder_password: admin10
+  image_password: admin10
   ssh_public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFN65XT1iOqLGjTGwOHqKf4VtgOebCJzpbD80hGFvdts kez@ironcloud"
+  ssh_public_key_path: /home/kez/.ssh/openstack-key.pub
   proxmox_secret_name: openstack-infra-proxmox-secret
   proxmox_url: "https://192.168.0.34:8006"
   proxmox_token: "root@pam!capi"
   proxmox_secret: "97ecfc71-b6ff-4b83-9c17-c3ebe5c58baa"
-
+  provider: metal3
+  image_os: ubuntu
+  image_flavor: ubuntu
+  image_version: "24.04"
+  capm3_release: v1.13.99
+  capm3_release_branch: release-1.11
+  capm3_version: v1beta1
+  metal3_templates_path: assets/metal3/templates
+  metal3_namespace: metal3
+  image_username: kez
+  image_password_hash: "$6$XXyZJ8BwjBrvzVOo$O7OoAQDRngVwNbeG7CjwUe.zUxktYPcLZ.JWUerfkc58jty6c86U9s2WqTuAMOSECK/ZOKnq8rzwMXlspKkrw."
+  service_cidr: 10.96.0.0/12
+  mgmt_host: 192.168.0.89
+  mgmt_user: kez
+  ironic_http_base: http://172.22.0.1/images
+  image_url: http://172.22.0.1/images/UBUNTU_24.04_NODE_IMAGE_K8S_v1.35.0-raw.img
 
 repos: []                    # local charts don't need repos
 

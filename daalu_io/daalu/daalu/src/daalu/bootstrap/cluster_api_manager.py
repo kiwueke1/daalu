@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import subprocess
 import time
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Any
 
+from daalu.execution.runner import CommandRunner
 from .template_renderer import TemplateRenderer
-# Observer system imports (same as deploy_all)
+
+# Observer system imports
 from ..observers.dispatcher import EventBus
 from ..observers.events import (
     new_ctx,
@@ -18,7 +19,7 @@ from ..observers.events import (
     ClusterAPIFailed,
     ClusterAPISummary,
 )
-from ..config.models import ClusterConfig  # ✅ add import
+from ..config.models import ClusterConfig
 
 
 class ClusterAPIManager:
@@ -33,12 +34,19 @@ class ClusterAPIManager:
         mgmt_context: Optional[str] = None,
         kubeconfig: Optional[str] = None,
         observers: Optional[List] = None,
+        ctx: Any = None,
     ):
         self.repo_root = repo_root
         self.mgmt_context = mgmt_context
         self.kubeconfig = kubeconfig
         self.base_dir = repo_root / "cluster-defs"
         self.cluster_api_dir = self.base_dir / "cluster-api"
+
+        self.ctx = ctx
+        self.runner = CommandRunner(
+            logger=getattr(ctx, "logger", None),
+            dry_run=getattr(ctx, "dry_run", False),
+        )
 
         # EventBus setup
         self.bus = EventBus(observers or [])
@@ -47,6 +55,7 @@ class ClusterAPIManager:
     # -------------------------------------------------------------------------
     # Internal helpers
     # -------------------------------------------------------------------------
+
     def _kubectl(self) -> list[str]:
         cmd = ["kubectl"]
         if self.kubeconfig:
@@ -59,12 +68,12 @@ class ClusterAPIManager:
         cmd = ["clusterctl"]
         if self.kubeconfig:
             cmd += ["--kubeconfig", self.kubeconfig]
-        # clusterctl uses the current context from the kubeconfig
         return cmd
 
     # -------------------------------------------------------------------------
-    # NEW: Render manifests only
+    # Render manifests only
     # -------------------------------------------------------------------------
+
     def render_dynamic(self, config: ClusterConfig) -> str:
         """
         Render the full Cluster API manifests (Secret + Cluster YAML) into
@@ -79,13 +88,13 @@ class ClusterAPIManager:
             manifest = renderer.render(tmpl, context)
             rendered_docs.append(manifest.strip())
 
-        # Combine with YAML doc separator for clarity
         return "\n---\n".join(rendered_docs) + "\n"
 
     # -------------------------------------------------------------------------
-    # Main deploy routine
+    # Dynamic deploy (render + apply)
     # -------------------------------------------------------------------------
-    def deploy_dynamic(self, config: ClusterConfig):
+
+    def deploy_dynamic(self, config: ClusterConfig) -> None:
         self.bus.emit(
             ClusterAPIStarted(
                 name=config.cluster_api.cluster_name,
@@ -102,26 +111,37 @@ class ClusterAPIManager:
             print(f"[ClusterAPI] Applying {tmpl} ...")
             manifest = renderer.render(tmpl, context)
 
-            cp = subprocess.run(
+            result = self.runner.run(
                 self._kubectl() + ["apply", "-f", "-"],
-                input=manifest,
-                text=True,
+                stdin_text=manifest,
                 capture_output=True,
+                check=False,
             )
 
-            if cp.returncode != 0:
+            if result.returncode != 0:
                 self.bus.emit(
-                    ClusterAPIFailed(name=tmpl, error=cp.stderr.strip(), **self.run_ctx)
+                    ClusterAPIFailed(
+                        name=tmpl,
+                        error=(result.stderr or "").strip(),
+                        **self.run_ctx,
+                    )
                 )
-                raise RuntimeError(f"Failed to apply {tmpl}: {cp.stderr}")
+                raise RuntimeError(
+                    f"Failed to apply {tmpl}: {result.stderr}"
+                )
 
             self.bus.emit(
-                ManifestApplied(name=tmpl, output=cp.stdout.strip(), **self.run_ctx)
+                ManifestApplied(
+                    name=tmpl,
+                    output=(result.stdout or "").strip(),
+                    **self.run_ctx,
+                )
             )
 
     # -------------------------------------------------------------------------
-    # Static deploy (from pre-rendered files)
+    # Static deploy (pre-rendered files)
     # -------------------------------------------------------------------------
+
     def deploy(
         self,
         cluster_name: str = "openstack-infra",
@@ -131,73 +151,110 @@ class ClusterAPIManager:
         secret_filename: str = "openstack-cluster-api-secret.yaml",
         cluster_filename: str = "openstack-cluster-api.yaml",
     ) -> None:
-        """
-        Applies Cluster API manifests and waits for the control plane to become ready.
-        Emits observer events for each stage.
-        """
         self.bus.emit(
-            ClusterAPIStarted(name=cluster_name, namespace=namespace, **self.run_ctx)
+            ClusterAPIStarted(
+                name=cluster_name,
+                namespace=namespace,
+                **self.run_ctx,
+            )
         )
 
         secret_file = self.cluster_api_dir / secret_filename
         cluster_file = self.cluster_api_dir / cluster_filename
 
         try:
+            # -------------------------------------------------------------
+            # Apply manifests
+            # -------------------------------------------------------------
             for manifest in (secret_file, cluster_file):
                 cmd = self._kubectl() + ["apply", "-f", str(manifest)]
                 print(f"[ClusterAPI] Applying {manifest} ...")
-                cp = subprocess.run(cmd, capture_output=True, text=True)
-                if cp.returncode != 0:
+
+                result = self.runner.run(
+                    cmd,
+                    capture_output=True,
+                    check=False,
+                )
+
+                if result.returncode != 0:
                     self.bus.emit(
                         ClusterAPIFailed(
-                            name=cluster_name, error=cp.stderr.strip(), **self.run_ctx
+                            name=cluster_name,
+                            error=(result.stderr or "").strip(),
+                            **self.run_ctx,
                         )
                     )
                     raise RuntimeError(
-                        f"[ClusterAPI] Failed to apply {manifest}:\n{cp.stderr}"
+                        f"[ClusterAPI] Failed to apply {manifest}:\n{result.stderr}"
                     )
+
                 self.bus.emit(
                     ManifestApplied(
-                        name=manifest.name, output=cp.stdout.strip(), **self.run_ctx
+                        name=manifest.name,
+                        output=(result.stdout or "").strip(),
+                        **self.run_ctx,
                     )
                 )
 
-            print("[ClusterAPI] Manifests applied. Waiting for control plane to be ready...")
+            print(
+                "[ClusterAPI] Manifests applied. Waiting for control plane to be ready..."
+            )
+
+            # -------------------------------------------------------------
+            # Poll readiness via clusterctl
+            # -------------------------------------------------------------
             start = time.time()
 
             while True:
-                desc = self._clusterctl() + [
+                desc_cmd = self._clusterctl() + [
                     "describe",
                     "cluster",
                     cluster_name,
                     "-n",
                     namespace,
                 ]
-                cp = subprocess.run(desc, capture_output=True, text=True)
-                out = cp.stdout if cp.returncode == 0 else cp.stderr
+
+                result = self.runner.run(
+                    desc_cmd,
+                    capture_output=True,
+                    check=False,
+                )
+
+                out = (
+                    result.stdout
+                    if result.returncode == 0
+                    else result.stderr
+                ) or ""
 
                 self.bus.emit(
                     ClusterAPIStatusUpdate(
-                        name=cluster_name, output=out.strip(), **self.run_ctx
+                        name=cluster_name,
+                        output=out.strip(),
+                        **self.run_ctx,
                     )
                 )
 
-                # crude readiness check based on textual output
+                # Same crude readiness heuristic (unchanged)
                 cluster_ready = (
                     f"Cluster/{cluster_name}" in out
                     and "True"
                     in out.split(f"Cluster/{cluster_name}")[1].split()[0]
                 )
+
                 kcp = f"KubeadmControlPlane/{cluster_name}-control-plane"
                 control_plane_ready = (
-                    kcp in out and "True" in out.split(kcp)[1].split()[0]
+                    kcp in out
+                    and "True"
+                    in out.split(kcp)[1].split()[0]
                 )
 
                 if cluster_ready and control_plane_ready:
                     print("[ClusterAPI] Cluster and control plane are ready.")
                     self.bus.emit(
                         ClusterAPIReady(
-                            name=cluster_name, namespace=namespace, **self.run_ctx
+                            name=cluster_name,
+                            namespace=namespace,
+                            **self.run_ctx,
                         )
                     )
                     break
@@ -219,13 +276,22 @@ class ClusterAPIManager:
 
             print("[ClusterAPI] Bootstrap completed successfully.")
             self.bus.emit(
-                ClusterAPISummary(status="OK", name=cluster_name, **self.run_ctx)
+                ClusterAPISummary(
+                    status="OK",
+                    name=cluster_name,
+                    **self.run_ctx,
+                )
             )
 
         except Exception as e:
             self.bus.emit(
                 ClusterAPISummary(
-                    status="FAILED", name=cluster_name, error=str(e), **self.run_ctx
+                    status="FAILED",
+                    name=cluster_name,
+                    error=str(e),
+                    **self.run_ctx,
                 )
             )
             raise
+
+

@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from daalu.bootstrap.node.models import NodeBootstrapPlan
+from daalu.bootstrap.node.models import NodeBootstrapPlan,Host
 
 
 def _default_workspace_root() -> Path:
@@ -21,7 +21,63 @@ def inventory_path(workspace_root: Optional[Path] = None) -> Path:
     root = workspace_root or Path(os.environ.get("WORKSPACE_ROOT", _default_workspace_root()))
     return root / "cloud-config" / "inventory" / "openstack_hosts.ini"
 
-def read_hosts_from_inventory(inv_path: Path) -> List[Tuple[str, str]]:
+def read_hosts_from_inventory(path: Path) -> list[Host]:
+    hosts: list[Host] = []
+    current_group: Optional[str] = None
+
+    for line in path.read_text().splitlines():
+        line = line.strip()
+
+        if not line or line.startswith("#"):
+            continue
+
+        # Inventory group (currently informational, but kept for future use)
+        if line.startswith("[") and line.endswith("]"):
+            current_group = line[1:-1]
+            continue
+
+        parts = line.split()
+        hostname = parts[0]
+
+        vars_: dict[str, str] = {}
+        for item in parts[1:]:
+            if "=" in item:
+                k, v = item.split("=", 1)
+                vars_[k] = v
+
+        address = vars_.get("ansible_host")
+        if not address:
+            raise ValueError(f"Host {hostname} missing ansible_host")
+
+        # --- Build per-host netplan content (optional) ---
+        int2_ip = vars_.get("int2_ip")
+        netplan_content: Optional[str] = None
+
+        if int2_ip:
+            netplan_content = f"""\
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    enp7s0:
+      dhcp4: false
+      addresses:
+        - {int2_ip}/24
+"""
+
+        hosts.append(
+            Host(
+                hostname=hostname,
+                address=address,
+                username="",          # filled later by caller
+                netplan_content=netplan_content,
+            )
+        )
+
+    return hosts
+
+
+def read_hosts_from_inventory_1(inv_path: Path) -> List[Tuple[str, str]]:
     """
     Parse an INI-like hosts file with sections like [controllers], [computes], [cephs].
     Returns a list of (hostname, address), trimming FQDN suffix like '.net.daalu.io'.
@@ -65,40 +121,6 @@ def read_hosts_from_inventory(inv_path: Path) -> List[Tuple[str, str]]:
 
     return hosts
 
-def read_hosts_from_inventory_1(inv_path: Path) -> List[Tuple[str, str]]:
-    """
-    Parse an INI-like hosts file with a section called [servers].
-    Returns a list of (hostname, address).
-    """
-    hosts: List[Tuple[str, str]] = []
-    if not inv_path.exists():
-        print('no hosts found, testing')
-        return hosts
-
-    in_section = False
-    for raw in inv_path.read_text().splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#") or line.startswith(";"):
-            continue
-        if line.startswith("[") and line.endswith("]"):
-            section_name = line[1:-1].strip()
-            in_section = section_name in ("controllers", "computes", "cephs")  # ✅ Accept both
-            continue
-        if not in_section:
-            continue
-
-        parts = line.split()
-        if not parts:
-            continue
-        hname = parts[0]
-        addr = None
-        for p in parts[1:]:
-            if p.startswith("ansible_host="):
-                addr = p.split("=", 1)[1]
-                break
-        if hname and addr:
-            hosts.append((hname, addr))
-    return hosts
 
 
 def plan_from_tags(node_tags: Optional[str]) -> NodeBootstrapPlan:

@@ -2,6 +2,7 @@
 
 from typing import Dict, List, Optional, Literal
 from pydantic import BaseModel, HttpUrl, Field
+from pathlib import Path
 
 class RepoSpec(BaseModel):
     name: str
@@ -36,6 +37,7 @@ class ClusterAPI(BaseModel):
     network_bridge: str
     source_node: str
     template_id: int
+    pivot: bool
 
     # Kubernetes and images
     kubernetes_version: str
@@ -43,7 +45,9 @@ class ClusterAPI(BaseModel):
 
     # Replicas
     control_plane_replicas: int
+    control_plane_count: int
     worker_replicas: int
+    worker_count: int
 
     # Hardware profiles
     control_plane_disk_gb: int
@@ -58,12 +62,39 @@ class ClusterAPI(BaseModel):
     # User bootstrap
     builder_password: str
     ssh_public_key: str
+    ssh_public_key_path: Path
 
     # Proxmox secret fields
     proxmox_secret_name: str
     proxmox_url: str
     proxmox_token: str
     proxmox_secret: str
+    provider: Literal["proxmox", "metal3"] = "proxmox"
+    image_username: str
+    image_password: str
+    image_password_hash: str
+    service_cidr: str
+    image_url: str
+
+    # -----------------------
+    # Metal3-specific fields
+    # -----------------------
+    image_os: Optional[Literal["ubuntu", "centos"]] = "ubuntu"
+    capm3_release: Optional[str] = None
+    capm3_release_branch: Optional[str] = None
+    capm3_version: Optional[str] = None
+    metal3_templates_path: Optional[Path] = None
+    image_flavor: Literal["ubuntu", "centos"] = "ubuntu"
+    image_version: str = "22.04"    
+
+    # Management cluster access (Metal3 dev env host)
+    mgmt_host: str
+    mgmt_user: str
+    mgmt_ssh_key_path: Path = Path.home() / ".ssh" / "id_ed25519"
+    metal3_namespace: str = "metal3"
+
+    # Ironic HTTP base (where images are served from)
+    ironic_http_base: str
     
 class ReleaseSpec(BaseModel):
     name: str                        # helm release name
@@ -93,3 +124,5 @@ class ClusterConfig(BaseModel):
         Useful for quickly accessing release configurations by name.
         """
         return {r.name: r for r in self.releases}
+
+

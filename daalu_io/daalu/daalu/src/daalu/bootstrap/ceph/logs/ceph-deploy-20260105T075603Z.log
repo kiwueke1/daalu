@@ -1,0 +1,52 @@
+# Ceph deployment log started 20260105T075603Z UTC
+
+
+[2026-01-05T07:56:03Z] (unknown) $ sudo -S bash -lc 'command -v docker || command -v podman'
+(unknown) [stdout]
+/usr/bin/docker
+
+(unknown) [exit 0]
+
+[2026-01-05T07:56:04Z] (unknown) $ bash -lc 'command -v cephadm || echo MISSING'
+(unknown) [stdout]
+/usr/local/bin/cephadm
+
+(unknown) [exit 0]
+
+[2026-01-05T07:56:05Z] (unknown) $ sudo -S bash -lc '(podman pull quay.io/ceph/ceph:v17.2.6 || docker pull quay.io/ceph/ceph:v17.2.6) || true'
+(unknown) [stderr] bash: line 1: podman: command not found
+(unknown) [stdout] v17.2.6: Pulling from ceph/ceph
+(unknown) [stdout]
+Digest: sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+Status: Image is up to date for quay.io/ceph/ceph:v17.2.6
+quay.io/ceph/ceph:v17.2.6
+
+(unknown) [exit 0]
+
+[2026-01-05T07:56:05Z] (unknown) $ bash -lc 'sudo cephadm shell -- ceph status >/dev/null 2>&1 || test -f /etc/ceph/ceph.conf'
+(unknown) [exit 0]
+[2026-01-05T07:56:19Z] [cephadm] Detected existing Ceph cluster on auto-openstack-infra-2r5vs (192.168.111.20); skipping bootstrap.
+
+[2026-01-05T07:56:19Z] (unknown) $ sudo -S bash -lc 'cat /etc/ceph/ceph.pub'
+(unknown) [stdout]
+ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDKx+rbnRTINBF25pPM96VaxiGZ0dvjBWIEwTYxEpsJIAm3owgQuccPUPUk4cC1pc2DTx6P+4lSaQ067ar/aMneBHL3A2DBiEKvESb3l4KJ8FAEVvT9Jt5f0YrOmo+OIJkkAgzieFMO/DHX/HDB+nZ21p1q0aVcnmHWjrPBohivmME1QRtI/cJ+VqTVFEZUonuzA1FJfwU/zJIry4ptpnvwgV6mjwVD1avd/iLk4B085Fxn4Y4od7jyvaKPPIamrcDni0IKnPU/C4WTg9SRmDnXIOxyoDFZi4wVqCyw2CYL0gf79TQjxj2bEq/qdkmejxsm4ry4T/IRTp4C4CdDJ5J/KgxR/eWH7lxueCR+pgP5RIdUraDSrk/5E2GTjriGytcKKq5UxmDRqT4KqTjcLlj/47JjoEkwbjtavatuE6XMkMRzTySK5eI8B+ub5bPY4JRrGVfox7tnFuUPMLgRrJWq62cpm8UqTcj6RecFAvmUCKPxPyuraBjiS36wUiWWi2s= ceph-eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6
+
+(unknown) [exit 0]
+
+[2026-01-05T07:56:19Z] (unknown) $ sudo -S bash -lc 'mkdir -p /root/.ssh && echo "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDKx+rbnRTINBF25pPM96VaxiGZ0dvjBWIEwTYxEpsJIAm3owgQuccPUPUk4cC1pc2DTx6P+4lSaQ067ar/aMneBHL3A2DBiEKvESb3l4KJ8FAEVvT9Jt5f0YrOmo+OIJkkAgzieFMO/DHX/HDB+nZ21p1q0aVcnmHWjrPBohivmME1QRtI/cJ+VqTVFEZUonuzA1FJfwU/zJIry4ptpnvwgV6mjwVD1avd/iLk4B085Fxn4Y4od7jyvaKPPIamrcDni0IKnPU/C4WTg9SRmDnXIOxyoDFZi4wVqCyw2CYL0gf79TQjxj2bEq/qdkmejxsm4ry4T/IRTp4C4CdDJ5J/KgxR/eWH7lxueCR+pgP5RIdUraDSrk/5E2GTjriGytcKKq5UxmDRqT4KqTjcLlj/47JjoEkwbjtavatuE6XMkMRzTySK5eI8B+ub5bPY4JRrGVfox7tnFuUPMLgRrJWq62cpm8UqTcj6RecFAvmUCKPxPyuraBjiS36wUiWWi2s= ceph-eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6" >> /root/.ssh/authorized_keys'
+(unknown) [exit 0]
+
+[2026-01-05T07:56:21Z] (unknown) $ sudo -S bash -lc 'mkdir -p /root/.ssh && echo "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDKx+rbnRTINBF25pPM96VaxiGZ0dvjBWIEwTYxEpsJIAm3owgQuccPUPUk4cC1pc2DTx6P+4lSaQ067ar/aMneBHL3A2DBiEKvESb3l4KJ8FAEVvT9Jt5f0YrOmo+OIJkkAgzieFMO/DHX/HDB+nZ21p1q0aVcnmHWjrPBohivmME1QRtI/cJ+VqTVFEZUonuzA1FJfwU/zJIry4ptpnvwgV6mjwVD1avd/iLk4B085Fxn4Y4od7jyvaKPPIamrcDni0IKnPU/C4WTg9SRmDnXIOxyoDFZi4wVqCyw2CYL0gf79TQjxj2bEq/qdkmejxsm4ry4T/IRTp4C4CdDJ5J/KgxR/eWH7lxueCR+pgP5RIdUraDSrk/5E2GTjriGytcKKq5UxmDRqT4KqTjcLlj/47JjoEkwbjtavatuE6XMkMRzTySK5eI8B+ub5bPY4JRrGVfox7tnFuUPMLgRrJWq62cpm8UqTcj6RecFAvmUCKPxPyuraBjiS36wUiWWi2s= ceph-eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6" >> /root/.ssh/authorized_keys'
+(unknown) [exit 0]
+
+[2026-01-05T07:56:22Z] (unknown) $ sudo -S bash -lc 'mkdir -p /root/.ssh && echo "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDKx+rbnRTINBF25pPM96VaxiGZ0dvjBWIEwTYxEpsJIAm3owgQuccPUPUk4cC1pc2DTx6P+4lSaQ067ar/aMneBHL3A2DBiEKvESb3l4KJ8FAEVvT9Jt5f0YrOmo+OIJkkAgzieFMO/DHX/HDB+nZ21p1q0aVcnmHWjrPBohivmME1QRtI/cJ+VqTVFEZUonuzA1FJfwU/zJIry4ptpnvwgV6mjwVD1avd/iLk4B085Fxn4Y4od7jyvaKPPIamrcDni0IKnPU/C4WTg9SRmDnXIOxyoDFZi4wVqCyw2CYL0gf79TQjxj2bEq/qdkmejxsm4ry4T/IRTp4C4CdDJ5J/KgxR/eWH7lxueCR+pgP5RIdUraDSrk/5E2GTjriGytcKKq5UxmDRqT4KqTjcLlj/47JjoEkwbjtavatuE6XMkMRzTySK5eI8B+ub5bPY4JRrGVfox7tnFuUPMLgRrJWq62cpm8UqTcj6RecFAvmUCKPxPyuraBjiS36wUiWWi2s= ceph-eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6" >> /root/.ssh/authorized_keys'
+(unknown) [exit 0]
+
+[2026-01-05T07:56:24Z] (unknown) $ sudo -S bash -lc 'mkdir -p /root/.ssh && echo "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDKx+rbnRTINBF25pPM96VaxiGZ0dvjBWIEwTYxEpsJIAm3owgQuccPUPUk4cC1pc2DTx6P+4lSaQ067ar/aMneBHL3A2DBiEKvESb3l4KJ8FAEVvT9Jt5f0YrOmo+OIJkkAgzieFMO/DHX/HDB+nZ21p1q0aVcnmHWjrPBohivmME1QRtI/cJ+VqTVFEZUonuzA1FJfwU/zJIry4ptpnvwgV6mjwVD1avd/iLk4B085Fxn4Y4od7jyvaKPPIamrcDni0IKnPU/C4WTg9SRmDnXIOxyoDFZi4wVqCyw2CYL0gf79TQjxj2bEq/qdkmejxsm4ry4T/IRTp4C4CdDJ5J/KgxR/eWH7lxueCR+pgP5RIdUraDSrk/5E2GTjriGytcKKq5UxmDRqT4KqTjcLlj/47JjoEkwbjtavatuE6XMkMRzTySK5eI8B+ub5bPY4JRrGVfox7tnFuUPMLgRrJWq62cpm8UqTcj6RecFAvmUCKPxPyuraBjiS36wUiWWi2s= ceph-eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6" >> /root/.ssh/authorized_keys'
+(unknown) [exit 0]
+
+[2026-01-05T07:56:24Z] (unknown) $ sudo -S bash -lc 'mkdir -p /root/.ssh && echo "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDKx+rbnRTINBF25pPM96VaxiGZ0dvjBWIEwTYxEpsJIAm3owgQuccPUPUk4cC1pc2DTx6P+4lSaQ067ar/aMneBHL3A2DBiEKvESb3l4KJ8FAEVvT9Jt5f0YrOmo+OIJkkAgzieFMO/DHX/HDB+nZ21p1q0aVcnmHWjrPBohivmME1QRtI/cJ+VqTVFEZUonuzA1FJfwU/zJIry4ptpnvwgV6mjwVD1avd/iLk4B085Fxn4Y4od7jyvaKPPIamrcDni0IKnPU/C4WTg9SRmDnXIOxyoDFZi4wVqCyw2CYL0gf79TQjxj2bEq/qdkmejxsm4ry4T/IRTp4C4CdDJ5J/KgxR/eWH7lxueCR+pgP5RIdUraDSrk/5E2GTjriGytcKKq5UxmDRqT4KqTjcLlj/47JjoEkwbjtavatuE6XMkMRzTySK5eI8B+ub5bPY4JRrGVfox7tnFuUPMLgRrJWq62cpm8UqTcj6RecFAvmUCKPxPyuraBjiS36wUiWWi2s= ceph-eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6" >> /root/.ssh/authorized_keys'
+(unknown) [exit 0]
+
+[2026-01-05T07:56:25Z] (unknown) $ sudo -S bash -lc 'cephadm shell -- ceph config set global container_image quay.io/ceph/ceph:v17.2.6'
+(unknown) [stderr] Inferring fsid eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6

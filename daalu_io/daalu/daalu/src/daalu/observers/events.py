@@ -234,3 +234,10 @@ class CephFailed(BaseEvent):
 class CephSucceeded(BaseEvent):
     stage: str
     message: str
+
+
+@dataclass
+class LifecycleEvent:
+    phase: str
+    status: str
+    message: str
