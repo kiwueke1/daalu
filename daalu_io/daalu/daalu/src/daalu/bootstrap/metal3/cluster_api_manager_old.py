@@ -14,6 +14,9 @@ from daalu.bootstrap.metal3.helpers import (
     wait_for_nodes_ready,
     label_crds_for_pivot,
     move_cluster_objects,
+    deploy_cni,
+    wait_for_cni_ready,
+    update_hosts_and_inventory,
 )
 from daalu.utils.execution import ExecutionContext
 from daalu.utils.shell import run
@@ -67,7 +70,7 @@ class Metal3ClusterAPIManager:
                 f"Metal3 templates root not found: {templates_root}"
             )
 
-        gen = Metal3TemplateGenerator()
+        gen = Metal3TemplateGenerator(ctx=self.ctx)
 
         opts = Metal3TemplateGenOptions(
             kube_context=self.mgmt_context,
@@ -88,9 +91,12 @@ class Metal3ClusterAPIManager:
             pod_cidr=cfg.cluster_api.pod_cidr,
             service_cidr=cfg.cluster_api.service_cidr,
             image_username=cfg.cluster_api.image_username,
+            image_password=cfg.cluster_api.image_password,
+            image_password_hash=cfg.cluster_api.image_password_hash,
             ssh_public_key=cfg.cluster_api.ssh_public_key,
             mgmt_host=cfg.cluster_api.mgmt_host,
             mgmt_user=cfg.cluster_api.mgmt_user,
+            image_url=cfg.cluster_api.image_url,
         )
 
         return gen.generate(opts)
@@ -122,9 +128,13 @@ class Metal3ClusterAPIManager:
         )
 
         return {
-            "IMAGE_URL": meta.image_url(http_base=cfg.cluster_api.ironic_http_base),
+            "IMAGE_URL": meta.image_url(
+                http_base=cfg.cluster_api.ironic_http_base,
+                raw=True,
+            ),
             "IMAGE_CHECKSUM": meta.checksum,
             "IMAGE_CHECKSUM_TYPE": meta.checksum_type,
+            "IMAGE_FORMAT": "raw",
         }
 
     def download_images(self, cfg) -> None:
@@ -327,16 +337,35 @@ class Metal3ClusterAPIManager:
             cluster_name=cluster,
             namespace=ns,
             out_path=Path(f"/tmp/kubeconfig-{cluster}.yaml"),
+            ctx=self.ctx,
         )
 
         if self.ctx.dry_run:
             self.bus.emit(LifecycleEvent("metal3.verify", "SUCCESS", "Dry-run: verify skipped"))
             return
 
-        wait_for_pods_running(kubeconfig)
-        wait_for_nodes_ready(kubeconfig, expected_count=expected)
+        # 1) Install CNI
+        deploy_cni(kubeconfig, ctx=self.ctx, cni="cilium")
+        wait_for_cni_ready(kubeconfig, ctx=self.ctx)
+
+        # 2) Now cluster can converge
+        wait_for_pods_running(kubeconfig, ctx=self.ctx)
+        wait_for_nodes_ready(
+            kubeconfig,
+            expected_count=expected,
+            ctx=self.ctx,
+        )
+
+        # 3) Update hosts + inventory
+        update_hosts_and_inventory(
+            kubeconfig=kubeconfig,
+            workspace_root=self.workspace_root,
+            domain_suffix="net.daalu.io",
+            ctx=self.ctx,
+        )
 
         self.bus.emit(LifecycleEvent("metal3.verify", "SUCCESS", "Cluster verified"))
+
 
 
     def pivot(self, cfg) -> None:
@@ -393,3 +422,5 @@ class Metal3ClusterAPIManager:
         )
 
         self.bus.emit(LifecycleEvent("metal3.repivot", "SUCCESS", "Re-pivot completed"))
+
+

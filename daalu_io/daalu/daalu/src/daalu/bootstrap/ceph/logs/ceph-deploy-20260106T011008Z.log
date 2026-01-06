@@ -1,0 +1,508 @@
+# Ceph deployment log started 20260106T011008Z UTC
+
+
+[2026-01-06T01:10:08Z] (unknown) $ sudo -S bash -lc 'command -v docker || command -v podman'
+(unknown) [stdout]
+/usr/bin/docker
+
+(unknown) [exit 0]
+
+[2026-01-06T01:10:09Z] (unknown) $ bash -lc 'command -v cephadm || echo MISSING'
+(unknown) [stdout]
+/usr/local/bin/cephadm
+
+(unknown) [exit 0]
+
+[2026-01-06T01:10:10Z] (unknown) $ sudo -S bash -lc '(podman pull quay.io/ceph/ceph:v17.2.6 || docker pull quay.io/ceph/ceph:v17.2.6) || true'
+(unknown) [stderr] bash: line 1: podman: command not found
+(unknown) [stdout]
+v17.2.6: Pulling from ceph/ceph
+Digest: sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+Status: Image is up to date for quay.io/ceph/ceph:v17.2.6
+quay.io/ceph/ceph:v17.2.6
+
+(unknown) [exit 0]
+
+[2026-01-06T01:10:10Z] (unknown) $ bash -lc 'sudo cephadm shell -- ceph status >/dev/null 2>&1 || test -f /etc/ceph/ceph.conf'
+(unknown) [exit 0]
+[2026-01-06T01:10:25Z] [cephadm] Detected existing Ceph cluster on auto-openstack-infra-2r5vs (192.168.111.20); skipping bootstrap.
+
+[2026-01-06T01:10:25Z] (unknown) $ sudo -S bash -lc 'cat /etc/ceph/ceph.pub'
+(unknown) [stdout]
+ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDKx+rbnRTINBF25pPM96VaxiGZ0dvjBWIEwTYxEpsJIAm3owgQuccPUPUk4cC1pc2DTx6P+4lSaQ067ar/aMneBHL3A2DBiEKvESb3l4KJ8FAEVvT9Jt5f0YrOmo+OIJkkAgzieFMO/DHX/HDB+nZ21p1q0aVcnmHWjrPBohivmME1QRtI/cJ+VqTVFEZUonuzA1FJfwU/zJIry4ptpnvwgV6mjwVD1avd/iLk4B085Fxn4Y4od7jyvaKPPIamrcDni0IKnPU/C4WTg9SRmDnXIOxyoDFZi4wVqCyw2CYL0gf79TQjxj2bEq/qdkmejxsm4ry4T/IRTp4C4CdDJ5J/KgxR/eWH7lxueCR+pgP5RIdUraDSrk/5E2GTjriGytcKKq5UxmDRqT4KqTjcLlj/47JjoEkwbjtavatuE6XMkMRzTySK5eI8B+ub5bPY4JRrGVfox7tnFuUPMLgRrJWq62cpm8UqTcj6RecFAvmUCKPxPyuraBjiS36wUiWWi2s= ceph-eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6
+
+(unknown) [exit 0]
+
+[2026-01-06T01:10:25Z] (unknown) $ sudo -S bash -lc 'mkdir -p /root/.ssh && echo "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDKx+rbnRTINBF25pPM96VaxiGZ0dvjBWIEwTYxEpsJIAm3owgQuccPUPUk4cC1pc2DTx6P+4lSaQ067ar/aMneBHL3A2DBiEKvESb3l4KJ8FAEVvT9Jt5f0YrOmo+OIJkkAgzieFMO/DHX/HDB+nZ21p1q0aVcnmHWjrPBohivmME1QRtI/cJ+VqTVFEZUonuzA1FJfwU/zJIry4ptpnvwgV6mjwVD1avd/iLk4B085Fxn4Y4od7jyvaKPPIamrcDni0IKnPU/C4WTg9SRmDnXIOxyoDFZi4wVqCyw2CYL0gf79TQjxj2bEq/qdkmejxsm4ry4T/IRTp4C4CdDJ5J/KgxR/eWH7lxueCR+pgP5RIdUraDSrk/5E2GTjriGytcKKq5UxmDRqT4KqTjcLlj/47JjoEkwbjtavatuE6XMkMRzTySK5eI8B+ub5bPY4JRrGVfox7tnFuUPMLgRrJWq62cpm8UqTcj6RecFAvmUCKPxPyuraBjiS36wUiWWi2s= ceph-eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6" >> /root/.ssh/authorized_keys'
+(unknown) [exit 0]
+
+[2026-01-06T01:10:27Z] (unknown) $ sudo -S bash -lc 'mkdir -p /root/.ssh && echo "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDKx+rbnRTINBF25pPM96VaxiGZ0dvjBWIEwTYxEpsJIAm3owgQuccPUPUk4cC1pc2DTx6P+4lSaQ067ar/aMneBHL3A2DBiEKvESb3l4KJ8FAEVvT9Jt5f0YrOmo+OIJkkAgzieFMO/DHX/HDB+nZ21p1q0aVcnmHWjrPBohivmME1QRtI/cJ+VqTVFEZUonuzA1FJfwU/zJIry4ptpnvwgV6mjwVD1avd/iLk4B085Fxn4Y4od7jyvaKPPIamrcDni0IKnPU/C4WTg9SRmDnXIOxyoDFZi4wVqCyw2CYL0gf79TQjxj2bEq/qdkmejxsm4ry4T/IRTp4C4CdDJ5J/KgxR/eWH7lxueCR+pgP5RIdUraDSrk/5E2GTjriGytcKKq5UxmDRqT4KqTjcLlj/47JjoEkwbjtavatuE6XMkMRzTySK5eI8B+ub5bPY4JRrGVfox7tnFuUPMLgRrJWq62cpm8UqTcj6RecFAvmUCKPxPyuraBjiS36wUiWWi2s= ceph-eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6" >> /root/.ssh/authorized_keys'
+(unknown) [exit 0]
+
+[2026-01-06T01:10:28Z] (unknown) $ sudo -S bash -lc 'mkdir -p /root/.ssh && echo "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDKx+rbnRTINBF25pPM96VaxiGZ0dvjBWIEwTYxEpsJIAm3owgQuccPUPUk4cC1pc2DTx6P+4lSaQ067ar/aMneBHL3A2DBiEKvESb3l4KJ8FAEVvT9Jt5f0YrOmo+OIJkkAgzieFMO/DHX/HDB+nZ21p1q0aVcnmHWjrPBohivmME1QRtI/cJ+VqTVFEZUonuzA1FJfwU/zJIry4ptpnvwgV6mjwVD1avd/iLk4B085Fxn4Y4od7jyvaKPPIamrcDni0IKnPU/C4WTg9SRmDnXIOxyoDFZi4wVqCyw2CYL0gf79TQjxj2bEq/qdkmejxsm4ry4T/IRTp4C4CdDJ5J/KgxR/eWH7lxueCR+pgP5RIdUraDSrk/5E2GTjriGytcKKq5UxmDRqT4KqTjcLlj/47JjoEkwbjtavatuE6XMkMRzTySK5eI8B+ub5bPY4JRrGVfox7tnFuUPMLgRrJWq62cpm8UqTcj6RecFAvmUCKPxPyuraBjiS36wUiWWi2s= ceph-eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6" >> /root/.ssh/authorized_keys'
+(unknown) [exit 0]
+
+[2026-01-06T01:10:30Z] (unknown) $ sudo -S bash -lc 'mkdir -p /root/.ssh && echo "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDKx+rbnRTINBF25pPM96VaxiGZ0dvjBWIEwTYxEpsJIAm3owgQuccPUPUk4cC1pc2DTx6P+4lSaQ067ar/aMneBHL3A2DBiEKvESb3l4KJ8FAEVvT9Jt5f0YrOmo+OIJkkAgzieFMO/DHX/HDB+nZ21p1q0aVcnmHWjrPBohivmME1QRtI/cJ+VqTVFEZUonuzA1FJfwU/zJIry4ptpnvwgV6mjwVD1avd/iLk4B085Fxn4Y4od7jyvaKPPIamrcDni0IKnPU/C4WTg9SRmDnXIOxyoDFZi4wVqCyw2CYL0gf79TQjxj2bEq/qdkmejxsm4ry4T/IRTp4C4CdDJ5J/KgxR/eWH7lxueCR+pgP5RIdUraDSrk/5E2GTjriGytcKKq5UxmDRqT4KqTjcLlj/47JjoEkwbjtavatuE6XMkMRzTySK5eI8B+ub5bPY4JRrGVfox7tnFuUPMLgRrJWq62cpm8UqTcj6RecFAvmUCKPxPyuraBjiS36wUiWWi2s= ceph-eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6" >> /root/.ssh/authorized_keys'
+(unknown) [exit 0]
+
+[2026-01-06T01:10:31Z] (unknown) $ sudo -S bash -lc 'mkdir -p /root/.ssh && echo "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDKx+rbnRTINBF25pPM96VaxiGZ0dvjBWIEwTYxEpsJIAm3owgQuccPUPUk4cC1pc2DTx6P+4lSaQ067ar/aMneBHL3A2DBiEKvESb3l4KJ8FAEVvT9Jt5f0YrOmo+OIJkkAgzieFMO/DHX/HDB+nZ21p1q0aVcnmHWjrPBohivmME1QRtI/cJ+VqTVFEZUonuzA1FJfwU/zJIry4ptpnvwgV6mjwVD1avd/iLk4B085Fxn4Y4od7jyvaKPPIamrcDni0IKnPU/C4WTg9SRmDnXIOxyoDFZi4wVqCyw2CYL0gf79TQjxj2bEq/qdkmejxsm4ry4T/IRTp4C4CdDJ5J/KgxR/eWH7lxueCR+pgP5RIdUraDSrk/5E2GTjriGytcKKq5UxmDRqT4KqTjcLlj/47JjoEkwbjtavatuE6XMkMRzTySK5eI8B+ub5bPY4JRrGVfox7tnFuUPMLgRrJWq62cpm8UqTcj6RecFAvmUCKPxPyuraBjiS36wUiWWi2s= ceph-eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6" >> /root/.ssh/authorized_keys'
+(unknown) [exit 0]
+
+[2026-01-06T01:10:33Z] (unknown) $ sudo -S bash -lc 'cephadm shell -- ceph config set global container_image quay.io/ceph/ceph:v17.2.6'
+(unknown) [stderr] Inferring fsid eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6
+(unknown) [stderr] Inferring config /var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/mon.auto-openstack-infra-2r5vs/config
+(unknown) [stderr] Using ceph image with id 'e40c19cd70e0' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+(unknown) [exit 0]
+[2026-01-06T01:10:48Z] [cephadm] Validating container engine on auto-openstack-infra-gnqvk (192.168.111.25)...
+
+[2026-01-06T01:10:48Z] (unknown) $ sudo -S bash -lc 'command -v docker || command -v podman'
+(unknown) [stdout]
+/usr/bin/docker
+
+(unknown) [exit 0]
+[2026-01-06T01:10:48Z] [cephadm] Container engine already present on auto-openstack-infra-gnqvk.
+[2026-01-06T01:10:48Z] [cephadm] Adding host auto-openstack-infra-gnqvk (192.168.111.25) to cluster...
+
+[2026-01-06T01:10:48Z] (unknown) $ sudo -S bash -lc 'cephadm shell -- ceph orch host add auto-openstack-infra-gnqvk 192.168.111.25'
+(unknown) [stderr] Inferring fsid eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6
+(unknown) [stderr] Inferring config /var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/mon.auto-openstack-infra-2r5vs/config
+(unknown) [stderr] Using ceph image with id 'e40c19cd70e0' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+(unknown) [stdout] Added host 'auto-openstack-infra-gnqvk' with addr '192.168.111.25'
+(unknown) [exit 0]
+[2026-01-06T01:11:04Z] [cephadm] Host auto-openstack-infra-gnqvk added successfully.
+[2026-01-06T01:11:04Z] [cephadm] Validating container engine on auto-openstack-infra-j9srx (192.168.111.24)...
+
+[2026-01-06T01:11:04Z] (unknown) $ sudo -S bash -lc 'command -v docker || command -v podman'
+(unknown) [stdout]
+/usr/bin/docker
+
+(unknown) [exit 0]
+[2026-01-06T01:11:05Z] [cephadm] Container engine already present on auto-openstack-infra-j9srx.
+[2026-01-06T01:11:05Z] [cephadm] Adding host auto-openstack-infra-j9srx (192.168.111.24) to cluster...
+
+[2026-01-06T01:11:05Z] (unknown) $ sudo -S bash -lc 'cephadm shell -- ceph orch host add auto-openstack-infra-j9srx 192.168.111.24'
+(unknown) [stderr] Inferring fsid eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6
+(unknown) [stderr] Inferring config /var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/mon.auto-openstack-infra-2r5vs/config
+(unknown) [stderr] Using ceph image with id 'e40c19cd70e0' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+(unknown) [stdout] Added host 'auto-openstack-infra-j9srx' with addr '192.168.111.24'
+(unknown) [exit 0]
+[2026-01-06T01:11:19Z] [cephadm] Host auto-openstack-infra-j9srx added successfully.
+[2026-01-06T01:11:19Z] [cephadm] Validating container engine on auto-openstack-infra-s626n-6clxc (192.168.111.23)...
+
+[2026-01-06T01:11:19Z] (unknown) $ sudo -S bash -lc 'command -v docker || command -v podman'
+(unknown) [stdout]
+/usr/bin/docker
+
+(unknown) [exit 0]
+[2026-01-06T01:11:20Z] [cephadm] Container engine already present on auto-openstack-infra-s626n-6clxc.
+[2026-01-06T01:11:20Z] [cephadm] Adding host auto-openstack-infra-s626n-6clxc (192.168.111.23) to cluster...
+
+[2026-01-06T01:11:20Z] (unknown) $ sudo -S bash -lc 'cephadm shell -- ceph orch host add auto-openstack-infra-s626n-6clxc 192.168.111.23'
+(unknown) [stderr] Inferring fsid eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6
+(unknown) [stderr] Inferring config /var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/mon.auto-openstack-infra-2r5vs/config
+(unknown) [stderr] Using ceph image with id 'e40c19cd70e0' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+(unknown) [stdout] Added host 'auto-openstack-infra-s626n-6clxc' with addr '192.168.111.23'
+(unknown) [exit 0]
+[2026-01-06T01:11:35Z] [cephadm] Host auto-openstack-infra-s626n-6clxc added successfully.
+[2026-01-06T01:11:35Z] [cephadm] Validating container engine on auto-openstack-infra-s626n-n764q (192.168.111.22)...
+
+[2026-01-06T01:11:35Z] (unknown) $ sudo -S bash -lc 'command -v docker || command -v podman'
+(unknown) [stdout]
+/usr/bin/docker
+
+(unknown) [exit 0]
+[2026-01-06T01:11:36Z] [cephadm] Container engine already present on auto-openstack-infra-s626n-n764q.
+[2026-01-06T01:11:36Z] [cephadm] Adding host auto-openstack-infra-s626n-n764q (192.168.111.22) to cluster...
+
+[2026-01-06T01:11:36Z] (unknown) $ sudo -S bash -lc 'cephadm shell -- ceph orch host add auto-openstack-infra-s626n-n764q 192.168.111.22'
+(unknown) [stderr] Inferring fsid eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6
+(unknown) [stderr] Inferring config /var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/mon.auto-openstack-infra-2r5vs/config
+(unknown) [stderr] Using ceph image with id 'e40c19cd70e0' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+(unknown) [stdout] Added host 'auto-openstack-infra-s626n-n764q' with addr '192.168.111.22'
+(unknown) [exit 0]
+[2026-01-06T01:11:51Z] [cephadm] Host auto-openstack-infra-s626n-n764q added successfully.
+[2026-01-06T01:11:51Z] [cephadm] Validating container engine on auto-openstack-infra-s626n-njs96 (192.168.111.21)...
+
+[2026-01-06T01:11:51Z] (unknown) $ sudo -S bash -lc 'command -v docker || command -v podman'
+(unknown) [stdout]
+/usr/bin/docker
+
+(unknown) [exit 0]
+[2026-01-06T01:11:52Z] [cephadm] Container engine already present on auto-openstack-infra-s626n-njs96.
+[2026-01-06T01:11:52Z] [cephadm] Adding host auto-openstack-infra-s626n-njs96 (192.168.111.21) to cluster...
+
+[2026-01-06T01:11:52Z] (unknown) $ sudo -S bash -lc 'cephadm shell -- ceph orch host add auto-openstack-infra-s626n-njs96 192.168.111.21'
+(unknown) [stderr] Inferring fsid eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6
+(unknown) [stderr] Inferring config /var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/mon.auto-openstack-infra-2r5vs/config
+(unknown) [stderr] Using ceph image with id 'e40c19cd70e0' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+(unknown) [stdout] Added host 'auto-openstack-infra-s626n-njs96' with addr '192.168.111.21'
+(unknown) [exit 0]
+[2026-01-06T01:12:07Z] [cephadm] Host auto-openstack-infra-s626n-njs96 added successfully.
+
+[2026-01-06T01:12:07Z] (unknown) $ sudo -S bash -lc '
+    set -e
+    FILES=$(ls /usr/local/bin/cephadm /var/lib/ceph/*/cephadm.* 2>/dev/null || true)
+    for f in $FILES; do
+    if grep -q "item, mode = line.split('\'' '\'')" "$f"; then
+        sed -i "s/item, mode = line.split('\'' '\'')/item, mode = line.rsplit('\'' '\'', 1)/" "$f"
+    fi
+    done
+    '
+(unknown) [exit 0]
+
+[2026-01-06T01:12:08Z] (unknown) $ sudo -S bash -lc 'ceph orch restart mgr'
+(unknown) [stderr]
+bash: line 1: ceph: command not found
+
+(unknown) [exit 127]
+
+[2026-01-06T01:12:08Z] (unknown) $ sudo -S bash -lc 'cephadm shell -- ceph orch apply mon --placement="count:3"'
+(unknown) [stderr] Inferring fsid eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6
+(unknown) [stderr] Inferring config /var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/mon.auto-openstack-infra-2r5vs/config
+(unknown) [stderr] Using ceph image with id 'e40c19cd70e0' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+(unknown) [stdout] Scheduled mon update...
+(unknown) [exit 0]
+
+[2026-01-06T01:12:23Z] (unknown) $ sudo -S bash -lc 'cephadm shell -- ceph orch apply mgr --placement="count:2"'
+(unknown) [stderr] Inferring fsid eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6
+(unknown) [stderr] Inferring config /var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/mon.auto-openstack-infra-2r5vs/config
+(unknown) [stderr] Using ceph image with id 'e40c19cd70e0' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+(unknown) [stdout] Scheduled mgr update...
+(unknown) [exit 0]
+
+[2026-01-06T01:12:38Z] (unknown) $ sudo -S bash -lc 'cephadm shell -- ceph orch daemon add osd auto-openstack-infra-2r5vs:/dev/vda'
+(unknown) [stderr] Inferring fsid eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6
+(unknown) [stderr] Inferring config /var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/mon.auto-openstack-infra-2r5vs/config
+(unknown) [stderr] Using ceph image with id 'e40c19cd70e0' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+(unknown) [stdout] Created no osd(s) on host auto-openstack-infra-2r5vs; already created?
+(unknown) [exit 0]
+
+[2026-01-06T01:13:12Z] (unknown) $ sudo -S bash -lc 'cephadm shell -- ceph orch daemon add osd auto-openstack-infra-gnqvk:/dev/vda'
+(unknown) [stderr] Inferring fsid eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6
+(unknown) [stderr] Inferring config /var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/mon.auto-openstack-infra-2r5vs/config
+(unknown) [stderr] Using ceph image with id 'e40c19cd70e0' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+(unknown) [stderr] Error EINVAL: Traceback (most recent call last):
+  File "/usr/share/ceph/mgr/mgr_module.py", line 1756, in _handle_command
+    return self.handle_command(inbuf, cmd)
+  File "/usr/share/ceph/mgr/orchestrator/_interface.py", line 171, in handle_command
+    return dispatch[cmd['prefix']].call(self, cmd, inbuf)
+  File "/usr/share/ceph/mgr/mgr_module.py", line 462, in call
+    return self.func(mgr, **kwargs)
+  File "/usr/share/ceph/mgr/orchestrator/_interface.py", line 107, in <lambda>
+    wrapper_copy = lambda *l_args, **l_kwargs: wrapper(*l_args, **l_kwargs)  # noqa: E731
+  File "/usr/share/ceph/mgr/orchestrator/_interface.py", line 96, in wrapper
+    return func(*args, **kwargs)
+  File "/usr/share/ceph/mgr/orchestrator/module.py", line 843, in _daemon_add_osd
+    raise_if_exception(completion)
+  File "/usr/share/ceph/mgr/orchestrator/_interface.py", line 228, in raise_if_exception
+    raise e
+RuntimeError: cephadm exited with an error code: 1, stderr:Inferring config /var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4(unknown) [stderr]
+d7b5c6/mon.auto-openstack-infra-gnqvk/config
+Traceback (most recent call last):
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 9653, in <module>
+    main()
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 9641, in main
+    r = ctx.func(ctx)
+        ^^^^^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 2153, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 2069, in _infer_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 2181, in _infer_image
+    return func(ctx)
+           ^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 2056, in _validate_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 6230, in command_ceph_volume
+    mounts = get_container_mounts(ctx, ctx.fsid, 'osd', None)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 2968, in get_container_mounts
+    if HostFacts(ctx).selinux_enabled:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 8721, in selinux_enabled
+    return (self.kernel_security['type'] == 'SELinux') and \
+            ^^^^^^^^^^^^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 8704, in kernel_security
+    ret = _fetch_apparmor()
+          ^^^^^^^^^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 8685, in _fetch_apparmor
+    item, mode = line.split(' ')
+    ^^^^^^^^^^
+ValueError: too many values to unpack (expected 2)
+
+
+(unknown) [exit 22]
+
+[2026-01-06T01:13:33Z] (unknown) $ sudo -S bash -lc 'cephadm shell -- ceph orch daemon add osd auto-openstack-infra-j9srx:/dev/vda'
+(unknown) [stderr] Inferring fsid eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6
+(unknown) [stderr] Inferring config /var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/mon.auto-openstack-infra-2r5vs/config
+(unknown) [stderr] Using ceph image with id 'e40c19cd70e0' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+(unknown) [stderr] Error EINVAL: Traceback (most recent call last):
+  File "/usr/share/ceph/mgr/mgr_module.py", line 1756, in _handle_command
+    return self.handle_command(inbuf, cmd)
+  File "/usr/share/ceph/mgr/orchestrator/_interface.py", line 171, in handle_command
+    return dispatch[cmd['prefix']].call(self, cmd, inbuf)
+  File "/usr/share/ceph/mgr/mgr_module.py", line 462, in call
+    return self.func(mgr, **kwargs)
+  File "/usr/share/ceph/mgr/orchestrator/_interface.py", line 107, in <lambda>
+    wrapper_copy = lambda *l_args, **l_kwargs: wrapper(*l_args, **l_kwargs)  # noqa: E731
+  File "/usr/share/ceph/mgr/orchestrator/_interface.py", line 96, in wrapper
+    return func(*args, **kwargs)
+  File "/usr/share/ceph/mgr/orchestrator/module.py", line 843, in _daemon_add_osd
+    raise_if_exception(completion)
+  File "/usr/share/ceph/mgr/orchestrator/_interface.py", line 228, in raise_if_exception
+    raise e
+RuntimeError: cephadm exited with an error code: 1, stderr:Inferring config /var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4(unknown) [stderr]
+d7b5c6/mon.auto-openstack-infra-j9srx/config
+Traceback (most recent call last):
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 9653, in <module>
+    main()
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 9641, in main
+    r = ctx.func(ctx)
+        ^^^^^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 2153, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 2069, in _infer_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 2181, in _infer_image
+    return func(ctx)
+           ^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 2056, in _validate_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 6230, in command_ceph_volume
+    mounts = get_container_mounts(ctx, ctx.fsid, 'osd', None)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 2968, in get_container_mounts
+    if HostFacts(ctx).selinux_enabled:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 8721, in selinux_enabled
+    return (self.kernel_security['type'] == 'SELinux') and \
+            ^^^^^^^^^^^^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 8704, in kernel_security
+    ret = _fetch_apparmor()
+          ^^^^^^^^^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 8685, in _fetch_apparmor
+    item, mode = line.split(' ')
+    ^^^^^^^^^^
+ValueError: too many values to unpack (expected 2)
+
+
+(unknown) [exit 22]
+
+[2026-01-06T01:13:53Z] (unknown) $ sudo -S bash -lc 'cephadm shell -- ceph orch daemon add osd auto-openstack-infra-s626n-6clxc:/dev/vda'
+(unknown) [stderr] Inferring fsid eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6
+(unknown) [stderr] Inferring config /var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/mon.auto-openstack-infra-2r5vs/config
+(unknown) [stderr] Using ceph image with id 'e40c19cd70e0' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+(unknown) [stderr] Error EINVAL: Traceback (most recent call last):
+  File "/usr/share/ceph/mgr/mgr_module.py", line 1756, in _handle_command
+    return self.handle_command(inbuf, cmd)
+  File "/usr/share/ceph/mgr/orchestrator/_interface.py", line 171, in handle_command
+    return dispatch[cmd['prefix']].call(self, cmd, inbuf)
+  File "/usr/share/ceph/mgr/mgr_module.py", line 462, in call
+    return self.func(mgr, **kwargs)
+  File "/usr/share/ceph/mgr/orchestrator/_interface.py", line 107, in <lambda>
+    wrapper_copy = lambda *l_args, **l_kwargs: wrapper(*l_args, **l_kwargs)  # noqa: E731
+  File "/usr/share/ceph/mgr/orchestrator/_interface.py", line 96, in wrapper
+    return func(*args, **kwargs)
+  File "/usr/share/ceph/mgr/orchestrator/module.py", line 843, in _daemon_add_osd
+    raise_if_exception(completion)
+  File "/usr/share/ceph/mgr/orchestrator/_interface.py", line 228, in raise_if_exception
+    raise e
+RuntimeError: cephadm exited with an error code: 1, stderr:Traceback (most recent call last):
+  File "/var/lib/ceph/eaf2(unknown) [stderr]
+8af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 9653, in <module>
+    main()
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 9641, in main
+    r = ctx.func(ctx)
+        ^^^^^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 2153, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 2069, in _infer_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 2181, in _infer_image
+    return func(ctx)
+           ^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 2056, in _validate_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 6230, in command_ceph_volume
+    mounts = get_container_mounts(ctx, ctx.fsid, 'osd', None)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 2968, in get_container_mounts
+    if HostFacts(ctx).selinux_enabled:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 8721, in selinux_enabled
+    return (self.kernel_security['type'] == 'SELinux') and \
+            ^^^^^^^^^^^^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 8704, in kernel_security
+    ret = _fetch_apparmor()
+          ^^^^^^^^^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 8685, in _fetch_apparmor
+    item, mode = line.split(' ')
+    ^^^^^^^^^^
+ValueError: too many values to unpack (expected 2)
+
+
+(unknown) [exit 22]
+
+[2026-01-06T01:14:12Z] (unknown) $ sudo -S bash -lc 'cephadm shell -- ceph orch daemon add osd auto-openstack-infra-s626n-n764q:/dev/vda'
+(unknown) [stderr] Inferring fsid eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6
+(unknown) [stderr] Inferring config /var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/mon.auto-openstack-infra-2r5vs/config
+(unknown) [stderr] Using ceph image with id 'e40c19cd70e0' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+(unknown) [stderr] Error EINVAL: Traceback (most recent call last):
+  File "/usr/share/ceph/mgr/mgr_module.py", line 1756, in _handle_command
+    return self.handle_command(inbuf, cmd)
+  File "/usr/share/ceph/mgr/orchestrator/_interface.py", line 171, in handle_command
+    return dispatch[cmd['prefix']].call(self, cmd, inbuf)
+  File "/usr/share/ceph/mgr/mgr_module.py", line 462, in call
+    return self.func(mgr, **kwargs)
+  File "/usr/share/ceph/mgr/orchestrator/_interface.py", line 107, in <lambda>
+    wrapper_copy = lambda *l_args, **l_kwargs: wrapper(*l_args, **l_kwargs)  # noqa: E731
+  File "/usr/share/ceph/mgr/orchestrator/_interface.py", line 96, in wrapper
+    return func(*args, **kwargs)
+  File "/usr/share/ceph/mgr/orchestrator/module.py", line 843, in _daemon_add_osd
+    raise_if_exception(completion)
+  File "/usr/share/ceph/mgr/orchestrator/_interface.py", line 228, in raise_if_exception
+    raise e
+RuntimeError: cephadm exited with an error code: 1, stderr:Traceback (most recent call last):
+  File "/var/lib/ceph/eaf2(unknown) [stderr]
+8af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 9653, in <module>
+    main()
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 9641, in main
+    r = ctx.func(ctx)
+        ^^^^^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 2153, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 2069, in _infer_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 2181, in _infer_image
+    return func(ctx)
+           ^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 2056, in _validate_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 6230, in command_ceph_volume
+    mounts = get_container_mounts(ctx, ctx.fsid, 'osd', None)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 2968, in get_container_mounts
+    if HostFacts(ctx).selinux_enabled:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 8721, in selinux_enabled
+    return (self.kernel_security['type'] == 'SELinux') and \
+            ^^^^^^^^^^^^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 8704, in kernel_security
+    ret = _fetch_apparmor()
+          ^^^^^^^^^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 8685, in _fetch_apparmor
+    item, mode = line.split(' ')
+    ^^^^^^^^^^
+ValueError: too many values to unpack (expected 2)
+
+
+(unknown) [exit 22]
+
+[2026-01-06T01:14:31Z] (unknown) $ sudo -S bash -lc 'cephadm shell -- ceph orch daemon add osd auto-openstack-infra-s626n-njs96:/dev/vda'
+(unknown) [stderr] Inferring fsid eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6
+(unknown) [stderr] Inferring config /var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/mon.auto-openstack-infra-2r5vs/config
+(unknown) [stderr] Using ceph image with id 'e40c19cd70e0' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+(unknown) [stderr] Error EINVAL: Traceback (most recent call last):
+  File "/usr/share/ceph/mgr/mgr_module.py", line 1756, in _handle_command
+    return self.handle_command(inbuf, cmd)
+  File "/usr/share/ceph/mgr/orchestrator/_interface.py", line 171, in handle_command
+    return dispatch[cmd['prefix']].call(self, cmd, inbuf)
+  File "/usr/share/ceph/mgr/mgr_module.py", line 462, in call
+    return self.func(mgr, **kwargs)
+  File "/usr/share/ceph/mgr/orchestrator/_interface.py", line 107, in <lambda>
+    wrapper_copy = lambda *l_args, **l_kwargs: wrapper(*l_args, **l_kwargs)  # noqa: E731
+  File "/usr/share/ceph/mgr/orchestrator/_interface.py", line 96, in wrapper
+    return func(*args, **kwargs)
+  File "/usr/share/ceph/mgr/orchestrator/module.py", line 843, in _daemon_add_osd
+    raise_if_exception(completion)
+  File "/usr/share/ceph/mgr/orchestrator/_interface.py", line 228, in raise_if_exception
+    raise e
+RuntimeError: cephadm exited with an error code: 1, stderr:Traceback (most recent call last):
+  File "/var/lib/ceph/eaf2(unknown) [stderr]
+8af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 9653, in <module>
+    main()
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 9641, in main
+    r = ctx.func(ctx)
+        ^^^^^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 2153, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 2069, in _infer_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 2181, in _infer_image
+    return func(ctx)
+           ^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 2056, in _validate_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 6230, in command_ceph_volume
+    mounts = get_container_mounts(ctx, ctx.fsid, 'osd', None)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 2968, in get_container_mounts
+    if HostFacts(ctx).selinux_enabled:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 8721, in selinux_enabled
+    return (self.kernel_security['type'] == 'SELinux') and \
+            ^^^^^^^^^^^^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 8704, in kernel_security
+    ret = _fetch_apparmor()
+          ^^^^^^^^^^^^^^^^^
+  File "/var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/cephadm.7ab03136237675497d535fb1b85d1d0f95bbe5b95f32cd4e6f3ca71a9f97bf3c", line 8685, in _fetch_apparmor
+    item, mode = line.split(' ')
+    ^^^^^^^^^^
+ValueError: too many values to unpack (expected 2)
+
+
+(unknown) [exit 22]
+
+[2026-01-06T01:14:49Z] (unknown) $ sudo -S bash -lc 'cephadm shell -- ceph -s'
+(unknown) [stderr] Inferring fsid eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6
+(unknown) [stderr] Inferring config /var/lib/ceph/eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6/mon.auto-openstack-infra-2r5vs/config
+(unknown) [stderr] Using ceph image with id 'e40c19cd70e0' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+(unknown) [stdout]   cluster:
+    id:     eaf28af1-e9e6-11f0-a1e6-00ddb4d7b5c6
+    health: HEALTH_WARN
+            failed to probe daemons or devices
+            OSD count 1 < osd_pool_default_size 3
+ 
+  services:
+    mon: 3 daemons, quorum auto-openstack-infra-2r5vs,auto-openstack-infra-gnqvk,auto-openstack-infra-j9srx (age 2h)
+    mgr: auto-openstack-infra-2r5vs.klwoym(active, since 21h), standbys: auto-openstack-infra-gnqvk.rdzgng
+    osd: 1 osds: 1 up (since 2h), 1 in (since 2h)
+ 
+  data:
+    pools:   0 pools, 0 pgs
+    objects: 0 objects, 0 B
+    usage:   419 MiB used, 200 GiB / 200 GiB avail
+    pgs:     
+ 
+(unknown) [exit 0]

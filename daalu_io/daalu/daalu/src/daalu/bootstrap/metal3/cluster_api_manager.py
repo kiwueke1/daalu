@@ -1,7 +1,5 @@
-# src/daalu/bootstrap/metal3/cluster_api_manager.py
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 from typing import Optional, Dict
 
@@ -18,37 +16,35 @@ from daalu.bootstrap.metal3.helpers import (
     wait_for_cni_ready,
     update_hosts_and_inventory,
 )
+from daalu.bootstrap.metal3.images import resolve_image_spec
+
 from daalu.utils.execution import ExecutionContext
-from daalu.utils.shell import run
+from daalu.utils.shell import run_logged
+from daalu.utils.logging import RunLogger
+
 from daalu.observers.events import LifecycleEvent
 from daalu.observers.dispatcher import EventBus
-from daalu.bootstrap.metal3.images import resolve_image_spec
-from daalu.bootstrap.metal3.image_manager import Metal3ImageManager
-
-def _kubectl_apply(
-    manifest: Path,
-    namespace: str,
-    *,
-    context: str | None = None,
-    ctx: ExecutionContext | None = None,
-) -> None:
-    cmd = ["kubectl"]
-    if context:
-        cmd += ["--context", context]
-    cmd += ["apply", "-f", str(manifest), "-n", namespace]
-
-    run(cmd, ctx=ctx)
 
 
 class Metal3ClusterAPIManager:
     """
     Metal3-backed Cluster API workflow.
+
+    This manager is responsible for:
+      - Generating Cluster API + Metal3 manifests
+      - Preparing and serving Metal3 images
+      - Applying cluster, control plane, and worker resources
+      - Verifying cluster readiness
+      - Performing Cluster API pivot and re-pivot
+
+    All external commands (kubectl, clusterctl) are executed through
+    run_logged() to ensure full stdout/stderr capture into a run-scoped log.
     """
 
     def __init__(
         self,
         workspace_root: Path,
-        mgmt_context: Optional[str] = None,
+        mgmt_context: Optional[str],
         *,
         bus: EventBus,
         ctx: ExecutionContext,
@@ -58,17 +54,33 @@ class Metal3ClusterAPIManager:
         self.bus = bus
         self.ctx = ctx
 
+        # Run-scoped logger (mirrors CephManager behavior)
+        self.logger = RunLogger("metal3")
+
+    # ------------------------------------------------------------------
+    # Template Generation
+    # ------------------------------------------------------------------
+
     def generate_templates(self, cfg) -> Dict[str, Path]:
-        # Resolve Metal3 templates root relative to workspace
+        """
+        Generate Metal3-backed Cluster API manifests from templates.
+
+        This renders:
+          - Cluster
+          - Metal3Cluster
+          - KubeadmControlPlane
+          - Metal3MachineTemplate
+          - KubeadmConfigTemplate (control plane + workers)
+        """
         templates_root = (
             self.workspace_root
             / cfg.cluster_api.metal3_templates_path
         ).resolve()
 
         if not templates_root.is_dir():
-            raise RuntimeError(
-                f"Metal3 templates root not found: {templates_root}"
-            )
+            raise RuntimeError(f"Metal3 templates root not found: {templates_root}")
+
+        self.logger.log(f"Using Metal3 templates from {templates_root}")
 
         gen = Metal3TemplateGenerator(ctx=self.ctx)
 
@@ -101,17 +113,22 @@ class Metal3ClusterAPIManager:
 
         return gen.generate(opts)
 
+    # ------------------------------------------------------------------
+    # Image Preparation
+    # ------------------------------------------------------------------
+
     def prepare_images(self, cfg) -> dict:
         """
         Ensure Metal3 images exist on the management host and
         return Jinja-safe image metadata.
         """
-
         image_spec = resolve_image_spec(
             flavor=cfg.cluster_api.image_flavor,
             version=cfg.cluster_api.image_version,
             kubernetes_version=cfg.cluster_api.kubernetes_version,
         )
+
+        self.logger.log(f"Preparing Metal3 image {image_spec.qcow2}")
 
         img_mgr = Metal3ImageManager(
             mgmt_host=cfg.cluster_api.mgmt_host,
@@ -137,196 +154,77 @@ class Metal3ClusterAPIManager:
             "IMAGE_FORMAT": "raw",
         }
 
-    def download_images(self, cfg) -> None:
-        mgr = Metal3ImageManager()
+    # ------------------------------------------------------------------
+    # Manifest Application Helpers
+    # ------------------------------------------------------------------
 
-        items = ["controlplane", "worker"]
+    def _kubectl_apply(self, manifest: Path, namespace: str, label: str):
+        """
+        Apply a Kubernetes manifest using kubectl with full logging.
+        """
+        cmd = ["kubectl"]
+        if self.mgmt_context:
+            cmd += ["--context", self.mgmt_context]
+        cmd += ["apply", "-f", str(manifest), "-n", namespace]
 
-        for item in items:
-            if cfg.cluster_api.image_os.lower() == "ubuntu":
-                image = f"UBUNTU_24.04_NODE_IMAGE_K8S_v1.35.0.qcow2"
-                raw = f"UBUNTU_24.04_NODE_IMAGE_K8S_v1.35.0-raw.img"
-            elif cfg.cluster_api.image_os.lower() == "centos":
-                image = f"CENTOS_NODE_IMAGE_K8S_v1.35.0.qcow2"
-                raw = f"CENTOS_NODE_IMAGE_K8S_v1.35.0-raw.img"
-            else:
-                raise ValueError(f"Unsupported IMAGE_OS: {cfg.cluster_api.image_os}")
+        run_logged(cmd, logger=self.logger, label=label)
 
-            mgr.download_image(image, raw)
-
+    # ------------------------------------------------------------------
+    # Cluster API Apply Phases
+    # ------------------------------------------------------------------
 
     def apply_cluster(self, paths: Dict[str, Path], namespace: str) -> None:
         """
         Apply the Cluster-level manifest.
 
-        This kubectl apply creates the top-level Cluster API objects, including:
-        - cluster.x-k8s.io/Cluster
-        - infrastructure.cluster.x-k8s.io/Metal3Cluster
-        - Associated Secrets and ConfigMaps referenced by the Cluster
-            (e.g. cloud-config, credentials, endpoints)
+        This creates:
+          - Cluster
+          - Metal3Cluster
+          - Shared Secrets / ConfigMaps
 
-        These objects define the workload cluster identity and infrastructure
-        but do NOT yet provision any machines. This MUST be applied first.
+        This MUST be applied before control plane or workers.
         """
-        self.bus.emit(
-            LifecycleEvent(
-                phase="metal3.apply.cluster",
-                status="START",
-                message="Applying Cluster manifest",
-            )
-        )
-
-        try:
-            cluster_manifest = paths["cluster"]
-
-            run(
-                [
-                    "kubectl",
-                    *(["--context", self.mgmt_context] if self.mgmt_context else []),
-                    "apply",
-                    "-f",
-                    str(cluster_manifest),
-                    "-n",
-                    namespace,
-                ],
-                ctx=self.ctx,
-            )
-
-            self.bus.emit(
-                LifecycleEvent(
-                    phase="metal3.apply.cluster",
-                    status="SUCCESS",
-                    message="Cluster manifest applied",
-                )
-            )
-        except Exception as e:
-            self.bus.emit(
-                LifecycleEvent(
-                    phase="metal3.apply.cluster",
-                    status="FAIL",
-                    message=str(e),
-                )
-            )
-            raise
-
+        self.bus.emit(LifecycleEvent("metal3.apply.cluster", "START", "Applying Cluster manifest"))
+        self._kubectl_apply(paths["cluster"], namespace, "kubectl.apply.cluster")
+        self.bus.emit(LifecycleEvent("metal3.apply.cluster", "SUCCESS", "Cluster manifest applied"))
 
     def apply_controlplane(self, paths: Dict[str, Path], namespace: str) -> None:
         """
         Apply the control plane manifest.
 
-        This kubectl apply creates the control plane objects, including:
-        - controlplane.cluster.x-k8s.io/KubeadmControlPlane
-        - infrastructure.cluster.x-k8s.io/Metal3MachineTemplate
-        - bootstrap.cluster.x-k8s.io/KubeadmConfigTemplate (control plane)
-        - cluster.x-k8s.io/Machine resources for control plane nodes
-
-        Applying this manifest triggers:
-        - BareMetalHost consumption by Metal3
-        - kubeadm init on the first control plane node
-        - kubeadm join on subsequent control plane nodes
-
-        This MUST be applied AFTER the Cluster manifest.
+        This triggers:
+          - BareMetalHost consumption
+          - kubeadm init on first control plane
+          - kubeadm join on remaining control planes
         """
-
-        self.bus.emit(
-            LifecycleEvent(
-                phase="metal3.apply.controlplane",
-                status="START",
-                message="Applying control plane manifest"
-            )
-        )
-
-        try:
-            cp_manifest = paths["controlplane"]
-        
-            print(f"[metal3] Applying control plane manifest: {cp_manifest}")
-            run(
-                [
-                    "kubectl",
-                    *(["--context", self.mgmt_context] if self.mgmt_context else []),
-                    "apply",
-                    "-f",
-                    str(cp_manifest),
-                    "-n",
-                    namespace,
-                ],
-                ctx=self.ctx,
-            )
-
-            self.bus.emit(
-                LifecycleEvent(
-                    phase="metal3.apply.controlplane",
-                    status="SUCCESS",
-                    message="Cluster manifest applied"
-                )
-            )
-        except Exception as e:
-            self.bus.emit(
-                phase="metal3.apply.controlplane",
-                status="FAIL",
-                message=str(e)               
-            )
-            raise
+        self.bus.emit(LifecycleEvent("metal3.apply.controlplane", "START", "Applying control plane manifest"))
+        self._kubectl_apply(paths["controlplane"], namespace, "kubectl.apply.controlplane")
+        self.bus.emit(LifecycleEvent("metal3.apply.controlplane", "SUCCESS", "Control plane applied"))
 
     def apply_workers(self, paths: Dict[str, Path], namespace: str) -> None:
         """
-        Apply the worker nodes manifest.
+        Apply worker MachineDeployments and templates.
 
-        This kubectl apply creates worker node objects, including:
-        - cluster.x-k8s.io/MachineDeployment
-        - cluster.x-k8s.io/MachineSet
-        - cluster.x-k8s.io/Machine resources for worker nodes
-        - infrastructure.cluster.x-k8s.io/Metal3MachineTemplate
-        - bootstrap.cluster.x-k8s.io/KubeadmConfigTemplate (workers)
-
-        Applying this manifest triggers:
-        - BareMetalHost provisioning for worker nodes
-        - kubeadm join of workers to the control plane
-
-        This MUST be applied AFTER the control plane is available.
+        This triggers worker BareMetalHost provisioning and kubeadm join.
         """
+        self.bus.emit(LifecycleEvent("metal3.apply.workers", "START", "Applying worker manifest"))
+        self._kubectl_apply(paths["workers"], namespace, "kubectl.apply.workers")
+        self.bus.emit(LifecycleEvent("metal3.apply.workers", "SUCCESS", "Workers applied"))
 
-        self.bus.emit(
-            LifecycleEvent(
-                phase="metal3.apply.worker",
-                status="START",
-                message="Applying control plane manifest"
-            )
-        )
-
-        try:
-            workers_manifest = paths["workers"]
-        
-            print(f"[metal3] Applying worker manifest: {workers_manifest}")
-            run(
-                [
-                    "kubectl",
-                    *(["--context", self.mgmt_context] if self.mgmt_context else []),
-                    "apply",
-                    "-f",
-                    str(workers_manifest),
-                    "-n",
-                    namespace,
-                ],
-                ctx=self.ctx,
-            )
-
-            self.bus.emit(
-                LifecycleEvent(
-                    phase="metal3.apply.workers",
-                    status="SUCCESS",
-                    message="Cluster manifest applied"
-                )
-            )
-        except Exception as e:
-            self.bus.emit(
-                phase="metal3.apply.workers",
-                status="FAIL",
-                message=str(e)               
-            )
-            raise
+    # ------------------------------------------------------------------
+    # Verification
+    # ------------------------------------------------------------------
 
     def verify(self, cfg) -> None:
+        """
+        Verify that the workload cluster converges successfully.
+
+        Steps:
+          1. Fetch workload kubeconfig
+          2. Deploy CNI
+          3. Wait for pods and nodes
+          4. Update inventory and hosts file
+        """
         self.bus.emit(LifecycleEvent("metal3.verify", "START", "Verifying target cluster"))
 
         ns = cfg.cluster_api.metal3_namespace
@@ -344,19 +242,12 @@ class Metal3ClusterAPIManager:
             self.bus.emit(LifecycleEvent("metal3.verify", "SUCCESS", "Dry-run: verify skipped"))
             return
 
-        # 1) Install CNI
         deploy_cni(kubeconfig, ctx=self.ctx, cni="cilium")
         wait_for_cni_ready(kubeconfig, ctx=self.ctx)
 
-        # 2) Now cluster can converge
         wait_for_pods_running(kubeconfig, ctx=self.ctx)
-        wait_for_nodes_ready(
-            kubeconfig,
-            expected_count=expected,
-            ctx=self.ctx,
-        )
+        wait_for_nodes_ready(kubeconfig, expected_count=expected, ctx=self.ctx)
 
-        # 3) Update hosts + inventory
         update_hosts_and_inventory(
             kubeconfig=kubeconfig,
             workspace_root=self.workspace_root,
@@ -366,18 +257,23 @@ class Metal3ClusterAPIManager:
 
         self.bus.emit(LifecycleEvent("metal3.verify", "SUCCESS", "Cluster verified"))
 
-
+    # ------------------------------------------------------------------
+    # Pivot / Re-pivot
+    # ------------------------------------------------------------------
 
     def pivot(self, cfg) -> None:
+        """
+        Pivot Cluster API management from the bootstrap cluster
+        to the workload cluster.
+        """
         self.bus.emit(LifecycleEvent("metal3.pivot", "START", "Pivoting cluster"))
 
-        ns = cfg.cluster_api.namespace
         cluster = cfg.cluster_api.cluster_name
         kubeconfig = Path(f"/tmp/kubeconfig-{cluster}.yaml")
 
         label_crds_for_pivot()
 
-        run(
+        run_logged(
             [
                 "clusterctl",
                 "init",
@@ -394,13 +290,14 @@ class Metal3ClusterAPIManager:
                 "-v",
                 "5",
             ],
-            ctx=self.ctx,
+            logger=self.logger,
+            label="clusterctl.init",
         )
 
         move_cluster_objects(
             from_kubeconfig=None,
             to_kubeconfig=kubeconfig,
-            namespace=ns,
+            namespace=cfg.cluster_api.namespace,
         )
 
         if not self.ctx.dry_run:
@@ -408,19 +305,18 @@ class Metal3ClusterAPIManager:
 
         self.bus.emit(LifecycleEvent("metal3.pivot", "SUCCESS", "Pivot completed"))
 
-
     def repivot(self, cfg) -> None:
+        """
+        Move Cluster API objects back to the original management cluster.
+        """
         self.bus.emit(LifecycleEvent("metal3.repivot", "START", "Re-pivoting cluster"))
 
-        ns = cfg.cluster_api.namespace
         cluster = cfg.cluster_api.cluster_name
 
         move_cluster_objects(
             from_kubeconfig=Path(f"/tmp/kubeconfig-{cluster}.yaml"),
             to_kubeconfig=Path.home() / ".kube" / "config",
-            namespace=ns,
+            namespace=cfg.cluster_api.namespace,
         )
 
         self.bus.emit(LifecycleEvent("metal3.repivot", "SUCCESS", "Re-pivot completed"))
-
-

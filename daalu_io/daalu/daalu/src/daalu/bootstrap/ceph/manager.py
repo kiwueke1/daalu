@@ -166,70 +166,6 @@ class CephManager:
         return rc, "".join(out_chunks), "".join(err_chunks)
 
 
-    def _run_1(
-        self,
-        cli: paramiko.SSHClient,
-        cmd: str,
-        env: Optional[dict] = None,
-        sudo: bool = True,
-        host: Optional["CephHost"] = None,
-    ) -> Tuple[int, str, str]:
-        """
-        Run a shell command on a remote host via SSH.
-        - Writes full command + output to logs/{hostname}.log
-        - No output is printed to CLI.
-        """
-        import time
-
-        log_dir = Path(self._log_file).parent  # keep in same dir as main log
-        log_dir.mkdir(exist_ok=True)
-        hostname = host.hostname if host else "unknown"
-        log_file = log_dir / f"{hostname}.log"
-
-        prefix = ""
-        if env:
-            exports = " ".join(f'{k}={self._shq(v)}' for k, v in env.items())
-            prefix += f"{exports} "
-        shell_cmd = f"{prefix}{cmd}"
-        final = f"sudo -S bash -lc {self._shq(shell_cmd)}" if sudo else f"bash -lc {self._shq(shell_cmd)}"
-
-        with open(log_file, "a", encoding="utf-8") as f:
-            start_ts = datetime.utcnow().isoformat()
-            f.write(f"\n[{start_ts}Z] ({hostname}) $ {final}\n")
-
-        stdin, stdout, stderr = cli.exec_command(final, timeout=self.cmd_timeout)
-
-        out_chunks, err_chunks = [], []
-        while not stdout.channel.exit_status_ready():
-            if stdout.channel.recv_ready():
-                chunk = stdout.channel.recv(1024).decode("utf-8", "replace")
-                out_chunks.append(chunk)
-                with open(log_file, "a", encoding="utf-8") as f:
-                    f.write(chunk)
-            if stdout.channel.recv_stderr_ready():
-                chunk = stdout.channel.recv_stderr(1024).decode("utf-8", "replace")
-                err_chunks.append(chunk)
-                with open(log_file, "a", encoding="utf-8") as f:
-                    f.write("[stderr] " + chunk)
-            time.sleep(0.2)
-
-        rc = stdout.channel.recv_exit_status()
-        out_rem = stdout.read().decode("utf-8", "replace")
-        err_rem = stderr.read().decode("utf-8", "replace")
-        if out_rem:
-            out_chunks.append(out_rem)
-        if err_rem:
-            err_chunks.append(err_rem)
-
-        with open(log_file, "a", encoding="utf-8") as f:
-            if out_rem.strip():
-                f.write(f"[stdout]\n{out_rem}\n")
-            if err_rem.strip():
-                f.write(f"[stderr]\n{err_rem}\n")
-            f.write(f"[exit {rc}]\n")
-
-        return rc, "".join(out_chunks), "".join(err_chunks)
-
 
     def _shq(self, s: str) -> str:
         """Shell-quote helper."""
@@ -294,341 +230,6 @@ class CephManager:
         else:
             raise RuntimeError(f"[ceph] cephadm installation verification failed: {err or out}")
 
-    def deploy_1(self, hosts: List[CephHost], cfg: CephConfig) -> None:
-        """
-        Perform Ceph deployment via cephadm.
-        - Ensures cephadm and a container engine (Docker/Podman) are installed.
-        - Automatically heals APT issues using aptitude for better dependency repair.
-        """
-        if not hosts:
-            raise ValueError("No Ceph hosts provided")
-
-        image = cfg.image or f"quay.io/ceph/ceph:v{cfg.version}"
-        primary = hosts[0]
-        others = hosts[1:]
-
-        cli = self._connect(primary)
-        try:
-
-            # ------------------------------------------------------------------
-            # 0) Ensure container engine (Docker or Podman) is installed
-            # ------------------------------------------------------------------
-            rc, out, err = self._run(cli, "command -v docker || command -v podman", sudo=True)
-            if rc != 0:
-                print(f"[ceph] No container engine found on {primary.hostname}, installing Docker...")
-
-                install_docker = (
-                    "curl -fsSL https://get.docker.com -o /tmp/get-docker.sh && "
-                    "chmod +x /tmp/get-docker.sh && "
-                    "sh /tmp/get-docker.sh && "
-                    "systemctl enable docker && "
-                    "systemctl start docker"
-                )
-
-                rc, out, err = self._run(cli, install_docker, sudo=True)
-                if rc != 0:
-                    msg = (err or out or "").lower()
-                    if any(
-                        bad in msg
-                        for bad in [
-                            "release file",
-                            "$(lsb_release",
-                            "duplicate",
-                            "held broken packages",
-                            "dependency problems",
-                        ]
-                    ):
-                        print(f"[ceph] Detected APT issues on {primary.hostname}, auto-repairing with aptitude...")
-
-                        # --- Self-healing using aptitude ---
-                        heal_apt_env = (
-                            "sudo rm -f /var/lib/apt/lists/lock /var/cache/apt/archives/lock "
-                            "/var/lib/dpkg/lock-frontend /var/lib/dpkg/lock || true && "
-                            "sudo dpkg --configure -a && "
-                            "sudo apt-get -f install -y || true && "
-                            # install aptitude (for advanced resolution)
-                            "sudo apt-get install -y aptitude || true && "
-                            # use aptitude to fix and reinstall essentials
-                            "sudo aptitude -f install -y || true && "
-                            "sudo aptitude reinstall -y apt ca-certificates curl gnupg lsb-release || true && "
-                            "sudo aptitude update -y && "
-                            "sudo aptitude full-upgrade -y && "
-                            "(sudo apt-mark unhold docker-ce docker-ce-cli containerd.io || true)"
-                        )
-                        self._run(cli, heal_apt_env, sudo=True)
-
-                        print(f"[ceph] Retrying Docker installation on {primary.hostname} after aptitude repair...")
-                        rc2, out2, err2 = self._run(cli, install_docker, sudo=True)
-                        if rc2 != 0:
-                            raise RuntimeError(
-                                f"[ceph] Docker installation still failed after aptitude repair: {err2 or out2}"
-                            )
-                        else:
-                            print(f"[ceph] Docker installed successfully after aptitude repair.")
-                    else:
-                        raise RuntimeError(f"[ceph] Docker installation failed: {err or out}")
-                else:
-                    print(f"[ceph] Docker installed successfully on {primary.hostname}")
-            else:
-                print(f"[ceph] Container engine already present on {primary.hostname}: {out.strip()}")
-
-            # ------------------------------------------------------------------
-            # 0.5) Ensure cephadm is installed
-            # ------------------------------------------------------------------
-            rc, out, err = self._run(cli, "command -v cephadm || echo MISSING", sudo=False)
-            if "MISSING" in (out + err):
-                print(f"[ceph] cephadm not found on {primary.hostname}, installing...")
-                self._install_cephadm(cli)
-            else:
-                print(f"[ceph] cephadm already installed on {primary.hostname}")
-
-            # ------------------------------------------------------------------
-            # 1) Pre-pull Ceph image (optional optimization)
-            # ------------------------------------------------------------------
-            self._run(
-                cli,
-                f"(command -v podman && podman pull {image}) || "
-                f"(command -v docker && docker pull {image}) || true",
-                sudo=True,
-            )
-
-            # ------------------------------------------------------------------
-            # 2) Bootstrap Ceph cluster
-            # ------------------------------------------------------------------
-            mon_ip = primary.address
-            bootstrap_cmd = (
-                f"cephadm --image {image} "
-                f"bootstrap --mon-ip {mon_ip} "
-                f"--initial-dashboard-user {cfg.initial_dashboard_user} "
-                f"--initial-dashboard-password {cfg.initial_dashboard_password} "
-                "--skip-monitoring-stack"
-            )
-            rc, out, err = self._run(cli, bootstrap_cmd, sudo=True)
-            if rc != 0:
-                raise RuntimeError(f"cephadm bootstrap failed: {err or out}")
-
-            print("[ceph] Distributing Ceph orchestrator SSH key...")
-            rc, pubkey, err = self._run(cli, "cat /etc/ceph/ceph.pub", sudo=True)
-            for h in others:
-                cmd = f'mkdir -p /root/.ssh && echo "{pubkey.strip()}" >> /root/.ssh/authorized_keys'
-                c2 = self._connect(h)
-                try:
-                    self._run(c2, cmd, sudo=True)
-                    print(f"[ceph] Copied orchestrator SSH key to {h.hostname}")
-                finally:
-                    c2.close()
-
-            # ------------------------------------------------------------------
-            # 3) Set global container image
-            # ------------------------------------------------------------------
-            self._run(cli, f"cephadm shell -- ceph config set global container_image {image}", sudo=True)
-
-            # ------------------------------------------------------------------
-            # 4) Add remaining hosts
-            # ------------------------------------------------------------------
-            for h in others:
-                self._run(cli, f"cephadm shell -- ceph orch host add {h.hostname} {h.address}", sudo=True)
-
-            # ------------------------------------------------------------------
-            # 5) Apply mon & mgr placements
-            # ------------------------------------------------------------------
-            desired_mon = cfg.mon_count if cfg.mon_count is not None else min(3, len(hosts))
-            self._run(cli, f'cephadm shell -- ceph orch apply mon --placement="count:{desired_mon}"', sudo=True)
-            self._run(cli, f'cephadm shell -- ceph orch apply mgr --placement="count:{cfg.mgr_count}"', sudo=True)
-
-            # ------------------------------------------------------------------
-            # 6) Apply OSDs
-            # ------------------------------------------------------------------
-            if cfg.apply_osds_all_devices:
-                self._run(cli, "cephadm shell -- ceph orch apply osd --all-available-devices", sudo=True)
-
-            # ------------------------------------------------------------------
-            # 7) Health check
-            # ------------------------------------------------------------------
-            rc, out, err = self._run(cli, "cephadm shell -- ceph -s", sudo=True)
-            print(out if rc == 0 else err)
-
-        finally:
-            cli.close()
-
-    # ------------- cephadm orchestration -------------
-
-    def deploy_2(self, hosts: List[CephHost], cfg: CephConfig) -> None:
-        """
-        Perform Ceph deployment via cephadm.
-        - Ensures cephadm and a container engine (Docker/Podman) are installed.
-        - Automatically heals APT issues using aptitude for better dependency repair.
-        """
-        if not hosts:
-            raise ValueError("No Ceph hosts provided")
-
-        image = cfg.image or f"quay.io/ceph/ceph:v{cfg.version}"
-        primary = hosts[0]
-        others = hosts[1:]
-
-        # 🔹 Emit: start of deployment
-        self.bus.emit(
-            CephStarted(stage="init", message=f"Starting Ceph deployment on {primary.hostname}", **self.run_ctx)
-        )
-
-        cli = self._connect(primary)
-        try:
-            # ------------------------------------------------------------------
-            # 0) Ensure cephadm is installed
-            # ------------------------------------------------------------------
-            self.bus.emit(CephProgress(stage="cephadm_check", message="Checking cephadm presence...", **self.run_ctx))
-            rc, out, err = self._run(cli, "command -v cephadm || echo MISSING", sudo=False)
-            if "MISSING" in (out + err):
-                self.bus.emit(CephProgress(stage="cephadm_install", message=f"Installing cephadm on {primary.hostname}", **self.run_ctx))
-                self._install_cephadm(cli)
-            else:
-                self.bus.emit(CephProgress(stage="cephadm_check", message=f"cephadm already installed on {primary.hostname}", **self.run_ctx))
-
-            # ------------------------------------------------------------------
-            # 0.5) Ensure container engine (Docker or Podman) is installed
-            # ------------------------------------------------------------------
-            self.bus.emit(CephProgress(stage="container_engine_check", message="Checking container engine...", **self.run_ctx))
-            rc, out, err = self._run(cli, "command -v docker || command -v podman", sudo=True)
-            if rc != 0:
-                self.bus.emit(CephProgress(stage="container_engine_install", message=f"Installing Docker on {primary.hostname}", **self.run_ctx))
-                install_docker = (
-                    "curl -fsSL https://get.docker.com -o /tmp/get-docker.sh && "
-                    "chmod +x /tmp/get-docker.sh && "
-                    "sh /tmp/get-docker.sh && "
-                    "systemctl enable docker && "
-                    "systemctl start docker"
-                )
-
-                rc, out, err = self._run(cli, install_docker, sudo=True)
-                if rc != 0:
-                    msg = (err or out or "").lower()
-                    if any(
-                        bad in msg
-                        for bad in [
-                            "release file",
-                            "$(lsb_release",
-                            "duplicate",
-                            "held broken packages",
-                            "dependency problems",
-                        ]
-                    ):
-                        self.bus.emit(CephProgress(stage="apt_repair", message=f"Auto-repairing APT on {primary.hostname}", **self.run_ctx))
-                        heal_apt_env = (
-                            "sudo rm -f /var/lib/apt/lists/lock /var/cache/apt/archives/lock "
-                            "/var/lib/dpkg/lock-frontend /var/lib/dpkg/lock || true && "
-                            "sudo dpkg --configure -a && "
-                            "sudo apt-get -f install -y || true && "
-                            "sudo apt-get install -y aptitude || true && "
-                            "sudo aptitude -f install -y || true && "
-                            "sudo aptitude reinstall -y apt ca-certificates curl gnupg lsb-release || true && "
-                            "sudo aptitude update -y && "
-                            "sudo aptitude full-upgrade -y && "
-                            "(sudo apt-mark unhold docker-ce docker-ce-cli containerd.io || true)"
-                        )
-                        self._run(cli, heal_apt_env, sudo=True)
-
-                        self.bus.emit(CephProgress(stage="container_engine_retry", message=f"Retrying Docker install on {primary.hostname}", **self.run_ctx))
-                        rc2, out2, err2 = self._run(cli, install_docker, sudo=True)
-                        if rc2 != 0:
-                            self.bus.emit(CephFailed(stage="container_engine_install", error=err2 or out2, **self.run_ctx))
-                            raise RuntimeError(
-                                f"[ceph] Docker installation still failed after aptitude repair: {err2 or out2}"
-                            )
-                        else:
-                            self.bus.emit(CephProgress(stage="container_engine_success", message="Docker installed successfully after aptitude repair", **self.run_ctx))
-                    else:
-                        self.bus.emit(CephFailed(stage="container_engine_install", error=err or out, **self.run_ctx))
-                        raise RuntimeError(f"[ceph] Docker installation failed: {err or out}")
-                else:
-                    self.bus.emit(CephProgress(stage="container_engine_success", message=f"Docker installed successfully on {primary.hostname}", **self.run_ctx))
-            else:
-                self.bus.emit(CephProgress(stage="container_engine_check", message=f"Container engine already present: {out.strip()}", **self.run_ctx))
-
-            # ------------------------------------------------------------------
-            # 1) Pre-pull Ceph image
-            # ------------------------------------------------------------------
-            self.bus.emit(CephProgress(stage="image_pull", message=f"Pulling Ceph image {image}", **self.run_ctx))
-            self._run(
-                cli,
-                f"(command -v podman && podman pull {image}) || "
-                f"(command -v docker && docker pull {image}) || true",
-                sudo=True,
-            )
-
-            # ------------------------------------------------------------------
-            # 2) Bootstrap Ceph cluster
-            # ------------------------------------------------------------------
-            mon_ip = primary.address
-            bootstrap_cmd = (
-                f"cephadm --image {image} "
-                f"bootstrap --mon-ip {mon_ip} "
-                f"--initial-dashboard-user {cfg.initial_dashboard_user} "
-                f"--initial-dashboard-password {cfg.initial_dashboard_password} "
-                "--skip-monitoring-stack --allow-overwrite"
-            )
-            self.bus.emit(CephProgress(stage="bootstrap", message="Bootstrapping Ceph cluster", **self.run_ctx))
-            rc, out, err = self._run(cli, bootstrap_cmd, sudo=True)
-            if rc != 0:
-                self.bus.emit(CephFailed(stage="bootstrap", error=err or out, **self.run_ctx))
-                raise RuntimeError(f"cephadm bootstrap failed: {err or out}")
-
-            # ------------------------------------------------------------------
-            # 2.5) Distribute Ceph SSH key
-            # ------------------------------------------------------------------
-            self.bus.emit(CephProgress(stage="ssh_key_distribute", message="Distributing Ceph orchestrator SSH key", **self.run_ctx))
-            rc, pubkey, err = self._run(cli, "cat /etc/ceph/ceph.pub", sudo=True)
-            for h in others:
-                cmd = f'mkdir -p /root/.ssh && echo "{pubkey.strip()}" >> /root/.ssh/authorized_keys'
-                c2 = self._connect(h)
-                try:
-                    self._run(c2, cmd, sudo=True)
-                    self.bus.emit(CephProgress(stage="ssh_key_distribute", message=f"Copied SSH key to {h.hostname}", **self.run_ctx))
-                finally:
-                    c2.close()
-
-            # ------------------------------------------------------------------
-            # 3) Set global container image
-            # ------------------------------------------------------------------
-            self.bus.emit(CephProgress(stage="config_image", message="Setting global Ceph container image", **self.run_ctx))
-            self._run(cli, f"cephadm shell -- ceph config set global container_image {image}", sudo=True)
-
-            # ------------------------------------------------------------------
-            # 4) Add remaining hosts
-            # ------------------------------------------------------------------
-            for h in others:
-                self.bus.emit(CephProgress(stage="add_host", message=f"Adding host {h.hostname} ({h.address})", **self.run_ctx))
-                self._run(cli, f"cephadm shell -- ceph orch host add {h.hostname} {h.address}", sudo=True)
-
-            # ------------------------------------------------------------------
-            # 5) Apply mon & mgr placements
-            # ------------------------------------------------------------------
-            self.bus.emit(CephProgress(stage="placements", message="Applying mon/mgr placements", **self.run_ctx))
-            desired_mon = cfg.mon_count if cfg.mon_count is not None else min(3, len(hosts))
-            self._run(cli, f'cephadm shell -- ceph orch apply mon --placement="count:{desired_mon}"', sudo=True)
-            self._run(cli, f'cephadm shell -- ceph orch apply mgr --placement="count:{cfg.mgr_count}"', sudo=True)
-
-            # ------------------------------------------------------------------
-            # 6) Apply OSDs
-            # ------------------------------------------------------------------
-            if cfg.apply_osds_all_devices:
-                self.bus.emit(CephProgress(stage="osd_apply", message="Applying OSDs to all available devices", **self.run_ctx))
-                self._run(cli, "cephadm shell -- ceph orch apply osd --all-available-devices", sudo=True)
-
-            # ------------------------------------------------------------------
-            # 7) Health check
-            # ------------------------------------------------------------------
-            self.bus.emit(CephProgress(stage="health_check", message="Checking Ceph cluster health", **self.run_ctx))
-            rc, out, err = self._run(cli, "cephadm shell -- ceph -s", sudo=True)
-            if rc == 0:
-                self.bus.emit(CephSucceeded(stage="completed", message="Ceph deployment completed successfully", **self.run_ctx))
-                print(out)
-            else:
-                self.bus.emit(CephFailed(stage="health_check", error=err or out, **self.run_ctx))
-
-        finally:
-            cli.close()
-
-
     def deploy(self, hosts: List[CephHost], cfg: CephConfig) -> None:
         """Main orchestrator for Ceph deployment."""
         if not hosts:
@@ -636,6 +237,7 @@ class CephManager:
 
         image = cfg.image or f"quay.io/ceph/ceph:v{cfg.version}"
         primary = hosts[0]
+        print(f"ceph primary host is {primary}")
         others = hosts[1:]
         cli = self._connect(primary)
 
@@ -644,17 +246,31 @@ class CephManager:
         )
 
         try:
-            # ✅ Correct order: container engine first
+            # 1. Base prerequisites
             self._ensure_container_engine(cli, primary)
             self._ensure_cephadm(cli, primary)
             self._prepull_image(cli, image)
+
+            # 2. Bootstrap cluster
             self._bootstrap_cluster(cli, cfg, image, primary)
+
+            # 3. SSH + hosts
             self._distribute_ssh_keys(primary, others)
             self._configure_global_image(cli, image)
             self._add_hosts(cli, primary, others)
+
+            # 4. 🔥 PATCH CEPHADM BUG (critical)
+            self._patch_cephadm_apparmor_bug(cli)
+            self._restart_mgr(cli)
+
+            # 5. Placements + OSDs
             self._apply_placements(cli, cfg, hosts)
-            self._apply_osds(cli, cfg)
+            #self._apply_osds(cli, cfg)
+            self._apply_osds(cli, cfg, hosts)
+
+            # 6. Health check
             self._check_health(cli)
+
         finally:
             cli.close()
 
@@ -769,19 +385,6 @@ class CephManager:
         self._log(f"[cephadm] Ceph cluster bootstrapped successfully on {host.hostname}.")
 
 
-    def _bootstrap_cluster_1(self, cli, cfg: CephConfig, image: str, host: CephHost):
-        """Run cephadm bootstrap."""
-        mon_ip = host.address
-        cmd = (
-            f"cephadm --image {image} bootstrap --mon-ip {mon_ip} "
-            f"--initial-dashboard-user {cfg.initial_dashboard_user} "
-            f"--initial-dashboard-password {cfg.initial_dashboard_password} "
-            "--skip-monitoring-stack --allow-overwrite"
-        )
-        rc, out, err = self._run(cli, cmd, sudo=True)
-        if rc != 0:
-            raise RuntimeError(f"cephadm bootstrap failed: {err or out}")
-
     # ----------------------------------------------------------------------
     def _distribute_ssh_keys(self, primary: CephHost, others: List[CephHost]):
         """Copy Ceph orchestrator SSH public key to all nodes."""
@@ -835,10 +438,21 @@ class CephManager:
         self._run(cli, f'cephadm shell -- ceph orch apply mgr --placement="count:{cfg.mgr_count}"', sudo=True)
 
     # ----------------------------------------------------------------------
-    def _apply_osds(self, cli, cfg: CephConfig):
-        """Apply OSD configuration."""
-        if cfg.apply_osds_all_devices:
-            self._run(cli, "cephadm shell -- ceph orch apply osd --all-available-devices", sudo=True)
+
+    def _apply_osds(self, cli, cfg: CephConfig, hosts: list[CephHost]) -> None:
+        """Apply OSDs explicitly on all Ceph hosts."""
+        if not cfg.apply_osds_all_devices:
+            return
+
+        for host in hosts:
+            print(f"[ceph] Adding OSD disk /dev/vda on host {host.hostname}")
+
+            self._run(
+                cli,
+                f"cephadm shell -- ceph orch daemon add osd {host.hostname}:/dev/vda",
+                sudo=True,
+            )
+
 
     # ----------------------------------------------------------------------
     def _check_health(self, cli):
@@ -849,3 +463,87 @@ class CephManager:
             print(out)
         else:
             self.bus.emit(CephFailed(stage="health_check", error=err or out, **self.run_ctx))
+
+    def _patch_cephadm_apparmor_bug(self, cli, hosts: List[CephHost]) -> None:
+        """
+        Patch cephadm AppArmor parsing bug on ALL Ceph hosts.
+
+        This MUST be applied on every host because `ceph orch daemon add osd`
+        executes cephadm on the target host, not just the mgr.
+        """
+
+        self.bus.emit(
+            CephProgress(
+                stage="cephadm_patch",
+                message="Patching cephadm AppArmor bug on all Ceph hosts",
+                **self.run_ctx,
+            )
+        )
+
+        patch_cmd = (
+            "find /var/lib/ceph -maxdepth 2 -type f -name 'cephadm.*' -exec "
+            "sed -i "
+            "\"s/item, mode = line.split(' ')/item, mode = line.rsplit(' ', 1)/\" "
+            "{} +"
+        )
+
+        verify_cmd = (
+            "grep -R --line-number \"item, mode = line.split(' ')\" "
+            "/var/lib/ceph/*/cephadm.* || echo OK"
+        )
+
+        for host in hosts:
+            print(f"[ceph] Patching cephadm AppArmor bug on {host.hostname}")
+            host_cli = self._connect(host)
+
+            try:
+                # Patch cephadm copies used by cephadm agent
+                self._run(host_cli, patch_cmd, sudo=True)
+
+                # Verify patch
+                self._run(host_cli, verify_cmd, sudo=True)
+
+            finally:
+                host_cli.close()
+
+
+    def _patch_cephadm_apparmor_bug_1(self, cli) -> None:
+        """
+        Patch cephadm AppArmor parsing bug on host.
+        Must patch both system cephadm and any cluster-internal copies.
+        """
+        print("[ceph] Patching cephadm AppArmor parsing bug")
+
+        # 1. Patch system cephadm
+        self._run(
+            cli,
+            (
+                "sed -i "
+                "\"s/item, mode = line.split(' ')/item, mode = line.rsplit(' ', 1)/\" "
+                "/usr/local/bin/cephadm"
+            ),
+            sudo=True,
+        )
+
+        # 2. Patch cluster cephadm copies (if any exist)
+        self._run(
+            cli,
+            (
+                "find /var/lib/ceph -type f -name 'cephadm.*' -exec "
+                "sed -i "
+                "\"s/item, mode = line.split(' ')/item, mode = line.rsplit(' ', 1)/\" "
+                "{} + || true"
+            ),
+            sudo=True,
+        )
+
+
+    def _restart_mgr(self, cli) -> None:
+        self.bus.emit(
+            CephProgress(
+                stage="mgr_restart",
+                message="Restarting ceph-mgr to pick up patched cephadm",
+                **self.run_ctx,
+            )
+        )
+        self._run(cli, "ceph orch restart mgr", sudo=True)

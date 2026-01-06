@@ -25,6 +25,7 @@ def fetch_cluster_kubeconfig(
     runner = CommandRunner(
         logger=getattr(ctx, "logger", None),
         dry_run=getattr(ctx, "dry_run", False),
+        label="fetch_cluster_kubeconfig",
     )
 
     result = runner.run(
@@ -57,6 +58,7 @@ def wait_for_pods_running(
     runner = CommandRunner(
         logger=getattr(ctx, "logger", None),
         dry_run=getattr(ctx, "dry_run", False),
+        label="wait_for_pods_running",
     )
 
     selector = ["--all-namespaces"] if namespace is None else ["-n", namespace]
@@ -97,6 +99,7 @@ def wait_for_nodes_ready(
     runner = CommandRunner(
         logger=getattr(ctx, "logger", None),
         dry_run=getattr(ctx, "dry_run", False),
+        label="wait_for_nodes_ready",
     )
 
     for attempt in range(1, retries + 1):
@@ -232,6 +235,7 @@ def wait_for_control_plane_ready(
     runner = CommandRunner(
         logger=getattr(ctx, "logger", None),
         dry_run=getattr(ctx, "dry_run", False),
+        label="wait_for_control_plane_ready",
     )
 
     start = time.time()
@@ -275,6 +279,7 @@ def deploy_cni(
     runner = CommandRunner(
         logger=getattr(ctx, "logger", None),
         dry_run=getattr(ctx, "dry_run", False),
+        label="deploy_cni",
     )
 
     if cni != "cilium":
@@ -351,6 +356,7 @@ def wait_for_cni_ready(
     runner = CommandRunner(
         logger=getattr(ctx, "logger", None),
         dry_run=getattr(ctx, "dry_run", False),
+        label="wait_for_cni_ready",
     )
 
     for attempt in range(1, retries + 1):
@@ -427,103 +433,17 @@ CONTROL_PLANE_LABELS = (
     "node-role.kubernetes.io/master",  # for older clusters
 )
 
-def update_hosts_and_inventory_1(
+
+def update_hosts_and_inventory_old(
     *,
     kubeconfig: Path,
     workspace_root: Path,
     domain_suffix: str,
     ctx: Any,
 ) -> None:
-    print("Updating hosts and inventory...")
-
-    runner = CommandRunner(
-        logger=getattr(ctx, "logger", None),
-        dry_run=getattr(ctx, "dry_run", False),
-    )
-
-    # Pull full JSON so we can reliably detect role-label presence
-    result = runner.run(
-        [
-            "kubectl",
-            "--kubeconfig",
-            str(kubeconfig),
-            "get",
-            "nodes",
-            "-o",
-            "json",
-        ],
-        capture_output=True,
-        check=True,
-    )
-
-    data = json.loads(result.stdout or "{}")
-    items = data.get("items", [])
-
-    controllers: list[str] = []
-    computes: list[str] = []
-
-    # Read existing /etc/hosts once for idempotency
-    hosts_path = Path("/etc/hosts")
-    existing_hosts_lines = hosts_path.read_text(encoding="utf-8").splitlines()
-
-    existing_ips = {
-        line.split()[0]
-        for line in existing_hosts_lines
-        if line.strip() and not line.strip().startswith("#")
-    }
-
-    for node in items:
-        name = node["metadata"]["name"]
-        labels = node["metadata"].get("labels", {})
-
-        # Find InternalIP
-        ip = None
-        for addr in node.get("status", {}).get("addresses", []):
-            if addr.get("type") == "InternalIP":
-                ip = addr.get("address")
-                break
-        if not ip:
-            raise RuntimeError(f"Node {name} has no InternalIP")
-
-        fqdn = f"{name}.{domain_suffix}"
-        entry = f"{fqdn} ansible_host={ip}"
-
-        is_control_plane = any(k in labels for k in CONTROL_PLANE_LABELS)
-        if is_control_plane:
-            controllers.append(entry)
-        else:
-            computes.append(entry)
-
-        # Idempotent /etc/hosts update (avoid duplicate IP entries)
-        if ip not in existing_ips:
-            runner.run(
-                ["sudo", "bash", "-c", f"echo '{ip} {name} {fqdn}' >> /etc/hosts"],
-                check=True,
-            )
-            existing_ips.add(ip)
-
-    inventory = workspace_root / "cloud-config/inventory/openstack_hosts.ini"
-    inventory.parent.mkdir(parents=True, exist_ok=True)
-
-    inventory.write_text(
-        "[controllers]\n\n"
-        + "\n".join(controllers)
-        + "\n\n[computes]\n\n"
-        + "\n".join(computes)
-        + "\n",
-        encoding="utf-8",
-    )
-
-
-
-def update_hosts_and_inventory(
-    *,
-    kubeconfig: Path,
-    workspace_root: Path,
-    domain_suffix: str,
-    ctx: Any,
-) -> None:
-
+    import json
+    import ipaddress
+    from pathlib import Path
 
     print("Updating hosts and inventory...")
 
@@ -554,22 +474,48 @@ def update_hosts_and_inventory(
     computes: list[str] = []
     ceph: list[str] = []
 
-
     # Allocate secondary interface IPs (int2) starting at 10.44.0.11
     int2_network = ipaddress.IPv4Network("10.44.0.0/24")
     int2_iter = iter(int2_network.hosts())
     for _ in range(10):  # Skip .1 → .10
         next(int2_iter)
 
-    # Read existing /etc/hosts once for idempotency
     hosts_path = Path("/etc/hosts")
-    existing_hosts_lines = hosts_path.read_text(encoding="utf-8").splitlines()
+    existing_lines = hosts_path.read_text(encoding="utf-8").splitlines()
 
-    existing_ips = {
-        line.split()[0]
-        for line in existing_hosts_lines
-        if line.strip() and not line.strip().startswith("#")
-    }
+    def clean_hosts(
+        lines: list[str],
+        *,
+        ip: str,
+        hostname: str,
+        fqdn: str,
+    ) -> list[str]:
+        """Remove any line that conflicts with this node."""
+        cleaned: list[str] = []
+
+        for line in lines:
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                cleaned.append(line)
+                continue
+
+            parts = stripped.split()
+            line_ip = parts[0]
+            names = parts[1:]
+
+            # 🔥 Remove if IP matches OR hostname/FQDN matches
+            if (
+                line_ip == ip
+                or hostname in names
+                or fqdn in names
+            ):
+                continue
+
+            cleaned.append(line)
+
+        return cleaned
+
+    new_hosts_lines = list(existing_lines)
 
     for node in items:
         name = node["metadata"]["name"]
@@ -596,13 +542,25 @@ def update_hosts_and_inventory(
         else:
             computes.append(entry)
 
-        # Idempotent /etc/hosts update (avoid duplicate IP entries)
-        if ip not in existing_ips:
-            runner.run(
-                ["sudo", "bash", "-c", f"echo '{ip} {name} {fqdn}' >> /etc/hosts"],
-                check=True,
-            )
-            existing_ips.add(ip)
+        # 🔥 HARD CLEAN: remove all conflicting entries
+        new_hosts_lines = clean_hosts(
+            new_hosts_lines,
+            ip=ip,
+            hostname=name,
+            fqdn=fqdn,
+        )
+
+        # Append canonical entry
+        new_hosts_lines.append(f"{ip} {name} {fqdn}")
+
+    # Write /etc/hosts atomically
+    tmp_hosts = hosts_path.with_suffix(".tmp")
+    tmp_hosts.write_text("\n".join(new_hosts_lines) + "\n", encoding="utf-8")
+
+    runner.run(
+        ["sudo", "cp", str(tmp_hosts), str(hosts_path)],
+        check=True,
+    )
 
     inventory = workspace_root / "cloud-config/inventory/openstack_hosts.ini"
     inventory.parent.mkdir(parents=True, exist_ok=True)
@@ -617,6 +575,298 @@ def update_hosts_and_inventory(
         + "\n",
         encoding="utf-8",
     )
+
+def update_hosts_and_inventory(
+    *,
+    kubeconfig: Path,
+    workspace_root: Path,
+    domain_suffix: str,
+    ctx: Any,
+) -> None:
+    import json
+    import ipaddress
+    from pathlib import Path
+
+    print("Updating hosts and inventory...")
+
+    runner = CommandRunner(
+        logger=getattr(ctx, "logger", None),
+        dry_run=getattr(ctx, "dry_run", False),
+        label="update_hosts_and_inventory",
+    )
+
+    # Pull full JSON so we can reliably detect role-label presence
+    result = runner.run(
+        [
+            "kubectl",
+            "--kubeconfig",
+            str(kubeconfig),
+            "get",
+            "nodes",
+            "-o",
+            "json",
+        ],
+        capture_output=True,
+        check=True,
+    )
+
+    data = json.loads(result.stdout or "{}")
+    items = data.get("items", [])
+
+    controllers: list[str] = []
+    computes: list[str] = []
+    ceph: list[str] = []
+
+    # Allocate secondary interface IPs (int2) starting at 10.44.0.11
+    int2_network = ipaddress.IPv4Network("10.44.0.0/24")
+    int2_iter = iter(int2_network.hosts())
+    for _ in range(10):  # Skip .1 → .10
+        next(int2_iter)
+
+    hosts_path = Path("/etc/hosts")
+    existing_lines = hosts_path.read_text(encoding="utf-8").splitlines()
+
+    new_hosts_lines = list(existing_lines)
+
+    def _remove_node_entries(
+        lines: list[str],
+        *,
+        ip: str,
+        name: str,
+        fqdn: str,
+    ) -> list[str]:
+        """Remove any /etc/hosts lines that conflict with this node."""
+        filtered: list[str] = []
+
+        for line in lines:
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                filtered.append(line)
+                continue
+
+            parts = stripped.split()
+            line_ip = parts[0]
+            names = parts[1:]
+
+            # 🔥 Remove if IP OR hostname OR FQDN matches
+            if (
+                line_ip == ip
+                or name in names
+                or fqdn in names
+            ):
+                continue
+
+            filtered.append(line)
+
+        return filtered
+
+    for node in items:
+        name = node["metadata"]["name"]
+        labels = node["metadata"].get("labels", {})
+
+        # Find InternalIP
+        ip = None
+        for addr in node.get("status", {}).get("addresses", []):
+            if addr.get("type") == "InternalIP":
+                ip = addr.get("address")
+                break
+        if not ip:
+            raise RuntimeError(f"Node {name} has no InternalIP")
+
+        fqdn = f"{name}.{domain_suffix}"
+        int2_ip = str(next(int2_iter))
+
+        entry = f"{fqdn} ansible_host={ip} int2_ip={int2_ip}"
+        ceph.append(entry)
+
+        is_control_plane = any(k in labels for k in CONTROL_PLANE_LABELS)
+        if is_control_plane:
+            controllers.append(entry)
+        else:
+            computes.append(entry)
+
+        # 🔥 HARD CLEAN: remove all conflicting entries
+        new_hosts_lines = _remove_node_entries(
+            new_hosts_lines,
+            ip=ip,
+            name=name,
+            fqdn=fqdn,
+        )
+
+        # Append canonical entry
+        new_hosts_lines.append(f"{ip} {name} {fqdn}")
+
+    # Write updated hosts file to a user-writable temp location
+    tmp_hosts = Path("/tmp/hosts.tmp")
+    tmp_hosts.write_text("\n".join(new_hosts_lines) + "\n", encoding="utf-8")
+
+    # Move into place with sudo (atomic replace)
+    runner.run(
+        ["sudo", "install", "-m", "0644", str(tmp_hosts), str(hosts_path)],
+        check=True,
+    )
+
+    try:
+        tmp_hosts.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+    inventory = workspace_root / "cloud-config/inventory/openstack_hosts.ini"
+    inventory.parent.mkdir(parents=True, exist_ok=True)
+
+    inventory.write_text(
+        "[controllers]\n\n"
+        + "\n".join(controllers)
+        + "\n\n[computes]\n\n"
+        + "\n".join(computes)
+        + "\n\n[ceph]\n\n"
+        + "\n".join(ceph)
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+
+def update_hosts_and_inventory_1(
+    *,
+    kubeconfig: Path,
+    workspace_root: Path,
+    domain_suffix: str,
+    ctx: Any,
+) -> None:
+    import json
+    import ipaddress
+    from pathlib import Path
+
+    print("Updating hosts and inventory...")
+
+    runner = CommandRunner(
+        logger=getattr(ctx, "logger", None),
+        dry_run=getattr(ctx, "dry_run", False),
+        label="update_hosts_and_inventory",
+    )
+
+    # Pull full JSON so we can reliably detect role-label presence
+    result = runner.run(
+        [
+            "kubectl",
+            "--kubeconfig",
+            str(kubeconfig),
+            "get",
+            "nodes",
+            "-o",
+            "json",
+        ],
+        capture_output=True,
+        check=True,
+    )
+
+    data = json.loads(result.stdout or "{}")
+    items = data.get("items", [])
+
+    controllers: list[str] = []
+    computes: list[str] = []
+    ceph: list[str] = []
+
+    # Allocate secondary interface IPs (int2) starting at 10.44.0.11
+    int2_network = ipaddress.IPv4Network("10.44.0.0/24")
+    int2_iter = iter(int2_network.hosts())
+    for _ in range(10):  # Skip .1 → .10
+        next(int2_iter)
+
+    hosts_path = Path("/etc/hosts")
+    existing_lines = hosts_path.read_text(encoding="utf-8").splitlines()
+
+    # We will rebuild /etc/hosts by filtering + appending
+    new_hosts_lines = list(existing_lines)
+
+    def _remove_node_entries(lines: list[str], name: str, fqdn: str) -> list[str]:
+        """Remove any /etc/hosts lines that reference this node."""
+        filtered: list[str] = []
+        for line in lines:
+            if not line.strip() or line.strip().startswith("#"):
+                filtered.append(line)
+                continue
+
+            parts = line.split()
+            # Remove lines containing hostname or FQDN
+            if name in parts or fqdn in parts:
+                continue
+
+            filtered.append(line)
+        return filtered
+
+    for node in items:
+        name = node["metadata"]["name"]
+        labels = node["metadata"].get("labels", {})
+
+        # Find InternalIP
+        ip = None
+        for addr in node.get("status", {}).get("addresses", []):
+            if addr.get("type") == "InternalIP":
+                ip = addr.get("address")
+                break
+        if not ip:
+            raise RuntimeError(f"Node {name} has no InternalIP")
+
+        fqdn = f"{name}.{domain_suffix}"
+        int2_ip = str(next(int2_iter))
+
+        entry = f"{fqdn} ansible_host={ip} int2_ip={int2_ip}"
+        ceph.append(entry)
+
+        is_control_plane = any(k in labels for k in CONTROL_PLANE_LABELS)
+        if is_control_plane:
+            controllers.append(entry)
+        else:
+            computes.append(entry)
+
+        # 🔥 FIX: replace existing entries for THIS NODE (not IP-based)
+        new_hosts_lines = _remove_node_entries(new_hosts_lines, name, fqdn)
+
+        # Append fresh correct entry
+        new_hosts_lines.append(f"{ip} {name} {fqdn}")
+
+    # Write updated /etc/hosts atomically
+    #tmp_hosts = hosts_path.with_suffix(".tmp")
+    #tmp_hosts.write_text("\n".join(new_hosts_lines) + "\n", encoding="utf-8")
+
+    #runner.run(
+    #    ["sudo", "cp", str(tmp_hosts), str(hosts_path)],
+    #    check=True,
+    #)
+    # Write updated hosts file to a user-writable temp location
+    tmp_hosts = Path("/tmp/hosts.tmp")
+    tmp_hosts.write_text("\n".join(new_hosts_lines) + "\n", encoding="utf-8")
+
+    # Move into place with sudo (atomic replace)
+    runner.run(
+        ["sudo", "install", "-m", "0644", str(tmp_hosts), str(hosts_path)],
+        check=True,
+    )
+
+    # Optional cleanup
+    try:
+        tmp_hosts.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+
+
+    inventory = workspace_root / "cloud-config/inventory/openstack_hosts.ini"
+    inventory.parent.mkdir(parents=True, exist_ok=True)
+
+    inventory.write_text(
+        "[controllers]\n\n"
+        + "\n".join(controllers)
+        + "\n\n[computes]\n\n"
+        + "\n".join(computes)
+        + "\n\n[ceph]\n\n"
+        + "\n".join(ceph)
+        + "\n",
+        encoding="utf-8",
+    )
+
 
 
 def label_and_taint_nodes(self, opts: SetupOptions, entries: List[Tuple[str, str]]) -> None:
