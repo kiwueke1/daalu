@@ -140,8 +140,21 @@ def plan_from_tags(node_tags: Optional[str]) -> NodeBootstrapPlan:
         run_istio_modules=("istio" in tags),
     )
 
+def maybe_read_kubeconfig_text(
+    kubeconfig_path: Path | str
+) -> Optional[str]:
+    """
+    Best-effort read of the workload kubeconfig produced during Setup.
+    Returns the file content or None if missing/unreadable.
+    """
+    try:
+        path = Path(kubeconfig_path)
+        return path.read_text()
+    except Exception as e:
+        print(f"[debug] failed to read kubeconfig {kubeconfig_path}: {e}")
+        return None
 
-def maybe_read_kubeconfig_text(kubeconfig_path: Path = Path("/var/lib/tmp/kubeconfig")) -> Optional[str]:
+def maybe_read_kubeconfig_text_1(kubeconfig_path: Path = Path("/var/lib/tmp/kubeconfig")) -> Optional[str]:
     """
     Best-effort read of the workload kubeconfig produced during Setup.
     Returns the file content or None if missing/unreadable.

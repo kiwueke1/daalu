@@ -19,7 +19,7 @@ from daalu.bootstrap.metal3.helpers import (
 from daalu.bootstrap.metal3.images import resolve_image_spec
 
 from daalu.utils.execution import ExecutionContext
-from daalu.utils.shell import run_logged
+from daalu.utils.shell import run_remote_logged
 from daalu.utils.logging import RunLogger
 
 from daalu.observers.events import LifecycleEvent

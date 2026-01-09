@@ -26,10 +26,11 @@ from daalu.cli.helper import (
     read_hosts_from_inventory,
     plan_from_tags,
     maybe_read_kubeconfig_text,
+    read_group_from_inventory,
 )
+
 from daalu.bootstrap.ceph.manager import CephManager
 from daalu.bootstrap.ceph.models import CephHost, CephConfig
-from daalu.cli.helper import read_group_from_inventory
 from daalu.observers.dispatcher import EventBus
 from daalu.observers.console import ConsoleObserver
 
@@ -41,6 +42,13 @@ from daalu.logging.log import init_logging
 from daalu.observers.jsonfile import JsonFileObserver
 from daalu.observers.logger import LoggerObserver
 from daalu.observers.events import new_ctx
+
+# ---------------- Infrastructure imports ----------------
+from daalu.bootstrap.infrastructure.manager import InfrastructureManager
+from daalu.bootstrap.infrastructure.components.metallb import MetalLBComponent
+from daalu.bootstrap.infrastructure.models import parse_infra_flag
+from daalu.utils.ssh_runner import SSHRunner
+import paramiko
 
 
 app = typer.Typer(help="Daalu Deployment CLI")
@@ -58,21 +66,35 @@ def deploy(
     mgmt_context: Optional[str] = typer.Option(None, "--mgmt-context"),
     cluster_name: str = typer.Option("openstack-infra", "--cluster-name"),
     cluster_namespace: str = typer.Option("default", "--cluster-namespace"),
+
     skip_clusterapi: bool = typer.Option(False, "--skip-clusterapi"),
     skip_setup: bool = typer.Option(False, "--skip-setup"),
     skip_nodes: bool = typer.Option(False, "--skip-nodes"),
+    skip_ceph: bool = typer.Option(False, "--skip-ceph"),
+    skip_csi: bool = typer.Option(False, "--skip-csi"),
+    skip_infrastructure: bool = typer.Option(False, "--skip-infrastructure"),
+
+    infra: Optional[str] = typer.Option(
+        None,
+        "--infra",
+        help="Deploy specific infrastructure components (e.g. metallb,argocd or all)",
+    ),
+
     node_tags: Optional[str] = typer.Option(None, "--node-tags"),
+
     ssh_username: str = typer.Option("ubuntu", "--ssh-username"),
     ssh_password: Optional[str] = typer.Option(None, "--ssh-password"),
     ssh_key: Optional[Path] = typer.Option(None, "--ssh-key"),
+
     managed_user: str = typer.Option("kez", "--managed-user"),
     managed_user_password: str = typer.Option("admin10", "--managed-user-password"),
     domain_suffix: str = typer.Option("net.daalu.io", "--domain-suffix"),
-    skip_ceph: bool = typer.Option(False, "--skip-ceph"),
+
     debug: bool = typer.Option(False, "--debug", "-d"),
+    dry_run: bool = typer.Option(False, "--dry-run"),
+
     ceph_version: str = typer.Option("17.2.6", "--ceph-version"),
     ceph_image: Optional[str] = typer.Option(None, "--ceph-image"),
-    dry_run: bool = typer.Option(False, "--dry-run"),
 ):
     typer.echo(f"Workspace root: {WORKSPACE_ROOT}")
     cfg = load_config(config)
@@ -126,7 +148,7 @@ def deploy(
             )
             manager.deploy_dynamic(cfg)
 
-    # --- 3) Node OS bootstrap via SSH ---
+    # --- 2) Node OS bootstrap via SSH ---
     if not skip_nodes:
         typer.echo("\n[nodes] Bootstrapping node OS roles via SSH...")
 
@@ -138,15 +160,13 @@ def deploy(
         else:
             hosts: List[Host] = []
             for host in inventory_hosts:
-                typer.echo(f"[nodes] Host {host.hostname} @ {host.address}")
-                typer.echo(f"        netplan: {'yes' if host.netplan_content else 'no'}")
                 hosts.append(
                     Host(
                         hostname=host.hostname,
                         address=host.address,
                         netplan_content=host.netplan_content,
                         username=ssh_username,
-                        password=None,  # key-only auth
+                        password=None,
                         pkey_path=ssh_key,
                         authorized_key_path=(
                             Path.home() / ".ssh" / "openstack-key.pub"
@@ -154,11 +174,12 @@ def deploy(
                             else None
                         ),
                     )
-                )  # ✅ FIX: closing hosts.append(
+                )
 
             plan = plan_from_tags(node_tags)
-            kubeconfig_text = maybe_read_kubeconfig_text(f"/tmp/kubeconfig-{cfg.cluster_api.cluster_name}.yaml")
-            kubeconfig_path = f"/tmp/kubeconfig-{cfg.cluster_api.cluster_name}.yaml"
+            kubeconfig_text = maybe_read_kubeconfig_text(
+                f"/tmp/kubeconfig-{cfg.cluster_api.cluster_name}.yaml"
+            )
 
             opts = NodeBootstrapOptions(
                 cluster_name=cluster_name,
@@ -173,7 +194,7 @@ def deploy(
     else:
         typer.echo("[nodes] Skipped.")
 
-    # --- 4) Ceph phase ---
+    # --- 3) Ceph phase ---
     if not skip_ceph:
         typer.echo("\n[ceph] Deploying Ceph...")
 
@@ -201,15 +222,117 @@ def deploy(
                 ceph_hosts, ceph_cfg
             )
 
-    # --- 5) Helm phase ---
-    typer.echo("\n[helm] Starting Helm deployments...")
-    helm = HelmCliRunner(kube_context=context or cfg.context, debug=debug)
-    report = deploy_all(cfg, helm, options=DeployOptions(), observers=observers)
+    # --- 4.5) Create shared vars ---
+    # Resolve controller host early (needed by Helm + Infrastructure)
+    inv = inventory_path(WORKSPACE_ROOT)
+    controller_pairs = read_group_from_inventory(inv, "controllers")
+    if not controller_pairs:
+        raise typer.Exit("[infrastructure] No controllers found in inventory")
 
-    typer.echo("\nDeployment summary:")
-    typer.echo(report.summary())
+    controller_host = Host(
+        hostname=controller_pairs[0][0],
+        address=controller_pairs[0][1],
+        username=managed_user,
+        pkey_path=str(ssh_key) if ssh_key else None,
+    )
+
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+    try:
+        client.connect(
+            hostname=controller_host.address,
+            username=controller_host.username,
+            key_filename=str(ssh_key) if ssh_key else None,
+            password=ssh_password,
+        )
+
+        ssh = SSHRunner(client)
+
+        # Helm init
+        helm = HelmCliRunner(
+            ssh=ssh,
+            kube_context=context or cfg.context,
+        )
+
+        # CSI + Infrastructure logic here
+
+
+
+
+        kubeconfig_path = f"/tmp/kubeconfig-{cfg.cluster_api.cluster_name}.yaml"
+
+        kubeconfig_text = maybe_read_kubeconfig_text(kubeconfig_path)
+        if not kubeconfig_text:
+            raise typer.Exit("[infrastructure] kubeconfig not found")
+
+        # --- 5) CSI phase ---
+        if not skip_csi:
+            typer.echo("\n[csi] Deploying CSI...")
+
+            from daalu.bootstrap.csi.manager import CSIManager
+            from daalu.bootstrap.csi.models import CSIConfig
+
+            if not ceph_hosts:
+                raise typer.Exit("[csi] No Ceph hosts found in inventory")
+
+            csi_cfg = CSIConfig(
+                driver="rbd",
+                kubeconfig_path=f"/tmp/kubeconfig-{cfg.cluster_api.cluster_name}.yaml",
+            )
+
+            CSIManager(
+                bus=EventBus(observers=[ConsoleObserver()]),
+                helm=helm,
+                ceph_hosts=ceph_hosts,
+            ).deploy(csi_cfg)
+
+        # --- 6) Infrastructure phase ---
+        if not skip_infrastructure:
+            
+            typer.echo("\n[infrastructure] Deploying infrastructure components...")
+
+            from daalu.bootstrap.infrastructure.registry import (
+                build_infrastructure_components,
+            )
+
+            selection = parse_infra_flag(infra)
+            inv = inventory_path(WORKSPACE_ROOT)
+
+            # Resolve controller host (infra runs remotely)
+            controller_pairs = read_group_from_inventory(inv, "controllers")
+            if not controller_pairs:
+                raise typer.Exit("[infrastructure] No controllers found in inventory")
+
+            #controller_host = Host(
+            #    hostname=controller_pairs[0][0],
+            #    address=controller_pairs[0][1],
+            #    username=managed_user,
+            #    pkey_path=str(ssh_key) if ssh_key else None,
+            #)
+            print(f"controller host in use is {controller_host.hostname}")
+            print(f"controller host address in use is {controller_host.hostname}")
+
+
+            components = build_infrastructure_components(
+                selection=selection,
+                workspace_root=WORKSPACE_ROOT,
+                kubeconfig_path=kubeconfig_path,
+            )
+            if not components:
+                typer.echo("[infrastructure] No infrastructure components selected")
+            else:
+                InfrastructureManager(
+                    helm=helm,
+                    ssh=ssh,
+                ).deploy(components)
+
+        else:
+            typer.echo("[infrastructure] Skipped.")
+
+    finally:
+        client.close()
 
 
 if __name__ == "__main__":
     app()
-

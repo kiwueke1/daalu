@@ -1,3 +1,5 @@
+# src/daalu/observers/events.py
+
 from __future__ import annotations
 from dataclasses import dataclass, asdict
 from typing import List, Dict, Any, Optional
