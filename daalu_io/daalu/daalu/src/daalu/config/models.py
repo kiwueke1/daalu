@@ -16,6 +16,22 @@ class ValuesRef(BaseModel):
     inline: Optional[Dict] = None
     files: List[str] = Field(default_factory=list)
 
+class Metal3Node(BaseModel):
+    """
+    Declarative inventory for a Metal3-managed node.
+    The name must match the BareMetalHost name.
+    """
+    name: str
+    role: Literal["control-plane", "worker"]
+    nics: List[str]
+
+class Metal3Config(BaseModel):
+    """
+    Metal3-specific configuration block.
+    """
+    nodes: List[Metal3Node] = Field(default_factory=list)
+
+
 class ClusterAPI(BaseModel):
     """Configuration for Cluster API and Proxmox provider deployment."""
 
@@ -85,7 +101,8 @@ class ClusterAPI(BaseModel):
     capm3_version: Optional[str] = None
     metal3_templates_path: Optional[Path] = None
     image_flavor: Literal["ubuntu", "centos"] = "ubuntu"
-    image_version: str = "22.04"    
+    image_version: str = "22.04"
+    metal3: Optional[Metal3Config] = None    
 
     # Management cluster access (Metal3 dev env host)
     mgmt_host: str

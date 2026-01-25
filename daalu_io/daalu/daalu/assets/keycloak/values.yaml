@@ -1,0 +1,66 @@
+enableDefaultInitContainers: false
+
+containerSecurityContext:
+  readOnlyRootFilesystem: false
+  runAsUser: 1000
+
+extraEnvVars:
+  - name: KC_FEATURES
+    value: "token-exchange,admin-fine-grained-authz"
+  - name: KC_PROXY
+    value: edge
+  - name: KC_DB
+    value: mysql
+  - name: KC_DB_URL
+    value: jdbc:mysql://percona-xtradb-haproxy.openstack:3306/keycloak
+  - name: KC_DB_USERNAME
+    value: keycloak
+  - name: KC_DB_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: keycloak-externaldb
+        key: db-password
+
+
+#externalDatabase:
+#  host: percona-xtradb.openstack
+#  port: 3306
+#  database: keycloak
+#  user: keycloak
+#  password: admin10
+
+image:
+  registry: docker.io
+  repository: keycloak/keycloak
+  tag: "26.5.1"
+
+postgresql:
+  enabled: false
+
+production: true
+proxy: edge
+proxyHeaders: xforwarded
+
+startupProbe:
+  enabled: true
+  initialDelaySeconds: 5
+  failureThreshold: 120
+
+replica:
+  nodeSelector:
+    openstack-control-plane: enabled
+
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+
+  podAntiAffinityPreset: hard
+
+
+metrics:
+  enabled: true
+
+global:
+  security:
+    allowInsecureImages: true

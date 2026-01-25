@@ -8,7 +8,7 @@ from daalu.bootstrap.csi.events import (
     CSIStarted, CSIProgress, CSIFailed, CSISucceeded
 )
 from daalu.config.models import RepoSpec
-from daalu.helm.charts import ensure_chart
+from daalu.helm.charts import ensure_chart_remote
 
 class CephRbdCsiDriver(CSIBase):
     def __init__(
@@ -66,8 +66,16 @@ class CephRbdCsiDriver(CSIBase):
 
         charts_base = Path.home() / ".daalu" / "helm" / "charts"
 
-        chart_path = ensure_chart(
-            repo="ceph-csi",
+        #chart_path = ensure_chart(
+        #    repo="ceph-csi",
+        #    chart="ceph-csi-rbd",
+        #    version="3.11.0",
+        #    target_dir=charts_base,
+        #)
+        chart_path = ensure_chart_remote(
+            ssh=self.ssh,
+            repo_name="ceph-csi",
+            repo_url="https://ceph.github.io/csi-charts",
             chart="ceph-csi-rbd",
             version="3.11.0",
             target_dir=charts_base,

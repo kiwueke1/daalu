@@ -1,3 +1,5 @@
+# src/daalu/bootstrap/metal3/cluster_api_manager.py
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -19,7 +21,7 @@ from daalu.bootstrap.metal3.helpers import (
 from daalu.bootstrap.metal3.images import resolve_image_spec
 
 from daalu.utils.execution import ExecutionContext
-from daalu.utils.shell import run_remote_logged
+from daalu.utils.shell import run_logged, run_remote_logged
 from daalu.utils.logging import RunLogger
 
 from daalu.observers.events import LifecycleEvent
@@ -85,6 +87,7 @@ class Metal3ClusterAPIManager:
         gen = Metal3TemplateGenerator(ctx=self.ctx)
 
         opts = Metal3TemplateGenOptions(
+            cfg=cfg,
             kube_context=self.mgmt_context,
             namespace=cfg.cluster_api.metal3_namespace,
             cluster_name=cfg.cluster_api.cluster_name,

@@ -19,13 +19,13 @@ spec:
 
         vrrp_instance VI_2 {
             state MASTER
-            interface enp2s0
+            interface eno2
 
             virtual_router_id 2
             priority 101
             advert_int 1
             virtual_ipaddress {
-                192.168.111.249
+                192.168.0.249
             }
             track_script {
                 k8s_api_check
@@ -38,7 +38,7 @@ spec:
           renderer: networkd
           bridges:
             provisioning:
-              interfaces: [enp1s0]
+              interfaces: [eno1]
               addresses:
               - {{ ds.meta_data.provisioningIP }}/{{ ds.meta_data.provisioningCIDR }}
       owner: root:root
@@ -114,7 +114,7 @@ spec:
         apiGroup: infrastructure.cluster.x-k8s.io
         kind: Metal3MachineTemplate
         name: auto-openstack-infra-controlplane
-  replicas: 3
+  replicas: 1
   rollout:
     strategy:
       rollingUpdate:
@@ -161,19 +161,19 @@ spec:
   networkData:
     links:
       ethernets:
-      - id: enp1s0
+      - id: eno1
         macAddress:
-          fromHostInterface: enp1s0
+          fromHostInterface: eno1
         type: phy
-      - id: enp2s0
+      - id: eno2
         macAddress:
-          fromHostInterface: enp2s0
+          fromHostInterface: eno2
         type: phy
     networks:
       ipv4:
       - id: externalv4
         ipAddressFromIPPool: externalv4-pool
-        link: enp2s0
+        link: eno2
         routes:
         - gateway:
             fromIPPool: externalv4-pool

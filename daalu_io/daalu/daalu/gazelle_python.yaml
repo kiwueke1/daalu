@@ -15,6 +15,7 @@ manifest:
     cryptography: cryptography
     dunamai: dunamai
     funcy: funcy
+    google.protobuf: protobuf
     iniconfig: iniconfig
     invoke: invoke
     jinja2: jinja2
@@ -23,6 +24,7 @@ manifest:
     markupsafe: markupsafe
     mdurl: mdurl
     nacl: pynacl
+    nexusrpc: nexus_rpc
     packaging: packaging
     paramiko: paramiko
     pathspec: pathspec
@@ -35,10 +37,12 @@ manifest:
     pydantic: pydantic
     pydantic_core: pydantic_core
     pygments: pygments
+    pymysql: pymysql
     pytest: pytest
     questionary: questionary
     rich: rich
     shellingham: shellingham
+    temporalio: temporalio
     typer: typer
     typing_extensions: typing_extensions
     typing_inspection: typing_inspection

@@ -1,0 +1,28 @@
+global:
+  image:
+    tag: latest
+
+  securityContext:
+    fsGroup: 999
+
+server:
+  service:
+    type: LoadBalancer
+  ingress:
+    enabled: true
+
+repoServer:
+  env:
+    - name: ARGOCD_GPG_ENABLED
+      value: "false"
+
+extraObjects:
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: argocd-deploykf-plugin-assets
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 5Gi

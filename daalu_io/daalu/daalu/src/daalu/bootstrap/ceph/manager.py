@@ -211,7 +211,7 @@ class CephManager:
         Installs cephadm on the remote host if missing.
         Must be run as a user with passwordless sudo privileges.
         """
-        cephadm_url = "https://github.com/ceph/ceph/raw/quincy/src/cephadm/cephadm"
+        cephadm_url = "https://download.ceph.com/rpm-20.2.0/el9/noarch/cephadm"
 
         # Download cephadm to /usr/local/bin directly (requires sudo)
         install_cmd = (
@@ -229,6 +229,7 @@ class CephManager:
             print(f"[ceph] cephadm installed successfully: {out.strip()}")
         else:
             raise RuntimeError(f"[ceph] cephadm installation verification failed: {err or out}")
+
 
     def deploy(self, hosts: List[CephHost], cfg: CephConfig) -> None:
         """Main orchestrator for Ceph deployment."""
@@ -249,6 +250,7 @@ class CephManager:
             # 1. Base prerequisites
             self._ensure_container_engine(cli, primary)
             self._ensure_cephadm(cli, primary)
+            self._patch_cephadm_apparmor_bug_on_hosts(hosts)
             self._prepull_image(cli, image)
 
             # 2. Bootstrap cluster
@@ -259,8 +261,6 @@ class CephManager:
             self._configure_global_image(cli, image)
             self._add_hosts(cli, primary, others)
 
-            # 4. 🔥 PATCH CEPHADM BUG (critical)
-            self._patch_cephadm_apparmor_bug(cli)
             self._restart_mgr(cli)
 
             # 5. Placements + OSDs
@@ -466,76 +466,72 @@ class CephManager:
 
     def _patch_cephadm_apparmor_bug(self, cli, hosts: List[CephHost]) -> None:
         """
-        Patch cephadm AppArmor parsing bug on ALL Ceph hosts.
+        Patch cephadm AppArmor parsing bug everywhere it can execute from.
 
-        This MUST be applied on every host because `ceph orch daemon add osd`
-        executes cephadm on the target host, not just the mgr.
+        Fixes:
+            item, mode = line.split(' ')
+        to:
+            item, mode = line.split(None, 1)
         """
 
-        self.bus.emit(
-            CephProgress(
-                stage="cephadm_patch",
-                message="Patching cephadm AppArmor bug on all Ceph hosts",
-                **self.run_ctx,
-            )
-        )
-
-        patch_cmd = (
-            "find /var/lib/ceph -maxdepth 2 -type f -name 'cephadm.*' -exec "
-            "sed -i "
-            "\"s/item, mode = line.split(' ')/item, mode = line.rsplit(' ', 1)/\" "
-            "{} +"
-        )
-
-        verify_cmd = (
-            "grep -R --line-number \"item, mode = line.split(' ')\" "
-            "/var/lib/ceph/*/cephadm.* || echo OK"
-        )
+        self.bus.emit(CephProgress(
+            stage="cephadm_patch",
+            message="Patching cephadm AppArmor bug on all Ceph hosts",
+            **self.run_ctx,
+        ))
 
         for host in hosts:
-            print(f"[ceph] Patching cephadm AppArmor bug on {host.hostname}")
+            self._log(f"[ceph] Fixing cephadm on {host.hostname}")
             host_cli = self._connect(host)
 
             try:
-                # Patch cephadm copies used by cephadm agent
-                self._run(host_cli, patch_cmd, sudo=True)
+                patch_cmd = r'''
+    set -euo pipefail
 
-                # Verify patch
-                self._run(host_cli, verify_cmd, sudo=True)
+    patch_file() {
+    f="$1"
+    [ -f "$f" ] || return 0
+
+    if ! grep -q "item, mode = line.split" "$f"; then
+        echo "ERROR: expected AppArmor line not found in $f" >&2
+        exit 1
+    fi
+
+    cp "$f" "$f.bak"
+
+    python3 - <<EOF
+    from pathlib import Path
+    p = Path("$f")
+    txt = p.read_text()
+    txt = txt.replace(
+        "item, mode = line.split(' ')",
+        "item, mode = line.split(None, 1)"
+    ).replace(
+        'item, mode = line.split(" ")',
+        "item, mode = line.split(None, 1)"
+    )
+    p.write_text(txt)
+    EOF
+
+    python3 -m py_compile "$f"
+    }
+
+    # System cephadm binaries
+    patch_file /usr/local/bin/cephadm
+    patch_file /usr/sbin/cephadm
+
+    # Runtime cephadm copies
+    for f in /var/lib/ceph/*/cephadm.*; do
+    patch_file "$f"
+    done
+    '''
+
+                self._run(host_cli, patch_cmd, sudo=True, host=host)
 
             finally:
                 host_cli.close()
 
 
-    def _patch_cephadm_apparmor_bug_1(self, cli) -> None:
-        """
-        Patch cephadm AppArmor parsing bug on host.
-        Must patch both system cephadm and any cluster-internal copies.
-        """
-        print("[ceph] Patching cephadm AppArmor parsing bug")
-
-        # 1. Patch system cephadm
-        self._run(
-            cli,
-            (
-                "sed -i "
-                "\"s/item, mode = line.split(' ')/item, mode = line.rsplit(' ', 1)/\" "
-                "/usr/local/bin/cephadm"
-            ),
-            sudo=True,
-        )
-
-        # 2. Patch cluster cephadm copies (if any exist)
-        self._run(
-            cli,
-            (
-                "find /var/lib/ceph -type f -name 'cephadm.*' -exec "
-                "sed -i "
-                "\"s/item, mode = line.split(' ')/item, mode = line.rsplit(' ', 1)/\" "
-                "{} + || true"
-            ),
-            sudo=True,
-        )
 
 
     def _restart_mgr(self, cli) -> None:
@@ -547,3 +543,11 @@ class CephManager:
             )
         )
         self._run(cli, "ceph orch restart mgr", sudo=True)
+
+
+    def _patch_cephadm_apparmor_bug_on_hosts(self, hosts: List[CephHost]) -> None:
+        """
+        Host-scoped cephadm AppArmor fix.
+        Ensures all execution paths are patched before any ceph orch commands.
+        """
+        self._patch_cephadm_apparmor_bug(cli=None, hosts=hosts)

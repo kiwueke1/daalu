@@ -1,0 +1,1270 @@
+# Ceph deployment log started 20260118T210743Z UTC
+
+
+[2026-01-18T21:07:43Z] (unknown) $ sudo -S bash -lc 'command -v docker || command -v podman'
+(unknown) [stdout]
+/usr/bin/docker
+
+(unknown) [exit 0]
+
+[2026-01-18T21:07:43Z] (unknown) $ bash -lc 'command -v cephadm || echo MISSING'
+(unknown) [stdout]
+/usr/local/bin/cephadm
+
+(unknown) [exit 0]
+[2026-01-18T21:07:44Z] [ceph] Fixing cephadm on auto-openstack-infra-8xwlm
+
+[2026-01-18T21:07:44Z] (auto-openstack-infra-8xwlm) $ sudo -S bash -lc '
+    set -euo pipefail
+
+    PATCH_EXPR='\''
+    old = "item, mode = line.split(\\'\'' \\\'\'')"
+    new = (
+        "parts = line.split()\\n"
+        "                if len(parts) < 2:\\n"
+        "                    continue\\n"
+        "                item = parts[0]\\n"
+        "                mode = parts[1].strip(\\'\''()\\'\'')"
+    )
+    '\''
+
+    apply_patch() {
+    f="$1"
+    [ -f "$f" ] || return 0
+    cp "$f" "$f.bak"
+    python3 - <<EOF
+    from pathlib import Path
+    p = Path("$f")
+    txt = p.read_text()
+    $PATCH_EXPR
+    if old not in txt:
+        raise SystemExit("AppArmor pattern not found in %s" % p)
+    p.write_text(txt.replace(old, new))
+    EOF
+    python3 -m py_compile "$f"
+    }
+
+    # 1) Patch system cephadm binaries
+    apply_patch /usr/local/bin/cephadm || true
+    apply_patch /usr/sbin/cephadm || true
+
+    # 2) Patch runtime cephadm copies
+    for f in /var/lib/ceph/*/cephadm.*; do
+    apply_patch "$f" || true
+    done
+    '
+(auto-openstack-infra-8xwlm) [stderr]
+bash: -c: line 5: syntax error near unexpected token `)'
+
+(auto-openstack-infra-8xwlm) [exit 2]
+[2026-01-18T21:07:44Z] [ceph] Fixing cephadm on auto-openstack-infra-czhth-qb87b
+
+[2026-01-18T21:07:44Z] (auto-openstack-infra-czhth-qb87b) $ sudo -S bash -lc '
+    set -euo pipefail
+
+    PATCH_EXPR='\''
+    old = "item, mode = line.split(\\'\'' \\\'\'')"
+    new = (
+        "parts = line.split()\\n"
+        "                if len(parts) < 2:\\n"
+        "                    continue\\n"
+        "                item = parts[0]\\n"
+        "                mode = parts[1].strip(\\'\''()\\'\'')"
+    )
+    '\''
+
+    apply_patch() {
+    f="$1"
+    [ -f "$f" ] || return 0
+    cp "$f" "$f.bak"
+    python3 - <<EOF
+    from pathlib import Path
+    p = Path("$f")
+    txt = p.read_text()
+    $PATCH_EXPR
+    if old not in txt:
+        raise SystemExit("AppArmor pattern not found in %s" % p)
+    p.write_text(txt.replace(old, new))
+    EOF
+    python3 -m py_compile "$f"
+    }
+
+    # 1) Patch system cephadm binaries
+    apply_patch /usr/local/bin/cephadm || true
+    apply_patch /usr/sbin/cephadm || true
+
+    # 2) Patch runtime cephadm copies
+    for f in /var/lib/ceph/*/cephadm.*; do
+    apply_patch "$f" || true
+    done
+    '
+(auto-openstack-infra-czhth-qb87b) [stderr]
+bash: -c: line 5: syntax error near unexpected token `)'
+
+(auto-openstack-infra-czhth-qb87b) [exit 2]
+[2026-01-18T21:07:46Z] [ceph] Fixing cephadm on auto-openstack-infra-czhth-svkqn
+
+[2026-01-18T21:07:46Z] (auto-openstack-infra-czhth-svkqn) $ sudo -S bash -lc '
+    set -euo pipefail
+
+    PATCH_EXPR='\''
+    old = "item, mode = line.split(\\'\'' \\\'\'')"
+    new = (
+        "parts = line.split()\\n"
+        "                if len(parts) < 2:\\n"
+        "                    continue\\n"
+        "                item = parts[0]\\n"
+        "                mode = parts[1].strip(\\'\''()\\'\'')"
+    )
+    '\''
+
+    apply_patch() {
+    f="$1"
+    [ -f "$f" ] || return 0
+    cp "$f" "$f.bak"
+    python3 - <<EOF
+    from pathlib import Path
+    p = Path("$f")
+    txt = p.read_text()
+    $PATCH_EXPR
+    if old not in txt:
+        raise SystemExit("AppArmor pattern not found in %s" % p)
+    p.write_text(txt.replace(old, new))
+    EOF
+    python3 -m py_compile "$f"
+    }
+
+    # 1) Patch system cephadm binaries
+    apply_patch /usr/local/bin/cephadm || true
+    apply_patch /usr/sbin/cephadm || true
+
+    # 2) Patch runtime cephadm copies
+    for f in /var/lib/ceph/*/cephadm.*; do
+    apply_patch "$f" || true
+    done
+    '
+(auto-openstack-infra-czhth-svkqn) [stderr]
+bash: -c: line 5: syntax error near unexpected token `)'
+
+(auto-openstack-infra-czhth-svkqn) [exit 2]
+[2026-01-18T21:07:47Z] [ceph] Fixing cephadm on auto-openstack-infra-czhth-z4sgh
+
+[2026-01-18T21:07:47Z] (auto-openstack-infra-czhth-z4sgh) $ sudo -S bash -lc '
+    set -euo pipefail
+
+    PATCH_EXPR='\''
+    old = "item, mode = line.split(\\'\'' \\\'\'')"
+    new = (
+        "parts = line.split()\\n"
+        "                if len(parts) < 2:\\n"
+        "                    continue\\n"
+        "                item = parts[0]\\n"
+        "                mode = parts[1].strip(\\'\''()\\'\'')"
+    )
+    '\''
+
+    apply_patch() {
+    f="$1"
+    [ -f "$f" ] || return 0
+    cp "$f" "$f.bak"
+    python3 - <<EOF
+    from pathlib import Path
+    p = Path("$f")
+    txt = p.read_text()
+    $PATCH_EXPR
+    if old not in txt:
+        raise SystemExit("AppArmor pattern not found in %s" % p)
+    p.write_text(txt.replace(old, new))
+    EOF
+    python3 -m py_compile "$f"
+    }
+
+    # 1) Patch system cephadm binaries
+    apply_patch /usr/local/bin/cephadm || true
+    apply_patch /usr/sbin/cephadm || true
+
+    # 2) Patch runtime cephadm copies
+    for f in /var/lib/ceph/*/cephadm.*; do
+    apply_patch "$f" || true
+    done
+    '
+(auto-openstack-infra-czhth-z4sgh) [stderr]
+bash: -c: line 5: syntax error near unexpected token `)'
+
+(auto-openstack-infra-czhth-z4sgh) [exit 2]
+[2026-01-18T21:07:48Z] [ceph] Fixing cephadm on auto-openstack-infra-qgvlx
+
+[2026-01-18T21:07:48Z] (auto-openstack-infra-qgvlx) $ sudo -S bash -lc '
+    set -euo pipefail
+
+    PATCH_EXPR='\''
+    old = "item, mode = line.split(\\'\'' \\\'\'')"
+    new = (
+        "parts = line.split()\\n"
+        "                if len(parts) < 2:\\n"
+        "                    continue\\n"
+        "                item = parts[0]\\n"
+        "                mode = parts[1].strip(\\'\''()\\'\'')"
+    )
+    '\''
+
+    apply_patch() {
+    f="$1"
+    [ -f "$f" ] || return 0
+    cp "$f" "$f.bak"
+    python3 - <<EOF
+    from pathlib import Path
+    p = Path("$f")
+    txt = p.read_text()
+    $PATCH_EXPR
+    if old not in txt:
+        raise SystemExit("AppArmor pattern not found in %s" % p)
+    p.write_text(txt.replace(old, new))
+    EOF
+    python3 -m py_compile "$f"
+    }
+
+    # 1) Patch system cephadm binaries
+    apply_patch /usr/local/bin/cephadm || true
+    apply_patch /usr/sbin/cephadm || true
+
+    # 2) Patch runtime cephadm copies
+    for f in /var/lib/ceph/*/cephadm.*; do
+    apply_patch "$f" || true
+    done
+    '
+(auto-openstack-infra-qgvlx) [stderr]
+bash: -c: line 5: syntax error near unexpected token `)'
+
+(auto-openstack-infra-qgvlx) [exit 2]
+[2026-01-18T21:07:50Z] [ceph] Fixing cephadm on auto-openstack-infra-vvdw4
+
+[2026-01-18T21:07:50Z] (auto-openstack-infra-vvdw4) $ sudo -S bash -lc '
+    set -euo pipefail
+
+    PATCH_EXPR='\''
+    old = "item, mode = line.split(\\'\'' \\\'\'')"
+    new = (
+        "parts = line.split()\\n"
+        "                if len(parts) < 2:\\n"
+        "                    continue\\n"
+        "                item = parts[0]\\n"
+        "                mode = parts[1].strip(\\'\''()\\'\'')"
+    )
+    '\''
+
+    apply_patch() {
+    f="$1"
+    [ -f "$f" ] || return 0
+    cp "$f" "$f.bak"
+    python3 - <<EOF
+    from pathlib import Path
+    p = Path("$f")
+    txt = p.read_text()
+    $PATCH_EXPR
+    if old not in txt:
+        raise SystemExit("AppArmor pattern not found in %s" % p)
+    p.write_text(txt.replace(old, new))
+    EOF
+    python3 -m py_compile "$f"
+    }
+
+    # 1) Patch system cephadm binaries
+    apply_patch /usr/local/bin/cephadm || true
+    apply_patch /usr/sbin/cephadm || true
+
+    # 2) Patch runtime cephadm copies
+    for f in /var/lib/ceph/*/cephadm.*; do
+    apply_patch "$f" || true
+    done
+    '
+(auto-openstack-infra-vvdw4) [stderr]
+bash: -c: line 5: syntax error near unexpected token `)'
+
+(auto-openstack-infra-vvdw4) [exit 2]
+
+[2026-01-18T21:07:51Z] (unknown) $ sudo -S bash -lc '(podman pull quay.io/ceph/ceph:v17.2.6 || docker pull quay.io/ceph/ceph:v17.2.6) || true'
+(unknown) [stderr] bash: line 1: podman: command not found
+(unknown) [stdout] v17.2.6: Pulling from ceph/ceph
+(unknown) [stdout]
+Digest: sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+Status: Image is up to date for quay.io/ceph/ceph:v17.2.6
+quay.io/ceph/ceph:v17.2.6
+
+(unknown) [exit 0]
+
+[2026-01-18T21:07:52Z] (unknown) $ bash -lc 'sudo cephadm shell -- ceph status >/dev/null 2>&1 || test -f /etc/ceph/ceph.conf'
+(unknown) [exit 0]
+[2026-01-18T21:08:05Z] [cephadm] Detected existing Ceph cluster on auto-openstack-infra-8xwlm (192.168.111.24); skipping bootstrap.
+
+[2026-01-18T21:08:05Z] (unknown) $ sudo -S bash -lc 'cat /etc/ceph/ceph.pub'
+(unknown) [stdout]
+ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCrykC6eYpVRiD/ht9sE5eNEcRa32XCYS6o0w+jQTTME+jLwYyq8NmKe8JIKzpUv6nNe0ch2+fEt3dCF21hWZfOr88JDC+0wcShyrGeGcVFtySOwWHDWCUUienjXd7cHwoKFhqU36p5MGBfalzkXksX01hKPldNO/oJhqhImXu39rbjUIwayg+UNeyaOBduPFpw/NVStfXPk0eHaBNYdl6R2S3lI9+0a+0jotugtX5nuuAlYBchJ8fzbH2eqPQbeXBh+M3M7lK3mZD+ga0vMcQ6kn3y30kwHJyj1T7vxOT40OB3uI3BsUZbSfLfKv7mJXCBLvw7kIoboa6gSyqBrHTUKSpXaGSvAS44REfnhzwdGq1zpKQ2RLqojWDts/bNQlkyUb928TneXyUD/fHDZVDMZYPWwAiiUlGJN8c31wK3JKKskEy/nQ2j6Ztu/TOIyB1mtcRjiFlATxfL2QhB34D4QOBAPzQbIrHpWf7SF2WIklIL0llOc/HYCCJUXGMcG8U= ceph-7802e156-f4ae-11f0-8502-002fd39d1872
+
+(unknown) [exit 0]
+
+[2026-01-18T21:08:06Z] (unknown) $ sudo -S bash -lc 'mkdir -p /root/.ssh && echo "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCrykC6eYpVRiD/ht9sE5eNEcRa32XCYS6o0w+jQTTME+jLwYyq8NmKe8JIKzpUv6nNe0ch2+fEt3dCF21hWZfOr88JDC+0wcShyrGeGcVFtySOwWHDWCUUienjXd7cHwoKFhqU36p5MGBfalzkXksX01hKPldNO/oJhqhImXu39rbjUIwayg+UNeyaOBduPFpw/NVStfXPk0eHaBNYdl6R2S3lI9+0a+0jotugtX5nuuAlYBchJ8fzbH2eqPQbeXBh+M3M7lK3mZD+ga0vMcQ6kn3y30kwHJyj1T7vxOT40OB3uI3BsUZbSfLfKv7mJXCBLvw7kIoboa6gSyqBrHTUKSpXaGSvAS44REfnhzwdGq1zpKQ2RLqojWDts/bNQlkyUb928TneXyUD/fHDZVDMZYPWwAiiUlGJN8c31wK3JKKskEy/nQ2j6Ztu/TOIyB1mtcRjiFlATxfL2QhB34D4QOBAPzQbIrHpWf7SF2WIklIL0llOc/HYCCJUXGMcG8U= ceph-7802e156-f4ae-11f0-8502-002fd39d1872" >> /root/.ssh/authorized_keys'
+(unknown) [exit 0]
+
+[2026-01-18T21:08:07Z] (unknown) $ sudo -S bash -lc 'mkdir -p /root/.ssh && echo "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCrykC6eYpVRiD/ht9sE5eNEcRa32XCYS6o0w+jQTTME+jLwYyq8NmKe8JIKzpUv6nNe0ch2+fEt3dCF21hWZfOr88JDC+0wcShyrGeGcVFtySOwWHDWCUUienjXd7cHwoKFhqU36p5MGBfalzkXksX01hKPldNO/oJhqhImXu39rbjUIwayg+UNeyaOBduPFpw/NVStfXPk0eHaBNYdl6R2S3lI9+0a+0jotugtX5nuuAlYBchJ8fzbH2eqPQbeXBh+M3M7lK3mZD+ga0vMcQ6kn3y30kwHJyj1T7vxOT40OB3uI3BsUZbSfLfKv7mJXCBLvw7kIoboa6gSyqBrHTUKSpXaGSvAS44REfnhzwdGq1zpKQ2RLqojWDts/bNQlkyUb928TneXyUD/fHDZVDMZYPWwAiiUlGJN8c31wK3JKKskEy/nQ2j6Ztu/TOIyB1mtcRjiFlATxfL2QhB34D4QOBAPzQbIrHpWf7SF2WIklIL0llOc/HYCCJUXGMcG8U= ceph-7802e156-f4ae-11f0-8502-002fd39d1872" >> /root/.ssh/authorized_keys'
+(unknown) [exit 0]
+
+[2026-01-18T21:08:08Z] (unknown) $ sudo -S bash -lc 'mkdir -p /root/.ssh && echo "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCrykC6eYpVRiD/ht9sE5eNEcRa32XCYS6o0w+jQTTME+jLwYyq8NmKe8JIKzpUv6nNe0ch2+fEt3dCF21hWZfOr88JDC+0wcShyrGeGcVFtySOwWHDWCUUienjXd7cHwoKFhqU36p5MGBfalzkXksX01hKPldNO/oJhqhImXu39rbjUIwayg+UNeyaOBduPFpw/NVStfXPk0eHaBNYdl6R2S3lI9+0a+0jotugtX5nuuAlYBchJ8fzbH2eqPQbeXBh+M3M7lK3mZD+ga0vMcQ6kn3y30kwHJyj1T7vxOT40OB3uI3BsUZbSfLfKv7mJXCBLvw7kIoboa6gSyqBrHTUKSpXaGSvAS44REfnhzwdGq1zpKQ2RLqojWDts/bNQlkyUb928TneXyUD/fHDZVDMZYPWwAiiUlGJN8c31wK3JKKskEy/nQ2j6Ztu/TOIyB1mtcRjiFlATxfL2QhB34D4QOBAPzQbIrHpWf7SF2WIklIL0llOc/HYCCJUXGMcG8U= ceph-7802e156-f4ae-11f0-8502-002fd39d1872" >> /root/.ssh/authorized_keys'
+(unknown) [exit 0]
+
+[2026-01-18T21:08:09Z] (unknown) $ sudo -S bash -lc 'mkdir -p /root/.ssh && echo "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCrykC6eYpVRiD/ht9sE5eNEcRa32XCYS6o0w+jQTTME+jLwYyq8NmKe8JIKzpUv6nNe0ch2+fEt3dCF21hWZfOr88JDC+0wcShyrGeGcVFtySOwWHDWCUUienjXd7cHwoKFhqU36p5MGBfalzkXksX01hKPldNO/oJhqhImXu39rbjUIwayg+UNeyaOBduPFpw/NVStfXPk0eHaBNYdl6R2S3lI9+0a+0jotugtX5nuuAlYBchJ8fzbH2eqPQbeXBh+M3M7lK3mZD+ga0vMcQ6kn3y30kwHJyj1T7vxOT40OB3uI3BsUZbSfLfKv7mJXCBLvw7kIoboa6gSyqBrHTUKSpXaGSvAS44REfnhzwdGq1zpKQ2RLqojWDts/bNQlkyUb928TneXyUD/fHDZVDMZYPWwAiiUlGJN8c31wK3JKKskEy/nQ2j6Ztu/TOIyB1mtcRjiFlATxfL2QhB34D4QOBAPzQbIrHpWf7SF2WIklIL0llOc/HYCCJUXGMcG8U= ceph-7802e156-f4ae-11f0-8502-002fd39d1872" >> /root/.ssh/authorized_keys'
+(unknown) [exit 0]
+
+[2026-01-18T21:08:09Z] (unknown) $ sudo -S bash -lc 'mkdir -p /root/.ssh && echo "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCrykC6eYpVRiD/ht9sE5eNEcRa32XCYS6o0w+jQTTME+jLwYyq8NmKe8JIKzpUv6nNe0ch2+fEt3dCF21hWZfOr88JDC+0wcShyrGeGcVFtySOwWHDWCUUienjXd7cHwoKFhqU36p5MGBfalzkXksX01hKPldNO/oJhqhImXu39rbjUIwayg+UNeyaOBduPFpw/NVStfXPk0eHaBNYdl6R2S3lI9+0a+0jotugtX5nuuAlYBchJ8fzbH2eqPQbeXBh+M3M7lK3mZD+ga0vMcQ6kn3y30kwHJyj1T7vxOT40OB3uI3BsUZbSfLfKv7mJXCBLvw7kIoboa6gSyqBrHTUKSpXaGSvAS44REfnhzwdGq1zpKQ2RLqojWDts/bNQlkyUb928TneXyUD/fHDZVDMZYPWwAiiUlGJN8c31wK3JKKskEy/nQ2j6Ztu/TOIyB1mtcRjiFlATxfL2QhB34D4QOBAPzQbIrHpWf7SF2WIklIL0llOc/HYCCJUXGMcG8U= ceph-7802e156-f4ae-11f0-8502-002fd39d1872" >> /root/.ssh/authorized_keys'
+(unknown) [exit 0]
+
+[2026-01-18T21:08:10Z] (unknown) $ sudo -S bash -lc 'cephadm shell -- ceph config set global container_image quay.io/ceph/ceph:v17.2.6'
+(unknown) [stderr] Inferring fsid 7802e156-f4ae-11f0-8502-002fd39d1872
+(unknown) [stderr] Inferring config /var/lib/ceph/7802e156-f4ae-11f0-8502-002fd39d1872/mon.auto-openstack-infra-8xwlm/config
+(unknown) [stderr] Using ceph image with id 'e40c19cd70e0' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+(unknown) [stderr] Traceback (most recent call last):
+  File "/usr/local/bin/cephadm", line 9930, in <module>
+    main()
+  File "/usr/local/bin/cephadm", line 9918, in main
+    r = ctx.func(ctx)
+        ^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2141, in _infer_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2224, in _infer_image
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2099, in _validate_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 6334, in command_shell
+(unknown) [stderr]
+    mounts = get_container_mounts(ctx, ctx.fsid, daemon_type, daemon_id,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 3055, in get_container_mounts
+    if HostFacts(ctx).selinux_enabled:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8971, in selinux_enabled
+    return (self.kernel_security['type'] == 'SELinux') and \
+            ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8954, in kernel_security
+    ret = _fetch_apparmor()
+          ^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8935, in _fetch_apparmor
+    item, mode = line.split(' ')
+    ^^^^^^^^^^
+ValueError: too many values to unpack (expected 2)
+
+(unknown) [exit 1]
+[2026-01-18T21:08:24Z] [cephadm] Validating container engine on auto-openstack-infra-czhth-qb87b (192.168.111.23)...
+
+[2026-01-18T21:08:24Z] (unknown) $ sudo -S bash -lc 'command -v docker || command -v podman'
+(unknown) [stdout]
+/usr/bin/docker
+
+(unknown) [exit 0]
+[2026-01-18T21:08:25Z] [cephadm] Container engine already present on auto-openstack-infra-czhth-qb87b.
+[2026-01-18T21:08:25Z] [cephadm] Adding host auto-openstack-infra-czhth-qb87b (192.168.111.23) to cluster...
+
+[2026-01-18T21:08:25Z] (unknown) $ sudo -S bash -lc 'cephadm shell -- ceph orch host add auto-openstack-infra-czhth-qb87b 192.168.111.23'
+(unknown) [stderr] Inferring fsid 7802e156-f4ae-11f0-8502-002fd39d1872
+(unknown) [stderr] Inferring config /var/lib/ceph/7802e156-f4ae-11f0-8502-002fd39d1872/mon.auto-openstack-infra-8xwlm/config
+(unknown) [stderr] Using ceph image with id 'e40c19cd70e0' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+(unknown) [stderr]
+Traceback (most recent call last):
+  File "/usr/local/bin/cephadm", line 9930, in <module>
+    main()
+  File "/usr/local/bin/cephadm", line 9918, in main
+    r = ctx.func(ctx)
+        ^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2141, in _infer_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2224, in _infer_image
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2099, in _validate_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 6334, in command_shell
+    mounts = get_container_mounts(ctx, ctx.fsid, daemon_type, daemon_id,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 3055, in get_container_mounts
+    if HostFacts(ctx).selinux_enabled:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8971, in selinux_enabled
+    return (self.kernel_security['type'] == 'SELinux') and \
+            ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8954, in kernel_security
+    ret = _fetch_apparmor()
+          ^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8935, in _fetch_apparmor
+    item, mode = line.split(' ')
+    ^^^^^^^^^^
+ValueError: too many values to unpack (expected 2)
+
+(unknown) [exit 1]
+[2026-01-18T21:08:38Z] [cephadm] Host add failed for auto-openstack-infra-czhth-qb87b: Inferring fsid 7802e156-f4ae-11f0-8502-002fd39d1872
+Inferring config /var/lib/ceph/7802e156-f4ae-11f0-8502-002fd39d1872/mon.auto-openstack-infra-8xwlm/config
+Using ceph image with id 'e40c19cd70e0' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+Traceback (most recent call last):
+  File "/usr/local/bin/cephadm", line 9930, in <module>
+    main()
+  File "/usr/local/bin/cephadm", line 9918, in main
+    r = ctx.func(ctx)
+        ^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2141, in _infer_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2224, in _infer_image
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2099, in _validate_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 6334, in command_shell
+    mounts = get_container_mounts(ctx, ctx.fsid, daemon_type, daemon_id,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 3055, in get_container_mounts
+    if HostFacts(ctx).selinux_enabled:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8971, in selinux_enabled
+    return (self.kernel_security['type'] == 'SELinux') and \
+            ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8954, in kernel_security
+    ret = _fetch_apparmor()
+          ^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8935, in _fetch_apparmor
+    item, mode = line.split(' ')
+    ^^^^^^^^^^
+ValueError: too many values to unpack (expected 2)
+
+[2026-01-18T21:08:38Z] [cephadm] Validating container engine on auto-openstack-infra-czhth-svkqn (192.168.111.22)...
+
+[2026-01-18T21:08:38Z] (unknown) $ sudo -S bash -lc 'command -v docker || command -v podman'
+(unknown) [stdout]
+/usr/bin/docker
+
+(unknown) [exit 0]
+[2026-01-18T21:08:39Z] [cephadm] Container engine already present on auto-openstack-infra-czhth-svkqn.
+[2026-01-18T21:08:39Z] [cephadm] Adding host auto-openstack-infra-czhth-svkqn (192.168.111.22) to cluster...
+
+[2026-01-18T21:08:39Z] (unknown) $ sudo -S bash -lc 'cephadm shell -- ceph orch host add auto-openstack-infra-czhth-svkqn 192.168.111.22'
+(unknown) [stderr] Inferring fsid 7802e156-f4ae-11f0-8502-002fd39d1872
+(unknown) [stderr] Inferring config /var/lib/ceph/7802e156-f4ae-11f0-8502-002fd39d1872/mon.auto-openstack-infra-8xwlm/config
+(unknown) [stderr] Using ceph image with id 'e40c19cd70e0' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+(unknown) [stderr]
+Traceback (most recent call last):
+  File "/usr/local/bin/cephadm", line 9930, in <module>
+    main()
+  File "/usr/local/bin/cephadm", line 9918, in main
+    r = ctx.func(ctx)
+        ^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2141, in _infer_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2224, in _infer_image
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2099, in _validate_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 6334, in command_shell
+    mounts = get_container_mounts(ctx, ctx.fsid, daemon_type, daemon_id,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 3055, in get_container_mounts
+    if HostFacts(ctx).selinux_enabled:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8971, in selinux_enabled
+    return (self.kernel_security['type'] == 'SELinux') and \
+            ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8954, in kernel_security
+    ret = _fetch_apparmor()
+          ^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8935, in _fetch_apparmor
+    item, mode = line.split(' ')
+    ^^^^^^^^^^
+ValueError: too many values to unpack (expected 2)
+
+(unknown) [exit 1]
+[2026-01-18T21:08:53Z] [cephadm] Host add failed for auto-openstack-infra-czhth-svkqn: Inferring fsid 7802e156-f4ae-11f0-8502-002fd39d1872
+Inferring config /var/lib/ceph/7802e156-f4ae-11f0-8502-002fd39d1872/mon.auto-openstack-infra-8xwlm/config
+Using ceph image with id 'e40c19cd70e0' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+Traceback (most recent call last):
+  File "/usr/local/bin/cephadm", line 9930, in <module>
+    main()
+  File "/usr/local/bin/cephadm", line 9918, in main
+    r = ctx.func(ctx)
+        ^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2141, in _infer_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2224, in _infer_image
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2099, in _validate_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 6334, in command_shell
+    mounts = get_container_mounts(ctx, ctx.fsid, daemon_type, daemon_id,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 3055, in get_container_mounts
+    if HostFacts(ctx).selinux_enabled:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8971, in selinux_enabled
+    return (self.kernel_security['type'] == 'SELinux') and \
+            ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8954, in kernel_security
+    ret = _fetch_apparmor()
+          ^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8935, in _fetch_apparmor
+    item, mode = line.split(' ')
+    ^^^^^^^^^^
+ValueError: too many values to unpack (expected 2)
+
+[2026-01-18T21:08:53Z] [cephadm] Validating container engine on auto-openstack-infra-czhth-z4sgh (192.168.111.21)...
+
+[2026-01-18T21:08:53Z] (unknown) $ sudo -S bash -lc 'command -v docker || command -v podman'
+(unknown) [stdout]
+/usr/bin/docker
+
+(unknown) [exit 0]
+[2026-01-18T21:08:54Z] [cephadm] Container engine already present on auto-openstack-infra-czhth-z4sgh.
+[2026-01-18T21:08:54Z] [cephadm] Adding host auto-openstack-infra-czhth-z4sgh (192.168.111.21) to cluster...
+
+[2026-01-18T21:08:54Z] (unknown) $ sudo -S bash -lc 'cephadm shell -- ceph orch host add auto-openstack-infra-czhth-z4sgh 192.168.111.21'
+(unknown) [stderr] Inferring fsid 7802e156-f4ae-11f0-8502-002fd39d1872
+(unknown) [stderr] Inferring config /var/lib/ceph/7802e156-f4ae-11f0-8502-002fd39d1872/mon.auto-openstack-infra-8xwlm/config
+(unknown) [stderr] Using ceph image with id 'e40c19cd70e0' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+(unknown) [stderr] Traceback (most recent call last):
+  File "/usr/local/bin/cephadm", line 9930, in <module>
+    main()
+  File "/usr/local/bin/cephadm", line 9918, in main
+    r = ctx.func(ctx)
+        ^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2141, in _infer_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2224, in _infer_image
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2099, in _validate_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 6334, in command_shell
+    mounts = get_container_mounts(ctx, ctx.fsid, daemon_type, daemon_id,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 3055, in get_container_mounts
+    if HostFacts(ctx).selinux_enabled:(unknown) [stderr]
+
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8971, in selinux_enabled
+    return (self.kernel_security['type'] == 'SELinux') and \
+            ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8954, in kernel_security
+    ret = _fetch_apparmor()
+          ^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8935, in _fetch_apparmor
+    item, mode = line.split(' ')
+    ^^^^^^^^^^
+ValueError: too many values to unpack (expected 2)
+
+(unknown) [exit 1]
+[2026-01-18T21:09:07Z] [cephadm] Host add failed for auto-openstack-infra-czhth-z4sgh: Inferring fsid 7802e156-f4ae-11f0-8502-002fd39d1872
+Inferring config /var/lib/ceph/7802e156-f4ae-11f0-8502-002fd39d1872/mon.auto-openstack-infra-8xwlm/config
+Using ceph image with id 'e40c19cd70e0' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+Traceback (most recent call last):
+  File "/usr/local/bin/cephadm", line 9930, in <module>
+    main()
+  File "/usr/local/bin/cephadm", line 9918, in main
+    r = ctx.func(ctx)
+        ^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2141, in _infer_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2224, in _infer_image
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2099, in _validate_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 6334, in command_shell
+    mounts = get_container_mounts(ctx, ctx.fsid, daemon_type, daemon_id,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 3055, in get_container_mounts
+    if HostFacts(ctx).selinux_enabled:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8971, in selinux_enabled
+    return (self.kernel_security['type'] == 'SELinux') and \
+            ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8954, in kernel_security
+    ret = _fetch_apparmor()
+          ^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8935, in _fetch_apparmor
+    item, mode = line.split(' ')
+    ^^^^^^^^^^
+ValueError: too many values to unpack (expected 2)
+
+[2026-01-18T21:09:07Z] [cephadm] Validating container engine on auto-openstack-infra-qgvlx (192.168.111.25)...
+
+[2026-01-18T21:09:08Z] (unknown) $ sudo -S bash -lc 'command -v docker || command -v podman'
+(unknown) [stdout]
+/usr/bin/docker
+
+(unknown) [exit 0]
+[2026-01-18T21:09:09Z] [cephadm] Container engine already present on auto-openstack-infra-qgvlx.
+[2026-01-18T21:09:09Z] [cephadm] Adding host auto-openstack-infra-qgvlx (192.168.111.25) to cluster...
+
+[2026-01-18T21:09:09Z] (unknown) $ sudo -S bash -lc 'cephadm shell -- ceph orch host add auto-openstack-infra-qgvlx 192.168.111.25'
+(unknown) [stderr] Inferring fsid 7802e156-f4ae-11f0-8502-002fd39d1872
+(unknown) [stderr] Inferring config /var/lib/ceph/7802e156-f4ae-11f0-8502-002fd39d1872/mon.auto-openstack-infra-8xwlm/config
+(unknown) [stderr] Using ceph image with id 'e40c19cd70e0' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+(unknown) [stderr]
+Traceback (most recent call last):
+  File "/usr/local/bin/cephadm", line 9930, in <module>
+    main()
+  File "/usr/local/bin/cephadm", line 9918, in main
+    r = ctx.func(ctx)
+        ^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2141, in _infer_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2224, in _infer_image
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2099, in _validate_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 6334, in command_shell
+    mounts = get_container_mounts(ctx, ctx.fsid, daemon_type, daemon_id,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 3055, in get_container_mounts
+    if HostFacts(ctx).selinux_enabled:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8971, in selinux_enabled
+    return (self.kernel_security['type'] == 'SELinux') and \
+            ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8954, in kernel_security
+    ret = _fetch_apparmor()
+          ^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8935, in _fetch_apparmor
+    item, mode = line.split(' ')
+    ^^^^^^^^^^
+ValueError: too many values to unpack (expected 2)
+
+(unknown) [exit 1]
+[2026-01-18T21:09:22Z] [cephadm] Host add failed for auto-openstack-infra-qgvlx: Inferring fsid 7802e156-f4ae-11f0-8502-002fd39d1872
+Inferring config /var/lib/ceph/7802e156-f4ae-11f0-8502-002fd39d1872/mon.auto-openstack-infra-8xwlm/config
+Using ceph image with id 'e40c19cd70e0' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+Traceback (most recent call last):
+  File "/usr/local/bin/cephadm", line 9930, in <module>
+    main()
+  File "/usr/local/bin/cephadm", line 9918, in main
+    r = ctx.func(ctx)
+        ^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2141, in _infer_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2224, in _infer_image
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2099, in _validate_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 6334, in command_shell
+    mounts = get_container_mounts(ctx, ctx.fsid, daemon_type, daemon_id,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 3055, in get_container_mounts
+    if HostFacts(ctx).selinux_enabled:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8971, in selinux_enabled
+    return (self.kernel_security['type'] == 'SELinux') and \
+            ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8954, in kernel_security
+    ret = _fetch_apparmor()
+          ^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8935, in _fetch_apparmor
+    item, mode = line.split(' ')
+    ^^^^^^^^^^
+ValueError: too many values to unpack (expected 2)
+
+[2026-01-18T21:09:22Z] [cephadm] Validating container engine on auto-openstack-infra-vvdw4 (192.168.111.20)...
+
+[2026-01-18T21:09:22Z] (unknown) $ sudo -S bash -lc 'command -v docker || command -v podman'
+(unknown) [stdout]
+/usr/bin/docker
+
+(unknown) [exit 0]
+[2026-01-18T21:09:23Z] [cephadm] Container engine already present on auto-openstack-infra-vvdw4.
+[2026-01-18T21:09:23Z] [cephadm] Adding host auto-openstack-infra-vvdw4 (192.168.111.20) to cluster...
+
+[2026-01-18T21:09:23Z] (unknown) $ sudo -S bash -lc 'cephadm shell -- ceph orch host add auto-openstack-infra-vvdw4 192.168.111.20'
+(unknown) [stderr] Inferring fsid 7802e156-f4ae-11f0-8502-002fd39d1872
+(unknown) [stderr] Inferring config /var/lib/ceph/7802e156-f4ae-11f0-8502-002fd39d1872/mon.auto-openstack-infra-8xwlm/config
+(unknown) [stderr] Using ceph image with id 'e40c19cd70e0' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+(unknown) [stderr]
+Traceback (most recent call last):
+  File "/usr/local/bin/cephadm", line 9930, in <module>
+    main()
+  File "/usr/local/bin/cephadm", line 9918, in main
+    r = ctx.func(ctx)
+        ^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2141, in _infer_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2224, in _infer_image
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2099, in _validate_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 6334, in command_shell
+    mounts = get_container_mounts(ctx, ctx.fsid, daemon_type, daemon_id,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 3055, in get_container_mounts
+    if HostFacts(ctx).selinux_enabled:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8971, in selinux_enabled
+    return (self.kernel_security['type'] == 'SELinux') and \
+            ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8954, in kernel_security
+    ret = _fetch_apparmor()
+          ^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8935, in _fetch_apparmor
+    item, mode = line.split(' ')
+    ^^^^^^^^^^
+ValueError: too many values to unpack (expected 2)
+
+(unknown) [exit 1]
+[2026-01-18T21:09:37Z] [cephadm] Host add failed for auto-openstack-infra-vvdw4: Inferring fsid 7802e156-f4ae-11f0-8502-002fd39d1872
+Inferring config /var/lib/ceph/7802e156-f4ae-11f0-8502-002fd39d1872/mon.auto-openstack-infra-8xwlm/config
+Using ceph image with id 'e40c19cd70e0' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+Traceback (most recent call last):
+  File "/usr/local/bin/cephadm", line 9930, in <module>
+    main()
+  File "/usr/local/bin/cephadm", line 9918, in main
+    r = ctx.func(ctx)
+        ^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2141, in _infer_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2224, in _infer_image
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2099, in _validate_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 6334, in command_shell
+    mounts = get_container_mounts(ctx, ctx.fsid, daemon_type, daemon_id,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 3055, in get_container_mounts
+    if HostFacts(ctx).selinux_enabled:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8971, in selinux_enabled
+    return (self.kernel_security['type'] == 'SELinux') and \
+            ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8954, in kernel_security
+    ret = _fetch_apparmor()
+          ^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8935, in _fetch_apparmor
+    item, mode = line.split(' ')
+    ^^^^^^^^^^
+ValueError: too many values to unpack (expected 2)
+
+
+[2026-01-18T21:09:37Z] (unknown) $ sudo -S bash -lc 'ceph orch restart mgr'
+(unknown) [stderr]
+bash: line 1: ceph: command not found
+
+(unknown) [exit 127]
+
+[2026-01-18T21:09:37Z] (unknown) $ sudo -S bash -lc 'cephadm shell -- ceph orch apply mon --placement="count:3"'
+(unknown) [stderr] Inferring fsid 7802e156-f4ae-11f0-8502-002fd39d1872
+(unknown) [stderr] Inferring config /var/lib/ceph/7802e156-f4ae-11f0-8502-002fd39d1872/mon.auto-openstack-infra-8xwlm/config
+(unknown) [stderr] Using ceph image with id 'e40c19cd70e0' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+(unknown) [stderr]
+Traceback (most recent call last):
+  File "/usr/local/bin/cephadm", line 9930, in <module>
+    main()
+  File "/usr/local/bin/cephadm", line 9918, in main
+    r = ctx.func(ctx)
+        ^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2141, in _infer_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2224, in _infer_image
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2099, in _validate_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 6334, in command_shell
+    mounts = get_container_mounts(ctx, ctx.fsid, daemon_type, daemon_id,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 3055, in get_container_mounts
+    if HostFacts(ctx).selinux_enabled:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8971, in selinux_enabled
+    return (self.kernel_security['type'] == 'SELinux') and \
+            ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8954, in kernel_security
+    ret = _fetch_apparmor()
+          ^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8935, in _fetch_apparmor
+    item, mode = line.split(' ')
+    ^^^^^^^^^^
+ValueError: too many values to unpack (expected 2)
+
+(unknown) [exit 1]
+
+[2026-01-18T21:09:50Z] (unknown) $ sudo -S bash -lc 'cephadm shell -- ceph orch apply mgr --placement="count:2"'
+(unknown) [stderr] Inferring fsid 7802e156-f4ae-11f0-8502-002fd39d1872
+(unknown) [stderr] Inferring config /var/lib/ceph/7802e156-f4ae-11f0-8502-002fd39d1872/mon.auto-openstack-infra-8xwlm/config
+(unknown) [stderr] Using ceph image with id 'e40c19cd70e0' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+(unknown) [stderr]
+Traceback (most recent call last):
+  File "/usr/local/bin/cephadm", line 9930, in <module>
+    main()
+  File "/usr/local/bin/cephadm", line 9918, in main
+    r = ctx.func(ctx)
+        ^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2141, in _infer_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2224, in _infer_image
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2099, in _validate_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 6334, in command_shell
+    mounts = get_container_mounts(ctx, ctx.fsid, daemon_type, daemon_id,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 3055, in get_container_mounts
+    if HostFacts(ctx).selinux_enabled:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8971, in selinux_enabled
+    return (self.kernel_security['type'] == 'SELinux') and \
+            ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8954, in kernel_security
+    ret = _fetch_apparmor()
+          ^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8935, in _fetch_apparmor
+    item, mode = line.split(' ')
+    ^^^^^^^^^^
+ValueError: too many values to unpack (expected 2)
+
+(unknown) [exit 1]
+
+[2026-01-18T21:10:04Z] (unknown) $ sudo -S bash -lc 'cephadm shell -- ceph orch daemon add osd auto-openstack-infra-8xwlm:/dev/vda'
+(unknown) [stderr] Inferring fsid 7802e156-f4ae-11f0-8502-002fd39d1872
+(unknown) [stderr] Inferring config /var/lib/ceph/7802e156-f4ae-11f0-8502-002fd39d1872/mon.auto-openstack-infra-8xwlm/config
+(unknown) [stderr] Using ceph image with id 'e40c19cd70e0' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+(unknown) [stderr]
+Traceback (most recent call last):
+  File "/usr/local/bin/cephadm", line 9930, in <module>
+    main()
+  File "/usr/local/bin/cephadm", line 9918, in main
+    r = ctx.func(ctx)
+        ^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2141, in _infer_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2224, in _infer_image
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2099, in _validate_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 6334, in command_shell
+    mounts = get_container_mounts(ctx, ctx.fsid, daemon_type, daemon_id,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 3055, in get_container_mounts
+    if HostFacts(ctx).selinux_enabled:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8971, in selinux_enabled
+    return (self.kernel_security['type'] == 'SELinux') and \
+            ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8954, in kernel_security
+    ret = _fetch_apparmor()
+          ^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8935, in _fetch_apparmor
+    item, mode = line.split(' ')
+    ^^^^^^^^^^
+ValueError: too many values to unpack (expected 2)
+
+(unknown) [exit 1]
+
+[2026-01-18T21:10:17Z] (unknown) $ sudo -S bash -lc 'cephadm shell -- ceph orch daemon add osd auto-openstack-infra-czhth-qb87b:/dev/vda'
+(unknown) [stderr] Inferring fsid 7802e156-f4ae-11f0-8502-002fd39d1872
+(unknown) [stderr] Inferring config /var/lib/ceph/7802e156-f4ae-11f0-8502-002fd39d1872/mon.auto-openstack-infra-8xwlm/config
+(unknown) [stderr] Using ceph image with id 'e40c19cd70e0' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+(unknown) [stderr]
+Traceback (most recent call last):
+  File "/usr/local/bin/cephadm", line 9930, in <module>
+    main()
+  File "/usr/local/bin/cephadm", line 9918, in main
+    r = ctx.func(ctx)
+        ^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2141, in _infer_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2224, in _infer_image
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2099, in _validate_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 6334, in command_shell
+    mounts = get_container_mounts(ctx, ctx.fsid, daemon_type, daemon_id,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 3055, in get_container_mounts
+    if HostFacts(ctx).selinux_enabled:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8971, in selinux_enabled
+    return (self.kernel_security['type'] == 'SELinux') and \
+            ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8954, in kernel_security
+    ret = _fetch_apparmor()
+          ^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8935, in _fetch_apparmor
+    item, mode = line.split(' ')
+    ^^^^^^^^^^
+ValueError: too many values to unpack (expected 2)
+
+(unknown) [exit 1]
+
+[2026-01-18T21:10:30Z] (unknown) $ sudo -S bash -lc 'cephadm shell -- ceph orch daemon add osd auto-openstack-infra-czhth-svkqn:/dev/vda'
+(unknown) [stderr] Inferring fsid 7802e156-f4ae-11f0-8502-002fd39d1872
+(unknown) [stderr] Inferring config /var/lib/ceph/7802e156-f4ae-11f0-8502-002fd39d1872/mon.auto-openstack-infra-8xwlm/config
+(unknown) [stderr] Using ceph image with id 'e40c19cd70e0' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+(unknown) [stderr]
+Traceback (most recent call last):
+  File "/usr/local/bin/cephadm", line 9930, in <module>
+    main()
+  File "/usr/local/bin/cephadm", line 9918, in main
+    r = ctx.func(ctx)
+        ^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2141, in _infer_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2224, in _infer_image
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2099, in _validate_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 6334, in command_shell
+    mounts = get_container_mounts(ctx, ctx.fsid, daemon_type, daemon_id,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 3055, in get_container_mounts
+    if HostFacts(ctx).selinux_enabled:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8971, in selinux_enabled
+    return (self.kernel_security['type'] == 'SELinux') and \
+            ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8954, in kernel_security
+    ret = _fetch_apparmor()
+          ^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8935, in _fetch_apparmor
+    item, mode = line.split(' ')
+    ^^^^^^^^^^
+ValueError: too many values to unpack (expected 2)
+
+(unknown) [exit 1]
+
+[2026-01-18T21:10:43Z] (unknown) $ sudo -S bash -lc 'cephadm shell -- ceph orch daemon add osd auto-openstack-infra-czhth-z4sgh:/dev/vda'
+(unknown) [stderr] Inferring fsid 7802e156-f4ae-11f0-8502-002fd39d1872
+(unknown) [stderr] Inferring config /var/lib/ceph/7802e156-f4ae-11f0-8502-002fd39d1872/mon.auto-openstack-infra-8xwlm/config
+(unknown) [stderr] Using ceph image with id 'e40c19cd70e0' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+(unknown) [stderr]
+Traceback (most recent call last):
+  File "/usr/local/bin/cephadm", line 9930, in <module>
+    main()
+  File "/usr/local/bin/cephadm", line 9918, in main
+    r = ctx.func(ctx)
+        ^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2141, in _infer_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2224, in _infer_image
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2099, in _validate_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 6334, in command_shell
+    mounts = get_container_mounts(ctx, ctx.fsid, daemon_type, daemon_id,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 3055, in get_container_mounts
+    if HostFacts(ctx).selinux_enabled:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8971, in selinux_enabled
+    return (self.kernel_security['type'] == 'SELinux') and \
+            ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8954, in kernel_security
+    ret = _fetch_apparmor()
+          ^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8935, in _fetch_apparmor
+    item, mode = line.split(' ')
+    ^^^^^^^^^^
+ValueError: too many values to unpack (expected 2)
+
+(unknown) [exit 1]
+
+[2026-01-18T21:10:56Z] (unknown) $ sudo -S bash -lc 'cephadm shell -- ceph orch daemon add osd auto-openstack-infra-qgvlx:/dev/vda'
+(unknown) [stderr] Inferring fsid 7802e156-f4ae-11f0-8502-002fd39d1872
+(unknown) [stderr] Inferring config /var/lib/ceph/7802e156-f4ae-11f0-8502-002fd39d1872/mon.auto-openstack-infra-8xwlm/config
+(unknown) [stderr] Using ceph image with id 'e40c19cd70e0' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+(unknown) [stderr]
+Traceback (most recent call last):
+  File "/usr/local/bin/cephadm", line 9930, in <module>
+    main()
+  File "/usr/local/bin/cephadm", line 9918, in main
+    r = ctx.func(ctx)
+        ^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2141, in _infer_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2224, in _infer_image
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2099, in _validate_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 6334, in command_shell
+    mounts = get_container_mounts(ctx, ctx.fsid, daemon_type, daemon_id,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 3055, in get_container_mounts
+    if HostFacts(ctx).selinux_enabled:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8971, in selinux_enabled
+    return (self.kernel_security['type'] == 'SELinux') and \
+            ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8954, in kernel_security
+    ret = _fetch_apparmor()
+          ^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8935, in _fetch_apparmor
+    item, mode = line.split(' ')
+    ^^^^^^^^^^
+ValueError: too many values to unpack (expected 2)
+
+(unknown) [exit 1]
+
+[2026-01-18T21:11:10Z] (unknown) $ sudo -S bash -lc 'cephadm shell -- ceph orch daemon add osd auto-openstack-infra-vvdw4:/dev/vda'
+(unknown) [stderr] Inferring fsid 7802e156-f4ae-11f0-8502-002fd39d1872
+(unknown) [stderr] Inferring config /var/lib/ceph/7802e156-f4ae-11f0-8502-002fd39d1872/mon.auto-openstack-infra-8xwlm/config
+(unknown) [stderr] Using ceph image with id 'e40c19cd70e0' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+(unknown) [stderr]
+Traceback (most recent call last):
+  File "/usr/local/bin/cephadm", line 9930, in <module>
+    main()
+  File "/usr/local/bin/cephadm", line 9918, in main
+    r = ctx.func(ctx)
+        ^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2141, in _infer_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2224, in _infer_image
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2099, in _validate_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 6334, in command_shell
+    mounts = get_container_mounts(ctx, ctx.fsid, daemon_type, daemon_id,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 3055, in get_container_mounts
+    if HostFacts(ctx).selinux_enabled:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8971, in selinux_enabled
+    return (self.kernel_security['type'] == 'SELinux') and \
+            ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8954, in kernel_security
+    ret = _fetch_apparmor()
+          ^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8935, in _fetch_apparmor
+    item, mode = line.split(' ')
+    ^^^^^^^^^^
+ValueError: too many values to unpack (expected 2)
+
+(unknown) [exit 1]
+
+[2026-01-18T21:11:23Z] (unknown) $ sudo -S bash -lc 'cephadm shell -- ceph -s'
+(unknown) [stderr] Inferring fsid 7802e156-f4ae-11f0-8502-002fd39d1872
+(unknown) [stderr] Inferring config /var/lib/ceph/7802e156-f4ae-11f0-8502-002fd39d1872/mon.auto-openstack-infra-8xwlm/config
+(unknown) [stderr] Using ceph image with id 'e40c19cd70e0' and tag 'v17.2.6' created on 2023-10-27 02:15:04 +0000 UTC
+quay.io/ceph/ceph@sha256:e40c19cd70e047d14d70f5ec3cf501da081395a670cd59ca881ff56119660c8f
+(unknown) [stderr]
+Traceback (most recent call last):
+  File "/usr/local/bin/cephadm", line 9930, in <module>
+    main()
+  File "/usr/local/bin/cephadm", line 9918, in main
+    r = ctx.func(ctx)
+        ^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2141, in _infer_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2196, in _infer_config
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2224, in _infer_image
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 2099, in _validate_fsid
+    return func(ctx)
+           ^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 6334, in command_shell
+    mounts = get_container_mounts(ctx, ctx.fsid, daemon_type, daemon_id,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 3055, in get_container_mounts
+    if HostFacts(ctx).selinux_enabled:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8971, in selinux_enabled
+    return (self.kernel_security['type'] == 'SELinux') and \
+            ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8954, in kernel_security
+    ret = _fetch_apparmor()
+          ^^^^^^^^^^^^^^^^^
+  File "/usr/local/bin/cephadm", line 8935, in _fetch_apparmor
+    item, mode = line.split(' ')
+    ^^^^^^^^^^
+ValueError: too many values to unpack (expected 2)
+
+(unknown) [exit 1]

@@ -52,7 +52,7 @@ class InfrastructureManager:
         engine = HelmInfraEngine(
             helm=self.helm,
             ssh=logged_ssh,
-            logger=infra_logger,  # NEW
+            logger=infra_logger,  # new. for logging functionality.
         )
 
         for component in components:
@@ -69,3 +69,12 @@ class InfrastructureManager:
 
         infra_logger.set_stage("infra.complete")
         infra_logger.log_event("infra.manager.success")
+
+
+    def pre_install(self, kubectl):
+        """Run BEFORE Helm install/upgrade"""
+        pass
+
+    def post_install(self, kubectl):
+        """Run AFTER Helm install/upgrade"""
+        pass

@@ -14,8 +14,8 @@ def metal3_default_jinja_vars() -> Dict[str, Any]:
         "PROVISIONING_POOL_RANGE_END": "172.22.0.200",
 
         # IPv4 / IPv6 pools
-        "BARE_METAL_V4_POOL_RANGE_START": "192.168.111.20",
-        "BARE_METAL_V4_POOL_RANGE_END": "192.168.111.40",
+        "BARE_METAL_V4_POOL_RANGE_START": "192.168.0.220",
+        "BARE_METAL_V4_POOL_RANGE_END": "192.168.0.245",
         "BARE_METAL_V6_POOL_RANGE_START": "",
         "BARE_METAL_V6_POOL_RANGE_END": "",
 

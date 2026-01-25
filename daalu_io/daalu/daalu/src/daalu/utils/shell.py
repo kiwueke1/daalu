@@ -5,10 +5,10 @@ from __future__ import annotations
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Sequence
 
 import paramiko
-
+import subprocess
 
 def run_remote_logged(
     *,
@@ -84,3 +84,55 @@ def run_remote_logged(
         f.write(f"({hostname}) [exit {rc}]\n")
 
     return rc, "".join(out_chunks), "".join(err_chunks)
+
+
+def run_logged(
+    cmd: Sequence[str],
+    *,
+    logger,
+    label: str,
+    env: Optional[dict] = None,
+    cwd: Optional[Path] = None,
+    timeout: int = 900,
+) -> None:
+    """
+    Execute a local command with full structured logging.
+
+    - Streams stdout/stderr into RunLogger
+    - Raises RuntimeError on non-zero exit
+    """
+
+    logger.log(f"[{label}] $ {' '.join(cmd)}")
+
+    start = time.time()
+
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=env,
+        cwd=str(cwd) if cwd else None,
+    )
+
+    assert proc.stdout and proc.stderr
+
+    # Stream output live
+    for line in proc.stdout:
+        logger.log(f"[{label}] {line.rstrip()}")
+
+    for line in proc.stderr:
+        logger.log(f"[{label}][stderr] {line.rstrip()}")
+
+    try:
+        rc = proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        raise RuntimeError(f"[{label}] command timed out after {timeout}s")
+
+    elapsed = round(time.time() - start, 2)
+
+    if rc != 0:
+        raise RuntimeError(f"[{label}] failed (rc={rc}) after {elapsed}s")
+
+    logger.log(f"[{label}] completed successfully in {elapsed}s")

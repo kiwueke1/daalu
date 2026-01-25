@@ -1,0 +1,71 @@
+_percona_xtradb_cluster_spec:
+  crVersion: "1.14.0"
+
+  # Secret created by PerconaXtraDBClusterComponent (or pre-existing)
+  secretsName: percona-xtradb
+
+  pxc:
+    # REQUIRED — operator will not reconcile without this
+    image: docker.io/percona/percona-xtradb-cluster:8.0.36-28.1
+
+    size: 3
+    autoRecovery: true
+
+    # allow scheduling on control-plane nodes
+    tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+
+    configuration: |
+      [mysqld]
+      max_connections=8192
+      innodb_buffer_pool_size=4096M
+      max_allowed_packet=16M
+      skip-name-resolve
+      pxc_strict_mode=MASTER
+
+    sidecars:
+      - name: exporter
+        image: quay.io/prometheus/mysqld-exporter:v0.17.0
+        args:
+          - --mysqld.username=monitor
+          - --collect.info_schema.processlist
+        env:
+          - name: MYSQLD_EXPORTER_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: percona-xtradb
+                key: monitor
+        ports:
+          - name: metrics
+            containerPort: 9104
+
+    nodeSelector:
+      openstack-control-plane: enabled
+
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 160Gi
+
+  haproxy:
+    enabled: true
+    size: 3
+
+    # REQUIRED when haproxy.enabled=true
+    image: docker.io/percona/percona-xtradb-cluster-operator:1.14.0-haproxy
+
+    # allow scheduling on control-plane nodes
+    tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+
+    nodeSelector:
+      openstack-control-plane: enabled
+
+    configuration: |
+      global
+        maxconn 8192

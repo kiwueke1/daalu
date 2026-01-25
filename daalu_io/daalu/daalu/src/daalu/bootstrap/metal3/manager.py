@@ -1,3 +1,5 @@
+# src/daalu/bootstrap/metal3/manager.py
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -6,7 +8,7 @@ from typing import Any, Dict, Optional, Sequence
 
 from daalu.execution.runner import CommandRunner
 
-from daalu.bootstrap.metal3.bmh import list_bmhs, extract_bmh_nic_names
+from daalu.bootstrap.metal3.bmh import list_bmhs, extract_bmh_nic_names, get_node_nics_from_cfg
 from daalu.bootstrap.metal3.clusterctl_config import upsert_clusterctl_vars_block
 from daalu.bootstrap.metal3.models import Metal3TemplateGenOptions
 from daalu.bootstrap.metal3.templates import (
@@ -43,8 +45,18 @@ class Metal3TemplateGenerator:
                 f"No BareMetalHosts found in namespace={opts.namespace}"
             )
 
-        bmh0 = bmhs[0].raw
-        bmh_nic_names = extract_bmh_nic_names(bmh0)
+        # Pick the BMH used for control-plane template rendering
+        bmh = bmhs[0]
+        bmh_name = bmh.name
+
+        # Source of truth: cluster.yaml
+        bmh_nic_names = get_node_nics_from_cfg(
+            opts.cfg,
+            bmh_name,
+        )
+
+       #bmh0 = bmhs[0].raw
+        #bmh_nic_names = extract_bmh_nic_names(bmh0)
 
         ssh_pub_key = (
             opts.ssh_public_key_path

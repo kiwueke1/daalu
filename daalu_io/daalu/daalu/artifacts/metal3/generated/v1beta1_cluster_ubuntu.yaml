@@ -27,7 +27,7 @@ metadata:
   namespace: metal3
 spec:
   controlPlaneEndpoint:
-    host: 192.168.111.249
+    host: 192.168.0.249
     port: 6443
   noCloudProvider: true
 ---
@@ -51,7 +51,7 @@ metadata:
   namespace: metal3
 spec:
   clusterName: auto-openstack-infra
-  gateway: 192.168.111.1
+  gateway: 192.168.0.1
   namePrefix: auto-openstack-infra-bmv4
   pools:
   - end: 192.168.111.40

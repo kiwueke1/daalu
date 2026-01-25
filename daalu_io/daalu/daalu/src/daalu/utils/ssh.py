@@ -6,7 +6,7 @@ from daalu.utils.ssh_runner import SSHRunner
 from daalu.bootstrap.node.models import Host
 
 
-def open_ssh(host: Host) -> paramiko.SSHClient:
+def open_ssh_1(host: Host) -> paramiko.SSHClient:
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
@@ -21,7 +21,7 @@ def open_ssh(host: Host) -> paramiko.SSHClient:
 
 
 
-def open_ssh_1(
+def open_ssh(
     host: CephHost,
     *,
     connect_timeout: float = 20.0,

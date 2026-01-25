@@ -8,7 +8,7 @@ metadata:
   namespace: metal3
 spec:
   clusterName: auto-openstack-infra
-  replicas: 3
+  replicas: 2
   selector:
     matchLabels:
       cluster.x-k8s.io/cluster-name: auto-openstack-infra
@@ -73,19 +73,19 @@ spec:
   networkData:
     links:
       ethernets:
-      - id: enp1s0
+      - id: eno1
         macAddress:
-          fromHostInterface: enp1s0
+          fromHostInterface: eno1
         type: phy
-      - id: enp2s0
+      - id: eno2
         macAddress:
-          fromHostInterface: enp2s0
+          fromHostInterface: eno2
         type: phy
     networks:
       ipv4:
       - id: externalv4
         ipAddressFromIPPool: externalv4-pool
-        link: enp2s0
+        link: eno2
         routes:
         - gateway:
             fromIPPool: externalv4-pool
@@ -110,7 +110,7 @@ spec:
             renderer: networkd
             bridges:
               provisioning:
-                interfaces: [enp1s0]
+                interfaces: [eno1]
                 addresses:
                 - {{ ds.meta_data.provisioningIP }}/{{ ds.meta_data.provisioningCIDR }}
         owner: root:root

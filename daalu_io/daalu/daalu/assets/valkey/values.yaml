@@ -1,0 +1,45 @@
+global:
+  security:
+    allowInsecureImages: true
+
+image:
+  registry: docker.io
+  repository: bitnami/valkey
+  #tag: sha256-d82ace47777edf99394ab59fff0dff3ae01f47874ac2202e3b3c725b4f7ecfe5
+  tag: latest
+
+auth:
+  enabled: false
+  sentinel: false
+
+replica:
+  nodeSelector:
+    openstack-control-plane: enabled
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+  podAntiAffinityPreset: hard
+
+sentinel:
+  enabled: true
+  image:
+    registry: docker.io
+    repository: bitnami/valkey-sentinel
+    #tag: sha256-4a6a8125bba38e5bd21ce1435d36e191d0afd51f6bcb1d8fafac34b1e39d4e02
+    tag: latest
+  primarySet: atmosphere
+
+tls:
+  enabled: false
+  existingSecret: valkey-server-certs
+  certFilename: tls.crt
+  certKeyFilename: tls.key
+  certCAFilename: ca.crt
+
+metrics:
+  enabled: true
+  image:
+    registry: docker.io
+    repository: bitnami/redis-exporter
+    tag: latest

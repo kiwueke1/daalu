@@ -52,7 +52,7 @@ class CSIBase:
     # Command runner (Ceph-compatible)
     # ------------------------------------------------------------------
 
-    def _run(
+    def _run_1(
         self,
         *,
         cli: paramiko.SSHClient,
@@ -81,7 +81,9 @@ class CSIBase:
         with open(log_file, "a", encoding="utf-8") as f:
             f.write(f"\n[{start_ts}] ({host}) $ {final}\n")
 
-        stdin, stdout, stderr = cli.exec_command(final)
+        #stdin, stdout, stderr = cli.exec_command(final)
+        rc, out, err = cli.run(final, sudo=False)
+        
 
         out_chunks, err_chunks = [], []
 
@@ -115,6 +117,34 @@ class CSIBase:
             f.write(f"({host}) [exit {rc}]\n")
 
         return rc, "".join(out_chunks), "".join(err_chunks)
+
+    def _run(self, *, cli, cmd: str, hostname: str, env=None, sudo=True):
+        log_file = self._log_file
+        start_ts = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        prefix = ""
+        if env:
+            prefix = " ".join(f"{k}={v}" for k, v in env.items()) + " "
+
+        shell_cmd = f"{prefix}{cmd}"
+        final = f"bash -lc {shell_cmd!r}"
+        if sudo:
+            final = f"sudo -S {final}"
+
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(f"\n[{start_ts}] ({hostname}) $ {final}\n")
+
+        rc, out, err = cli.run(final, sudo=False)
+
+        with open(log_file, "a", encoding="utf-8") as f:
+            if out:
+                f.write(f"({hostname}) [stdout]\n{out}\n")
+            if err:
+                f.write(f"({hostname}) [stderr]\n{err}\n")
+            f.write(f"({hostname}) [exit {rc}]\n")
+
+        return rc, out, err
+
 
     def _shq(self, s: str) -> str:
         return "'" + s.replace("'", "'\\''") + "'"

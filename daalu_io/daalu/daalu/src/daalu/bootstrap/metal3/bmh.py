@@ -46,4 +46,36 @@ def extract_bmh_nic_names(bmh: dict) -> List[str]:
 
 
 
+def get_node_nics_from_cfg(cfg, node_name: str) -> list[str]:
+    """
+    Return NIC names for a node from cluster.yaml (source of truth).
 
+    node_name must match BareMetalHost.metadata.name
+    """
+    metal3 = cfg.cluster_api.metal3
+    if not metal3:
+        raise RuntimeError(
+            "cluster_api.metal3 is not defined in cluster.yaml "
+            "(required when provider=metal3)"
+        )
+
+    nodes = metal3.nodes
+    if not nodes:
+        raise RuntimeError(
+            "cluster_api.metal3.nodes is empty or not defined "
+            "(required for Metal3 deployments)"
+        )
+
+    for node in nodes:
+        if node.name == node_name:
+            if not node.nics:
+                raise RuntimeError(
+                    f"No NICs defined for node '{node_name}' "
+                    "in cluster.yaml"
+                )
+            return list(node.nics)
+
+    raise RuntimeError(
+        f"Node '{node_name}' not found in cluster_api.metal3.nodes "
+        "(must match BareMetalHost name)"
+    )

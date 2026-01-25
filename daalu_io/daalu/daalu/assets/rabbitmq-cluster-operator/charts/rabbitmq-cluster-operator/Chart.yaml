@@ -1,0 +1,35 @@
+annotations:
+  category: Infrastructure
+  images: |
+    - name: rabbitmq-cluster-operator
+      image: adeptiainc/adeptia-connect-rabbitmq-cluster-operator:4.7
+    - name: rabbitmq
+      image: adeptiainc/adeptia-connect-rabbitmq:4.7
+    - name: rmq-default-credential-updater
+      image: adeptiainc/adeptia-connect-rabbitmq-default-credential-updater:4.7
+    - name: rmq-messaging-topology-operator
+      image: adeptiainc/adeptia-connect-rabbitmq-messaging-topology-operator:4.7
+  licenses: Apache-2.0
+apiVersion: v2
+appVersion: 2.12.1
+dependencies:
+- name: common
+  repository: ""
+  version: 2.x.x
+description: The RabbitMQ Cluster Kubernetes Operator automates provisioning, management,
+  and operations of RabbitMQ clusters running on Kubernetes.
+home: https://adeptia.com
+keywords:
+- rabbitmq
+- operator
+- infrastructure
+- message queue
+- AMQP
+kubeVersion: '>= 1.19.0-0'
+maintainers:
+- name: Broadcom, Inc. All Rights Reserved.
+  url: https://github.com/adeptia/rabbitmq-cluster-operator-helm
+name: rabbitmq-cluster-operator
+sources:
+- https://github.com/adeptia/rabbitmq-cluster-operator-helm
+version: "4.7"

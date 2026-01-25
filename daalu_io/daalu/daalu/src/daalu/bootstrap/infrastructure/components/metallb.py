@@ -1,11 +1,15 @@
-# src/daalu/bootstrap/infrastructure/components/metallb.py
-
 from pathlib import Path
 from daalu.bootstrap.infrastructure.engine.component import InfraComponent
 
 
 class MetalLBComponent(InfraComponent):
-    def __init__(self, metallb_config_path: Path, kubeconfig: str):
+    def __init__(
+        self,
+        *,
+        values_path: Path,
+        metallb_config_path: Path,
+        kubeconfig: str,
+    ):
         super().__init__(
             name="metallb",
             repo_name="metallb",
@@ -18,28 +22,22 @@ class MetalLBComponent(InfraComponent):
             remote_chart_dir=Path("/usr/local/src"),
             kubeconfig=kubeconfig,
         )
+
+        self.values_path = values_path
         self.metallb_config_path = metallb_config_path
+        self.wait_for_pods = True
         self.min_running_pods = 2
 
+    # ------------------------------------------------------------------
+    # Helm values (from assets)
+    # ------------------------------------------------------------------
 
     def values(self) -> dict:
-        return {
-            "controller": {
-                "logLevel": "info",
-            },
-            "speaker": {
-                "tolerations": [
-                    {
-                        "key": "node-role.kubernetes.io/control-plane",
-                        "operator": "Exists",
-                        "effect": "NoSchedule",
-                    }
-                ]
-            },
-        }
+        return self.load_values_file(self.values_path)
 
-    def post_install_1(self, kubectl) -> None:
-        kubectl.apply_file(str(self.metallb_config_path))
+    # ------------------------------------------------------------------
+    # Post-install: apply address pool config
+    # ------------------------------------------------------------------
 
     def post_install(self, kubectl) -> None:
         content = self.metallb_config_path.read_text()

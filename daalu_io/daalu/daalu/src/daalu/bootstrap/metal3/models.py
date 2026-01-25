@@ -25,6 +25,7 @@ class Metal3TemplateGenOptions:
     ssh_public_key_path: Path
     mgmt_host: str
     mgmt_user: str
+    cfg: Any
 
     control_plane_vip: str
     pod_cidr: str

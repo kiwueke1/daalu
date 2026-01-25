@@ -6,7 +6,7 @@ cluster_api:
   namespace: default
   pod_cidr: 10.201.0.0/16
   pod_subnet: 10.201.0.0/16
-  control_plane_vip: 192.168.111.249
+  control_plane_vip: 192.168.0.249
   allowed_nodes: [pve-2, pve-3]
   dns_servers: [8.8.8.8, 8.8.4.4]
   ip_range: 192.168.0.170-192.168.0.180
@@ -20,10 +20,10 @@ cluster_api:
   kubernetes_version: v1.35.0
   KUBERNETES_VERSION: v1.35.0
   kube_vip_image: ghcr.io/kube-vip/kube-vip:v0.7.1
-  control_plane_replicas: 3
-  control_plane_count: 3
-  worker_replicas: 3
-  worker_count: 3
+  control_plane_replicas: 1
+  control_plane_count: 1
+  worker_replicas: 2
+  worker_count: 2
   control_plane_disk_gb: 300
   worker_disk_gb: 300
   control_plane_memory_mib: 62000
@@ -50,6 +50,25 @@ cluster_api:
   capm3_version: v1beta1
   metal3_templates_path: assets/metal3/templates
   metal3_namespace: metal3
+  metal3:
+    nodes:
+      - name: cp01
+        role: control-plane
+        nics:
+          - eno1
+          - eno2
+
+      - name: cp02
+        role: worker
+        nics:
+          - eno1
+          - eno2
+
+      - name: cp03
+        role: worker
+        nics:
+          - eno1
+          - eno2
   image_username: kez
   image_password_hash: "$6$XXyZJ8BwjBrvzVOo$O7OoAQDRngVwNbeG7CjwUe.zUxktYPcLZ.JWUerfkc58jty6c86U9s2WqTuAMOSECK/ZOKnq8rzwMXlspKkrw."
   service_cidr: 10.96.0.0/12

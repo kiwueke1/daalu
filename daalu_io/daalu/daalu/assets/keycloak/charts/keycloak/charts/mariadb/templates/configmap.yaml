@@ -1,0 +1,16 @@
+{{- if and .Values.config.customConfiguration (not .Values.config.existingConfigMap) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mariadb.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mariadb.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  my.cnf: |
+    {{ .Values.config.customConfiguration | nindent 4 }}
+{{- end }}

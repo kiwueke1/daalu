@@ -1,0 +1,16 @@
+# src/daalu/bootstrap/infrastructure/assets/istio/istiod-values.yaml
+
+global:
+  istioNamespace: istio-system
+
+pilot:
+  autoscaleEnabled: true
+  autoscaleMin: 1
+  autoscaleMax: 3
+
+meshConfig:
+  accessLogFile: /dev/stdout
+  enableTracing: true
+
+telemetry:
+  enabled: true

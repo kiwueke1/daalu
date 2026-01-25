@@ -1,3 +1,5 @@
+# src/daalu/BUILD
+
 load("@aspect_rules_py//py:defs.bzl", "py_library")
 
 # gazelle:resolve py daalu //src/daalu:daalu
@@ -7,7 +9,14 @@ load("@aspect_rules_py//py:defs.bzl", "py_library")
 
 py_library(
     name = "daalu",
-    srcs = glob(["**/*.py"]),        # automatically include all Python files
+    #srcs = glob(["**/*.py"]),        # automatically include all Python files
+    srcs = glob(
+        ["**/*.py"],
+        exclude = [
+            "temporal/**",
+            #"cli/**",
+        ],
+    ),    
     imports = [
         "..",
         "src",           # allows Bazel to add /src to PYTHONPATH
@@ -20,6 +29,7 @@ py_library(
         "@pip//pyyaml",
         "@pip//paramiko",
         "@pip//jinja2",
+        "@pip//pymysql:pkg",
     ],
 )
 
@@ -27,13 +37,16 @@ load("@aspect_rules_py//py:defs.bzl", "py_binary")
 
 py_binary(
     name = "cli_app",
-    srcs = ["cli/app.py"],
-    deps = [
-        ":daalu",           # main library in src/daalu
-        "@pip//typer",
-        "@pip//pydantic",
-        "@pip//pyyaml",
-        "@pip//jinja2",
+    srcs = [
+        "cli/app.py",
     ],
-    data = ["//:cluster-defs"]
+    deps = [
+        ":daalu",   # this is the full daalu package
+        "@pip//typer:pkg",
+        "@pip//pydantic:pkg",
+        "@pip//pyyaml:pkg",
+        "@pip//jinja2:pkg",
+        "//src/daalu/temporal:temporal",
+    ],
 )
+

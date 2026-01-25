@@ -1,0 +1,16 @@
+controller:
+  serviceType: LoadBalancer
+  installPlugins:
+    - kubernetes:latest
+    - workflow-aggregator:latest
+    - git:latest
+    - configuration-as-code:latest
+
+persistence:
+  enabled: true
+  storageClass: general
+  size: 10Gi
+
+serviceAccount:
+  create: false
+  name: jenkins
