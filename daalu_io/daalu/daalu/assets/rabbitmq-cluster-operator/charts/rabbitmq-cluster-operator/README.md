@@ -1,126 +1,77 @@
-<!--- app-name: RabbitMQ Cluster Operator -->
+<p align="center">
+    <a href="https://artifacthub.io/packages/search?repo=cloudpirates-rabbitmq"><img src="https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/cloudpirates-rabbitmq" /></a>
+</p>
 
-# Package for RabbitMQ Cluster Operator
+# RabbitMQ Cluster Operator
 
-The RabbitMQ Cluster Kubernetes Operator automates provisioning, management, and operations of RabbitMQ clusters running on Kubernetes.
-
-[Overview of RabbitMQ Cluster Operator](https://github.com/rabbitmq/cluster-operator)
-
-
-## TL;DR
-
-```console
-helm repo add rabbitmq-cluster-operator https://adeptia.github.io/rabbitmq-cluster-operator-helm-package/charts/
-
-helm install my-rabbitmq-cluster-operator rabbitmq-cluster-operator/rabbitmq-cluster-operator --version 4.7
-```
-
-## Introduction
-
-This chart bootstraps a [RabbitMQ Cluster Operator](https://www.rabbitmq.com/kubernetes/operator/operator-overview.html) Deployment in a [Kubernetes](https://kubernetes.io) cluster using the [Helm](https://helm.sh) package manager.
-
-RabbitMQ charts can be used with [Kubeapps](https://kubeapps.dev/) for deployment and management of Helm Charts in clusters.
+A Helm chart for the RabbitMQ Cluster Operator. This operator manages RabbitMQ clusters on Kubernetes, providing automated provisioning, scaling, and management of RabbitMQ instances.
 
 ## Prerequisites
 
-- Kubernetes 1.23+
-- Helm 3.8.0+
-- PV provisioner support in the underlying infrastructure
+- Kubernetes 1.19+
+- Helm 3.2.0+
+- PV provisioner support in the underlying infrastructure (if persistence is enabled)
 
 ## Installing the Chart
 
-To install the chart with the release name `my-release`:
+To install the chart with the release name `my-rabbitmq-operator`:
 
-```console
-helm install my-release oci://REGISTRY_NAME/REPOSITORY_NAME/rabbitmq-cluster-operator
+```bash
+$ helm install my-rabbitmq-operator oci://registry-1.docker.io/cloudpirates/rabbitmq-cluster-operator
 ```
 
-> Note: You need to substitute the placeholders `REGISTRY_NAME` and `REPOSITORY_NAME` with a reference to your Helm chart registry and repository. For example, in the case of Adeptia, you need to use `REGISTRY_NAME=registry-1.docker.io` and `REPOSITORY_NAME=adeptiacharts`.
+Or install directly from the local chart:
 
-The command deploy the RabbitMQ Cluster Kubernetes Operator on the Kubernetes cluster in the default configuration. The [Parameters](#parameters) section lists the parameters that can be configured during installation.
+```bash
+$ helm install my-rabbitmq-operator ./charts/rabbitmq-cluster-operator
+```
 
-> **Tip**: List all releases using `helm list`
+The command deploys the RabbitMQ Cluster Operator on the Kubernetes cluster in the default configuration. The [Configuration](#configuration) section lists the parameters that can be configured during installation.
 
 ## Uninstalling the Chart
 
-To uninstall/delete the `my-release` deployment:
+To uninstall/delete the `my-rabbitmq-operator` deployment:
 
-```console
-helm delete my-release
+```bash
+$ helm uninstall my-rabbitmq-operator
 ```
 
 The command removes all the Kubernetes components associated with the chart and deletes the release.
 
-## RabbitMQ Operator chart
+## Security & Signature Verification
 
-The *rabbitmq-operator* chart deploys a RabbitMQ Operator installation using a Kubernetes Deployment.  The figure below shows the RabbitMQ operator deployment after executing *helm install*:
+This Helm chart is cryptographically signed with Cosign to ensure authenticity and prevent tampering.
 
-```text
-+--------------------+
-|                    |      +---------------+
-|  RabbitMQ Operator |      |               |
-|                    |      |     RBAC      |
-|     Deployment     |      | Privileges    |
-+-------+------------+      +-------+-------+
-        ^                           |
-        |   +-----------------+     |
-        +---+ Service Account +<----+
-            +-----------------+
-```
-
-The operator will extend the Kubernetes API with the following object: *RabbitmqCluster*. From that moment, the user will be able to deploy objects of these kinds and the previously deployed Operator will take care of deploying all the required StatefulSets, ConfigMaps and Services for running a RabbitMQ instance. Its lifecycle is managed using *kubectl* on the RabbitmqCluster objects. The following figure shows the deployed objects after deploying a *RabbitmqCluster* object using *kubectl*:
-
-```text
-  +--------------------+
-  |                    |      +---------------+
-  |  RabbitMQ Operator |      |               |
-  |                    |      |     RBAC      |
-  |     Deployment     |      | Privileges    |
-  +-------+------------+      +-------+-------+
-  |     ^                           |
-  |     |   +-----------------+     |
-  |     +---+ Service Account +<----+
-  |         +-----------------+
-  |
-  |
-  |
-  |
-  |    -------------------------------------------------------------------------
-  |    |                                                                       |
-  |    |                        +--------------+             +-----+           |
-  |    |                        |              |             |     |           |
-  |--->|     Service            |   RabbitMQ   +<------------+ PVC |           |
-       |    <-------------------+              |             |     |           |
-       |                        |  StatefulSet |             +-----+           |
-       |                        |              |                               |
-       |                        +-----------+--+                               |
-       |                                    ^                +------------+    |
-       |                                    |                |            |    |
-       |                                    +----------------+ Configmaps |    |
-       |                                                     | Secrets    |    |
-       |                                                     +------------+    |
-       |                                                                       |
-       |                                                                       |
-       -------------------------------------------------------------------------
+**Public Key:**
 
 ```
+-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE7BgqFgKdPtHdXz6OfYBklYwJgGWQ
+mZzYz8qJ9r6QhF3NxK8rD2oG7Bk6nHJz7qWXhQoU2JvJdI3Zx9HGpLfKvw==
+-----END PUBLIC KEY-----
+```
 
-As the operator automatically deploys RabbitMQ installations, the RabbitMQ Operator pods will require a ServiceAccount with privileges to create and destroy multiple Kubernetes objects. This may be problematic for Kubernetes clusters with strict role-based access policies.
+To verify the helm chart before installation, copy the public key to the file `cosign.pub` and run cosign:
 
-## Parameters
+```bash
+cosign verify --key cosign.pub registry-1.docker.io/cloudpirates/rabbitmq-cluster-operator:<version>
+```
 
-### Global parameters
+## Configuration
 
-| Name                                                  | Description                                                                                                                                                                                                                                                                                                                                                         | Value   |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
-| `global.imageRegistry`                                | Global Docker image registry                                                                                                                                                                                                                                                                                                                                        | `""`    |
-| `global.imagePullSecrets`                             | Global Docker registry secret names as an array                                                                                                                                                                                                                                                                                                                     | `[]`    |
-| `global.defaultStorageClass`                          | Global default StorageClass for Persistent Volume(s)                                                                                                                                                                                                                                                                                                                | `""`    |
-| `global.storageClass`                                 | DEPRECATED: use global.defaultStorageClass instead                                                                                                                                                                                                                                                                                                                  | `""`    |
-| `global.security.allowInsecureImages`                 | Allows skipping image verification                                                                                                                                                                                                                                                                                                                                  | `false` |
-| `global.compatibility.openshift.adaptSecurityContext` | Adapt the securityContext sections of the deployment to make them compatible with Openshift restricted-v2 SCC: remove runAsUser, runAsGroup and fsGroup and let the platform use their allowed default IDs. Possible values: auto (apply if the detected running cluster is Openshift), force (perform the adaptation always), disabled (do not perform adaptation) | `auto`  |
+The following table lists the configurable values of the RabbitMQ chart and their defaults.
 
-### Common parameters
+### Global Configuration
+
+| Name                                                  | Description                                                                                                                                                                                                                                                                                                                                                         | Value  |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| `global.imageRegistry`                                | Global Docker image registry                                                                                                                                                                                                                                                                                                                                        | `""`   |
+| `global.imagePullSecrets`                             | Global Docker registry secret names as an array                                                                                                                                                                                                                                                                                                                     | `[]`   |
+| `global.defaultStorageClass`                          | Global default StorageClass for Persistent Volume(s)                                                                                                                                                                                                                                                                                                                | `""`   |
+| `global.storageClass`                                 | DEPRECATED: use global.defaultStorageClass instead                                                                                                                                                                                                                                                                                                                  | `""`   |
+| `global.compatibility.openshift.adaptSecurityContext` | Adapt the securityContext sections of the deployment to make them compatible with Openshift restricted-v2 SCC: remove runAsUser, runAsGroup and fsGroup and let the platform use their allowed default IDs. Possible values: auto (apply if the detected running cluster is Openshift), force (perform the adaptation always), disabled (do not perform adaptation) | `auto` |
+
+### Common Configuration
 
 | Name                     | Description                                          | Value           |
 | ------------------------ | ---------------------------------------------------- | --------------- |
@@ -133,7 +84,7 @@ As the operator automatically deploys RabbitMQ installations, the RabbitMQ Opera
 | `extraDeploy`            | Array of extra objects to deploy with the release    | `[]`            |
 | `diagnosticMode.enabled` | Enable diagnostic mode (all probes will be disabled) | `false`         |
 
-### RabbitMQ Cluster Operator Parameters
+### RabbitMQ Cluster Operator Configuration
 
 | Name                                                                | Description                                                                                                                                                                                                                                       | Value                                            |
 | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
@@ -178,7 +129,6 @@ As the operator automatically deploys RabbitMQ installations, the RabbitMQ Opera
 | `clusterOperator.customLivenessProbe`                               | Custom livenessProbe that overrides the default one                                                                                                                                                                                               | `{}`                                             |
 | `clusterOperator.customReadinessProbe`                              | Custom readinessProbe that overrides the default one                                                                                                                                                                                              | `{}`                                             |
 | `clusterOperator.customStartupProbe`                                | Custom startupProbe that overrides the default one                                                                                                                                                                                                | `{}`                                             |
-| `clusterOperator.resourcesPreset`                                   | Set container resources according to one common preset (allowed values: none, nano, micro, small, medium, large, xlarge, 2xlarge). This is ignored if clusterOperator.resources is set (clusterOperator.resources is recommended for production). | `nano`                                           |
 | `clusterOperator.resources`                                         | Set container requests and limits for different resources like CPU or memory (essential for production workloads)                                                                                                                                 | `{}`                                             |
 | `clusterOperator.pdb.create`                                        | Enable a Pod Disruption Budget creation                                                                                                                                                                                                           | `true`                                           |
 | `clusterOperator.pdb.minAvailable`                                  | Minimum number/percentage of pods that should remain scheduled                                                                                                                                                                                    | `""`                                             |
@@ -204,11 +154,6 @@ As the operator automatically deploys RabbitMQ installations, the RabbitMQ Opera
 | `clusterOperator.hostAliases`                                       | RabbitMQ Cluster Operator pods host aliases                                                                                                                                                                                                       | `[]`                                             |
 | `clusterOperator.podLabels`                                         | Extra labels for RabbitMQ Cluster Operator pods                                                                                                                                                                                                   | `{}`                                             |
 | `clusterOperator.podAnnotations`                                    | Annotations for RabbitMQ Cluster Operator pods                                                                                                                                                                                                    | `{}`                                             |
-| `clusterOperator.podAffinityPreset`                                 | Pod affinity preset. Ignored if `affinity` is set. Allowed values: `soft` or `hard`                                                                                                                                                               | `""`                                             |
-| `clusterOperator.podAntiAffinityPreset`                             | Pod anti-affinity preset. Ignored if `affinity` is set. Allowed values: `soft` or `hard`                                                                                                                                                          | `soft`                                           |
-| `clusterOperator.nodeAffinityPreset.type`                           | Node affinity preset type. Ignored if `affinity` is set. Allowed values: `soft` or `hard`                                                                                                                                                         | `""`                                             |
-| `clusterOperator.nodeAffinityPreset.key`                            | Node label key to match. Ignored if `affinity` is set                                                                                                                                                                                             | `""`                                             |
-| `clusterOperator.nodeAffinityPreset.values`                         | Node label values to match. Ignored if `affinity` is set                                                                                                                                                                                          | `[]`                                             |
 | `clusterOperator.affinity`                                          | Affinity for RabbitMQ Cluster Operator pods assignment                                                                                                                                                                                            | `{}`                                             |
 | `clusterOperator.nodeSelector`                                      | Node labels for RabbitMQ Cluster Operator pods assignment                                                                                                                                                                                         | `{}`                                             |
 | `clusterOperator.tolerations`                                       | Tolerations for RabbitMQ Cluster Operator pods assignment                                                                                                                                                                                         | `[]`                                             |
@@ -292,7 +237,7 @@ As the operator automatically deploys RabbitMQ installations, the RabbitMQ Opera
 | `msgTopologyOperator.image.pullSecrets`                                 | RabbitMQ Messaging Topology Operator image pull secrets                                                                                                                                                                                                   | `[]`                                              |
 | `msgTopologyOperator.revisionHistoryLimit`                              | sets number of replicaset to keep in k8s                                                                                                                                                                                                                  | `10`                                              |
 | `msgTopologyOperator.watchAllNamespaces`                                | Watch for resources in all namespaces                                                                                                                                                                                                                     | `true`                                            |
-| `msgTopologyOperator.watchNamespaces`                                   | Watch for resources in the given namespaces   ## @param clusterOperator.watchNamespaces [array] Watch for resources in the given namespaces (ignored if watchAllNamespaces=true)                                                                          | `[]`                                              |
+| `msgTopologyOperator.watchNamespaces`                                   | Watch for resources in the given namespaces ## @param clusterOperator.watchNamespaces [array] Watch for resources in the given namespaces (ignored if watchAllNamespaces=true)                                                                            | `[]`                                              |
 | `msgTopologyOperator.replicaCount`                                      | Number of RabbitMQ Messaging Topology Operator replicas to deploy                                                                                                                                                                                         | `1`                                               |
 | `msgTopologyOperator.topologySpreadConstraints`                         | Topology Spread Constraints for pod assignment                                                                                                                                                                                                            | `[]`                                              |
 | `msgTopologyOperator.schedulerName`                                     | Alternative scheduler                                                                                                                                                                                                                                     | `""`                                              |
@@ -323,7 +268,6 @@ As the operator automatically deploys RabbitMQ installations, the RabbitMQ Opera
 | `msgTopologyOperator.skipCreateAdmissionWebhookConfig`                  | skip creation of ValidationWebhookConfiguration                                                                                                                                                                                                           | `false`                                           |
 | `msgTopologyOperator.existingWebhookCertSecret`                         | name of a secret containing the certificates (use it to avoid certManager creating one)                                                                                                                                                                   | `""`                                              |
 | `msgTopologyOperator.existingWebhookCertCABundle`                       | PEM-encoded CA Bundle of the existing secret provided in existingWebhookCertSecret (only if useCertManager=false)                                                                                                                                         | `""`                                              |
-| `msgTopologyOperator.resourcesPreset`                                   | Set container resources according to one common preset (allowed values: none, nano, micro, small, medium, large, xlarge, 2xlarge). This is ignored if msgTopologyOperator.resources is set (msgTopologyOperator.resources is recommended for production). | `nano`                                            |
 | `msgTopologyOperator.resources`                                         | Set container requests and limits for different resources like CPU or memory (essential for production workloads)                                                                                                                                         | `{}`                                              |
 | `msgTopologyOperator.pdb.create`                                        | Enable a Pod Disruption Budget creation                                                                                                                                                                                                                   | `true`                                            |
 | `msgTopologyOperator.pdb.minAvailable`                                  | Minimum number/percentage of pods that should remain scheduled                                                                                                                                                                                            | `""`                                              |
@@ -350,11 +294,6 @@ As the operator automatically deploys RabbitMQ installations, the RabbitMQ Opera
 | `msgTopologyOperator.hostAliases`                                       | RabbitMQ Messaging Topology Operator pods host aliases                                                                                                                                                                                                    | `[]`                                              |
 | `msgTopologyOperator.podLabels`                                         | Extra labels for RabbitMQ Messaging Topology Operator pods                                                                                                                                                                                                | `{}`                                              |
 | `msgTopologyOperator.podAnnotations`                                    | Annotations for RabbitMQ Messaging Topology Operator pods                                                                                                                                                                                                 | `{}`                                              |
-| `msgTopologyOperator.podAffinityPreset`                                 | Pod affinity preset. Ignored if `affinity` is set. Allowed values: `soft` or `hard`                                                                                                                                                                       | `""`                                              |
-| `msgTopologyOperator.podAntiAffinityPreset`                             | Pod anti-affinity preset. Ignored if `affinity` is set. Allowed values: `soft` or `hard`                                                                                                                                                                  | `soft`                                            |
-| `msgTopologyOperator.nodeAffinityPreset.type`                           | Node affinity preset type. Ignored if `affinity` is set. Allowed values: `soft` or `hard`                                                                                                                                                                 | `""`                                              |
-| `msgTopologyOperator.nodeAffinityPreset.key`                            | Node label key to match. Ignored if `affinity` is set                                                                                                                                                                                                     | `""`                                              |
-| `msgTopologyOperator.nodeAffinityPreset.values`                         | Node label values to match. Ignored if `affinity` is set                                                                                                                                                                                                  | `[]`                                              |
 | `msgTopologyOperator.affinity`                                          | Affinity for RabbitMQ Messaging Topology Operator pods assignment                                                                                                                                                                                         | `{}`                                              |
 | `msgTopologyOperator.nodeSelector`                                      | Node labels for RabbitMQ Messaging Topology Operator pods assignment                                                                                                                                                                                      | `{}`                                              |
 | `msgTopologyOperator.tolerations`                                       | Tolerations for RabbitMQ Messaging Topology Operator pods assignment                                                                                                                                                                                      | `[]`                                              |
@@ -396,7 +335,7 @@ As the operator automatically deploys RabbitMQ installations, the RabbitMQ Opera
 | `msgTopologyOperator.serviceAccount.annotations`                        | Add annotations                                                                                                                                                                                                                                           | `{}`                                              |
 | `msgTopologyOperator.serviceAccount.automountServiceAccountToken`       | Automount API credentials for a service account.                                                                                                                                                                                                          | `false`                                           |
 
-### RabbitMQ Messaging Topology Operator parameters
+### RabbitMQ Messaging Topology Operator Configuration
 
 | Name                                                           | Description                                                                        | Value                    |
 | -------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ------------------------ |
@@ -432,33 +371,3 @@ As the operator automatically deploys RabbitMQ installations, the RabbitMQ Opera
 | `msgTopologyOperator.metrics.podMonitor.additionalLabels`      | Additional labels that can be used so PodMonitors will be discovered by Prometheus | `{}`                     |
 | `msgTopologyOperator.metrics.podMonitor.relabelings`           | Specify general relabeling                                                         | `[]`                     |
 | `msgTopologyOperator.metrics.podMonitor.metricRelabelings`     | Specify additional relabeling of metrics                                           | `[]`                     |
-
-### cert-manager parameters
-
-| Name             | Description                                                       | Value   |
-| ---------------- | ----------------------------------------------------------------- | ------- |
-| `useCertManager` | Deploy cert-manager objects (Issuer and Certificate) for webhooks | `false` |
-
-Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`. For example,
-
-```console
-helm install my-release \
-  --set livenessProbe.enabled=false \
-    oci://REGISTRY_NAME/REPOSITORY_NAME/rabbitmq-cluster-operator
-```
-
-## License
-
-Copyright &copy; 2025 Broadcom. The term "Broadcom" refers to Broadcom Inc. and/or its subsidiaries.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-<http://www.apache.org/licenses/LICENSE-2.0>
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.

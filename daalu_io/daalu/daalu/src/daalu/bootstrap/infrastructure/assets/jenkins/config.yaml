@@ -1,5 +1,0 @@
-argocd:
-  app:
-    name: jenkins
-    namespace: argocd
-    manifest_url: https://raw.githubusercontent.com/kiwueke1/argocd-infrastructure-app/main/apps/jenkins/jenkins.yaml

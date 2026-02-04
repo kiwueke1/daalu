@@ -42,6 +42,8 @@ class InfraComponent(ABC):
     # Optional hooks
     wait_for_pods: bool = True
     min_running_pods: int = 1
+    enable_argocd: bool = False
+
 
     # ------------------------
     # Hooks
@@ -87,7 +89,10 @@ class InfraComponent(ABC):
         """
         Helm values for Valkey.
         """
-        return self._values
+        if self._values:
+            return self._values
+        else:
+            return {}
 
 
     def _onboard_to_argocd(self, kubectl) -> None:
@@ -140,3 +145,7 @@ class InfraComponent(ABC):
         """
         if self.enable_argocd:
             self._onboard_to_argocd(kubectl)
+
+    def pre_install(self, kubectl):
+        """Optional hook. Default: do nothing."""
+        pass

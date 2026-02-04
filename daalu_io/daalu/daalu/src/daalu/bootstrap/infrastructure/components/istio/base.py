@@ -1,7 +1,7 @@
 # src/daalu/bootstrap/infrastructure/components/istio/base.py
 
 from pathlib import Path
-from daalu.bootstrap.infrastructure.engine.component import InfraComponent
+from daalu.bootstrap.engine.component import InfraComponent
 
 
 class IstioBaseComponent(InfraComponent):
@@ -19,10 +19,10 @@ class IstioBaseComponent(InfraComponent):
             kubeconfig=kubeconfig,
             uses_helm=True,          # explicit
         )
-
         self.assets_dir = assets_dir
         self.min_running_pods = 0  # CRDs only
         self.enable_argocd = False
+        self._values: Dict = {}
 
     def values_file(self) -> Path:
         return self.assets_dir / "base-values.yaml"

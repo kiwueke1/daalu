@@ -1,22 +1,14 @@
-{{- /*
-Copyright Broadcom, Inc. All Rights Reserved.
-SPDX-License-Identifier: APACHE-2.0
-*/}}
-
 {{- if .Values.msgTopologyOperator.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
-  {{- $versionLabel := dict "app.kubernetes.io/version" ( include "common.images.version" ( dict "imageRoot" .Values.msgTopologyOperator.image "chart" .Chart ) ) }}
-  {{- $labels := include "common.tplvalues.merge" ( dict "values" ( list .Values.commonLabels $versionLabel ) "context" . ) }}
-  labels: {{- include "common.labels.standard" ( dict "customLabels" $labels "context" $ ) | nindent 4 }}
-    app.kubernetes.io/component: messaging-topology-operator
-    app.kubernetes.io/part-of: rabbitmq
+  labels:
+    {{- include "rmqmto.labels" . | nindent 4 }}
   name: {{ template "rmqco.msgTopologyOperator.webhook.fullname" . }}
-  namespace: {{ include "common.names.namespace" . | quote }}
+  namespace: {{ include "cloudpirates.namespace" . }}
   {{- if or .Values.commonAnnotations .Values.msgTopologyOperator.service.annotations }}
-  {{- $annotations := include "common.tplvalues.merge" ( dict "values" ( list .Values.msgTopologyOperator.service.annotations .Values.commonAnnotations ) "context" . ) }}
-  annotations: {{- include "common.tplvalues.render" ( dict "value" $annotations "context" $) | nindent 4 }}
+  {{- $annotations := include "cloudpirates.tplvalues.merge" ( dict "values" ( list .Values.msgTopologyOperator.service.annotations .Values.commonAnnotations ) "context" . ) }}
+  annotations: {{- include "cloudpirates.tplvalues.render" ( dict "value" $annotations "context" $) | nindent 4 }}
   {{- end }}
 spec:
   type: {{ .Values.msgTopologyOperator.service.type }}
@@ -36,7 +28,7 @@ spec:
   sessionAffinity: {{ .Values.msgTopologyOperator.service.sessionAffinity }}
   {{- end }}
   {{- if .Values.msgTopologyOperator.service.sessionAffinityConfig }}
-  sessionAffinityConfig: {{- include "common.tplvalues.render" (dict "value" .Values.msgTopologyOperator.service.sessionAffinityConfig "context" $) | nindent 4 }}
+  sessionAffinityConfig: {{- include "cloudpirates.tplvalues.render" (dict "value" .Values.msgTopologyOperator.service.sessionAffinityConfig "context" $) | nindent 4 }}
   {{- end }}
   ports:
     - name: https
@@ -49,9 +41,9 @@ spec:
       nodePort: null
       {{- end }}
     {{- if .Values.msgTopologyOperator.service.extraPorts }}
-    {{- include "common.tplvalues.render" (dict "value" .Values.msgTopologyOperator.service.extraPorts "context" $) | nindent 4 }}
+    {{- include "cloudpirates.tplvalues.render" (dict "value" .Values.msgTopologyOperator.service.extraPorts "context" $) | nindent 4 }}
     {{- end }}
-  {{- $podLabels := include "common.tplvalues.merge" ( dict "values" ( list .Values.msgTopologyOperator.podLabels .Values.commonLabels ) "context" . ) }}
-  selector: {{- include "common.labels.matchLabels" ( dict "customLabels" $podLabels "context" $ ) | nindent 4 }}
+  selector:
+    {{- include "rmqco.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: messaging-topology-operator
 {{- end }}

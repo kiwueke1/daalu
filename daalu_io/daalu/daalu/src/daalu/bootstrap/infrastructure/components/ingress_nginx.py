@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from daalu.bootstrap.infrastructure.engine.component import InfraComponent
+from daalu.bootstrap.engine.component import InfraComponent
 #from daalu.bootstrap.infrastructure.utils.github import download_raw_github_file
 
 
@@ -41,14 +41,17 @@ class IngressNginxComponent(InfraComponent):
         self.github_token = github_token
         self.wait_for_pods = True
 
+        self._values: Dict = {}
+
     # ------------------------------------------------------------------
     # Helm chart upload (Ansible dependency replacement)
     # ------------------------------------------------------------------
-    def pre_install(self, ssh) -> None:
-        ssh.put_dir(
-            local_path=self.local_chart_dir / "ingress-nginx",
-            remote_path=self.remote_chart_dir / "ingress-nginx",
-        )
+    #def pre_install(self, ssh) -> None:
+    #    ssh.put_dir(
+    #        local_path=self.local_chart_dir / "ingress-nginx",
+    #        remote_path=self.remote_chart_dir / "ingress-nginx",
+    #        release_name=self.release_name,
+    #    )
 
     # ------------------------------------------------------------------
     def values_file(self) -> Path:

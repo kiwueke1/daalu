@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import List
 import yaml
 
-from daalu.bootstrap.infrastructure.engine.component import InfraComponent
+from daalu.bootstrap.engine.component import InfraComponent
 from daalu.bootstrap.infrastructure.utils.assets import infra_asset_path
 
 from .base import IstioBaseComponent

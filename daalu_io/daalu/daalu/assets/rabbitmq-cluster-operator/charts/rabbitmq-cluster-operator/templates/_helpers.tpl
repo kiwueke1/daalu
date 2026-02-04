@@ -1,16 +1,61 @@
 {{/*
-Copyright Broadcom, Inc. All Rights Reserved.
-SPDX-License-Identifier: APACHE-2.0
-*/}}
-
-{{/*
 Return the proper RabbitMQ Cluster Operator fullname
 Note: We use the regular common function as the chart name already contains the
 the rabbitmq-cluster-operator name.
 */}}
 {{- define "rmqco.clusterOperator.fullname" -}}
-{{- include "common.names.fullname" . -}}
+{{- include "cloudpirates.fullname" . -}}
 {{- end -}}
+
+{{/*
+Common labels for rmq-cluster-operator
+*/}}
+{{- define "rmqco.labels" -}}
+  {{- $versionLabel := dict "app.kubernetes.io/version" (default "latest" .Values.clusterOperator.image.tag) -}}
+  {{- $staticLabels := dict
+        "app.kubernetes.io/component" "rabbitmq-operator"
+        "app.kubernetes.io/part-of" "rabbitmq"
+    -}}
+
+  {{- include "cloudpirates.tplvalues.merge" (dict
+        "values" (list
+            (include "cloudpirates.labels" . | fromYaml)
+            $versionLabel
+            $staticLabels
+        )
+        "context" .
+    )
+  }}
+{{- end }}
+
+{{/*
+Common labels for rmq-messaging-topology-operator
+*/}}
+{{- define "rmqmto.labels" -}}
+  {{- $versionLabel := dict "app.kubernetes.io/version" (default "latest" .Values.msgTopologyOperator.image.tag) -}}
+  {{- $staticLabels := dict
+        "app.kubernetes.io/component" "messaging-topology-operator"
+        "app.kubernetes.io/part-of" "rabbitmq"
+    -}}
+
+  {{- include "cloudpirates.tplvalues.merge" (dict
+        "values" (list
+            (include "cloudpirates.labels" . | fromYaml)
+            $versionLabel
+            $staticLabels
+        )
+        "context" .
+    )
+  }}
+{{- end }}
+
+{{/*
+Selector labels
+*/}}
+{{- define "rmqco.selectorLabels" -}}
+{{- include "cloudpirates.selectorLabels" . -}}
+{{- end }}
+
 
 {{/*
 Return the proper RabbitMQ Messaging Topology Operator fullname
@@ -30,7 +75,7 @@ NOTE: Not using the common function to avoid generating too long names
 Return the proper RabbitMQ Messaging Topology Operator fullname adding the installation's namespace.
 */}}
 {{- define "rmqco.msgTopologyOperator.fullname.namespace" -}}
-{{- printf "%s-%s" (include "rmqco.msgTopologyOperator.fullname" .) (include "common.names.namespace" .) | trunc 63 | trimSuffix "-" -}}
+{{- printf "%s-%s" (include "rmqco.msgTopologyOperator.fullname" .) (include "cloudpirates.namespace" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{/*
@@ -51,7 +96,7 @@ NOTE: Not using the common function to avoid generating too long names
 Return the proper RabbitMQ Messaging Topology Operator fullname adding the installation's namespace.
 */}}
 {{- define "rmqco.msgTopologyOperator.webhook.fullname.namespace" -}}
-{{- printf "%s-%s" (include "rmqco.msgTopologyOperator.webhook.fullname" .) (include "common.names.namespace" .) | trunc 63 | trimSuffix "-" -}}
+{{- printf "%s-%s" (include "rmqco.msgTopologyOperator.webhook.fullname" .) (include "cloudpirates.namespace" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{/*
@@ -69,35 +114,74 @@ Return the proper RabbitMQ Messaging Topology Operator fullname
 Return the proper RabbitMQ Default User Credential updater image name
 */}}
 {{- define "rmqco.defaultCredentialUpdater.image" -}}
-{{ include "common.images.image" (dict "imageRoot" .Values.credentialUpdaterImage "global" .Values.global) }}
+{{ include "cloudpirates.image" (dict "image" .Values.credentialUpdaterImage "global" .Values.global) }}
 {{- end -}}
 
 {{/*
 Return the proper RabbitMQ Cluster Operator image name
 */}}
 {{- define "rmqco.clusterOperator.image" -}}
-{{ include "common.images.image" (dict "imageRoot" .Values.clusterOperator.image "global" .Values.global) }}
+{{ include "cloudpirates.image" (dict "image" .Values.clusterOperator.image "global" .Values.global) }}
 {{- end -}}
 
 {{/*
 Return the proper RabbitMQ Cluster Operator image name
 */}}
 {{- define "rmqco.msgTopologyOperator.image" -}}
-{{ include "common.images.image" (dict "imageRoot" .Values.msgTopologyOperator.image "global" .Values.global) }}
+{{ include "cloudpirates.image" (dict "image" .Values.msgTopologyOperator.image "global" .Values.global) }}
 {{- end -}}
 
 {{/*
 Return the proper RabbitMQ image name
 */}}
 {{- define "rmqco.rabbitmq.image" -}}
-{{- include "common.images.image" ( dict "imageRoot" .Values.rabbitmqImage "global" .Values.global ) -}}
+{{- include "cloudpirates.image" ( dict "image" .Values.rabbitmqImage "global" .Values.global ) -}}
 {{- end -}}
 
 {{/*
-Return the proper Docker Image Registry Secret Names
+Return the imagePullSecrets section for Cluster Operator
 */}}
 {{- define "rmqco.imagePullSecrets" -}}
-{{- include "common.images.pullSecrets" (dict "images" (list .Values.clusterOperator.image .Values.rabbitmqImage) "global" .Values.global) -}}
+{{- $pullSecrets := list }}
+{{- if .Values.global }}
+  {{- range .Values.global.imagePullSecrets -}}
+    {{- $pullSecrets = append $pullSecrets . -}}
+  {{- end -}}
+{{- end -}}
+{{- range (list .Values.clusterOperator.image .Values.rabbitmqImage) -}}
+  {{- range .pullSecrets -}}
+    {{- $pullSecrets = append $pullSecrets . -}}
+  {{- end -}}
+{{- end }}
+{{- if (not (empty $pullSecrets)) }}
+imagePullSecrets:
+  {{- range $pullSecrets | uniq }}
+  - name: {{ . }}
+    {{- end }}
+  {{- end }}
+{{- end -}}
+
+{{/*
+Return the imagePullSecrets section for msgTopologyOperator
+*/}}
+{{- define "rmqmto.imagePullSecrets" -}}
+{{- $pullSecrets := list }}
+{{- if .Values.global }}
+  {{- range .Values.global.imagePullSecrets -}}
+    {{- $pullSecrets = append $pullSecrets . -}}
+  {{- end -}}
+{{- end -}}
+{{- range (list .Values.msgTopologyOperator.image) -}}
+  {{- range .pullSecrets -}}
+    {{- $pullSecrets = append $pullSecrets . -}}
+  {{- end -}}
+{{- end }}
+{{- if (not (empty $pullSecrets)) }}
+imagePullSecrets:
+  {{- range $pullSecrets | uniq }}
+  - name: {{ . }}
+    {{- end }}
+  {{- end }}
 {{- end -}}
 
 {{/*
@@ -140,4 +224,20 @@ Create the name of the service account to use (Messaging Topology Operator)
 {{- else -}}
     {{ default "default" .Values.msgTopologyOperator.serviceAccount.name }}
 {{- end -}}
+{{- end -}}
+
+{{/*
+Render podSecurityContext using the common helper with proper parameter mapping.
+*/}}
+{{- define "rmqco.renderPodSecurityContext" -}}
+{{- $ctx := merge (dict "Values" (dict "podSecurityContext" (omit .securityContext "enabled"))) .context }}
+{{- include "cloudpirates.renderPodSecurityContext" $ctx }}
+{{- end }}
+
+{{/*
+Render containerSecurityContext using the common helper with proper parameter mapping.
+*/}}
+{{- define "rmqco.renderContainerSecurityContext" -}}
+{{- $ctx := merge (dict "Values" (dict "containerSecurityContext" (omit .securityContext "enabled"))) .context }}
+{{- include "cloudpirates.renderContainerSecurityContext" $ctx }}
 {{- end -}}

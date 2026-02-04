@@ -8,7 +8,7 @@ from typing import Any, Dict, Optional, Sequence
 
 from daalu.execution.runner import CommandRunner
 
-from daalu.bootstrap.metal3.bmh import list_bmhs, extract_bmh_nic_names, get_node_nics_from_cfg
+from daalu.bootstrap.metal3.bmh import list_bmhs, extract_bmh_nic_names
 from daalu.bootstrap.metal3.clusterctl_config import upsert_clusterctl_vars_block
 from daalu.bootstrap.metal3.models import Metal3TemplateGenOptions
 from daalu.bootstrap.metal3.templates import (
@@ -47,13 +47,21 @@ class Metal3TemplateGenerator:
 
         # Pick the BMH used for control-plane template rendering
         bmh = bmhs[0]
-        bmh_name = bmh.name
+        bmh0 = bmh.raw
 
-        # Source of truth: cluster.yaml
-        bmh_nic_names = get_node_nics_from_cfg(
-            opts.cfg,
-            bmh_name,
-        )
+        try:
+            bmh_nic_names = extract_bmh_nic_names(bmh0)
+        except KeyError as e:
+            raise RuntimeError(
+                f"BMH {bmh.name} has no inspected NIC data. "
+                "Ensure inspection has completed successfully."
+            ) from e
+
+        if not bmh_nic_names:
+            raise RuntimeError(
+                f"BMH {bmh.name} has empty NIC list after inspection."
+            )
+
 
        #bmh0 = bmhs[0].raw
         #bmh_nic_names = extract_bmh_nic_names(bmh0)

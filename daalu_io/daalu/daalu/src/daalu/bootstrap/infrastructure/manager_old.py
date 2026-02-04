@@ -3,8 +3,8 @@
 from pathlib import Path
 
 from daalu.utils.ssh_runner import SSHRunner
-from daalu.bootstrap.infrastructure.engine.helm_engine import HelmInfraEngine
-from daalu.bootstrap.infrastructure.engine.component import InfraComponent
+from daalu.bootstrap.engine.helm_engine import HelmInfraEngine
+from daalu.bootstrap.engine.component import InfraComponent
 
 
 class InfrastructureManager:

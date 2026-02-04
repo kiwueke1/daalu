@@ -3,7 +3,7 @@
 from pathlib import Path
 import yaml
 
-from daalu.bootstrap.infrastructure.engine.component import InfraComponent
+from daalu.bootstrap.engine.component import InfraComponent
 from .models import (
     IstioTrafficConfig,
     IstioApplication,
@@ -33,6 +33,8 @@ class IstioTrafficComponent(InfraComponent):
         self.config_path = config_path
         self.cfg = self._load_config()
         self.wait_for_pods = False
+
+        self._values: Dict = {}
 
     # --------------------------------------------------
     def _load_config(self) -> IstioTrafficConfig:

@@ -1,5 +1,7 @@
 # User-specific settings file for this repo
 .aspect/bazelrc/user.bazelrc
+*.log
+*__pycache__*
 
 # Don't check in lockfile for now. It is unstable.
 # https://github.com/bazelbuild/bazel/issues/19026

@@ -12,7 +12,7 @@ import os
 import base64
 
 
-from daalu.bootstrap.infrastructure.engine.component import InfraComponent
+from daalu.bootstrap.engine.component import InfraComponent
 
 
 class KeycloakComponent(InfraComponent):
@@ -106,6 +106,28 @@ class KeycloakComponent(InfraComponent):
 
         job_name = "keycloak-mysql-bootstrap"
         pxc_ns = "openstack"
+        auth_ns = self.namespace  # expected to be "auth-system"
+
+        # ------------------------------------------------------------------
+        # Ensure auth-system namespace exists (idempotent)
+        # ------------------------------------------------------------------
+        print(f"Ensuring namespace '{auth_ns}' exists...")
+
+        kubectl.apply_objects(
+            [
+                {
+                    "apiVersion": "v1",
+                    "kind": "Namespace",
+                    "metadata": {
+                        "name": auth_ns,
+                    },
+                }
+            ]
+        )
+
+        kubectl.run(["get", "namespace", auth_ns])
+        print(f" Namespace '{auth_ns}' is present")
+
 
         sql = f"""
     CREATE DATABASE IF NOT EXISTS {self.db_name};

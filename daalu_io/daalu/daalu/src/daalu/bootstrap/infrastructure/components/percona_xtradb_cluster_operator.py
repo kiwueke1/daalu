@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from daalu.bootstrap.infrastructure.engine.component import InfraComponent
+from daalu.bootstrap.engine.component import InfraComponent
 
 
 class PerconaXtraDBClusterOperatorComponent(InfraComponent):
@@ -39,14 +39,17 @@ class PerconaXtraDBClusterOperatorComponent(InfraComponent):
         self.github_token = github_token
         self.wait_for_pods = True
 
+        self._values: Dict = {}
+
     # ------------------------------------------------------------------
     # Upload Helm chart (replaces vexxhost.kubernetes.upload_helm_chart)
     # ------------------------------------------------------------------
-    def pre_install(self, ssh) -> None:
-        ssh.put_dir(
-            local_path=self.local_chart_dir / "pxc-operator",
-            remote_path=self.remote_chart_dir / "pxc-operator",
-        )
+    #def pre_install(self, ssh) -> None:
+    #    ssh.put_dir(
+    #        local_path=self.local_chart_dir / "pxc-operator",
+    #        remote_path=self.remote_chart_dir / "pxc-operator",
+    #        release_name=self.release_name,
+    #    )
 
     # ------------------------------------------------------------------
     def values_file(self) -> Path:

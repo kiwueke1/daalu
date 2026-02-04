@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import time
 import yaml
+import base64
+import subprocess
 from typing import Iterable
 from typing import Any
 
@@ -26,13 +28,12 @@ class KubectlRunner:
         *,
         ssh: SSHRunner,
         kubeconfig: str = "/etc/kubernetes/admin.conf",
+        logger = None,
     ):
         self.ssh = ssh
         self.kubeconfig = kubeconfig
+        self.logger = logger
 
-    def _run_1(self, cmd: str) -> tuple[int, str, str]:
-        full_cmd = f"KUBECONFIG={self.kubeconfig} kubectl {cmd}"
-        return self.ssh.run(full_cmd, sudo=True)
 
     def _run(
         self,
@@ -46,6 +47,10 @@ class KubectlRunner:
         Returns:
             (rc, stdout, stderr)
         """
+        #print("=== KUBECTL DEBUG ===")
+        #print("kubectl command:", cmd)
+        #print("kubectl ssh runner:", self.ssh)
+        #print("=====================")
         full_cmd = f"KUBECONFIG={self.kubeconfig} kubectl {cmd}"
 
         rc, out, err = self.ssh.run(
@@ -57,18 +62,41 @@ class KubectlRunner:
         return rc, out, err
 
 
-    def apply_file(self, path: str) -> None:
-        rc, out, err = self._run(f"apply -f {path}")
+
+    def apply_file(
+        self,
+        path: str,
+        *,
+        server_side: bool = False,
+        force_conflicts: bool = False,
+    ) -> None:
+        flags = []
+        if server_side:
+            flags.append("--server-side")
+        if force_conflicts:
+            flags.append("--force-conflicts")
+
+        flag_str = " ".join(flags)
+        rc, out, err = self._run(f"apply {flag_str} -f {path}")
         if rc != 0:
             raise KubectlError(f"kubectl apply failed: {err or out}")
 
+
     def apply_content(
         self,
+        *,
         content: str,
-        remote_path: str = "/tmp/daalu-apply.yaml",
+        remote_path: str,
+        server_side: bool = False,
+        force_conflicts: bool = False,
     ) -> None:
         self.ssh.put_text(content, remote_path)
-        self.apply_file(remote_path)
+        self.apply_file(
+            remote_path,
+            server_side=server_side,
+            force_conflicts=force_conflicts,
+        )
+
 
     def get_pods(self, namespace: str) -> list[dict]:
         rc, out, err = self._run(f"get pods -n {namespace} -o json")
@@ -131,19 +159,59 @@ class KubectlRunner:
         objects: Iterable[dict],
         *,
         remote_path: str = "/tmp/daalu-apply.yaml",
+        server_side: bool = False,
+        force_conflicts: bool = False,
     ) -> None:
-        """
-        Apply one or more Kubernetes objects expressed as Python dicts.
-        """
-        manifest = yaml.safe_dump_all(
-            objects,
-            sort_keys=False,
-        )
+        objects = list(objects)
 
-        self.apply_content(
-            content=manifest,
-            remote_path=remote_path,
-        )
+        if not objects:
+            if self.logger:
+                self.logger.log_event(
+                    "kubectl.apply.skip",
+                    reason="no_objects",
+                )
+            return
+
+        manifest = yaml.safe_dump_all(objects, sort_keys=False)
+
+        try:
+            self.apply_content(
+                content=manifest,
+                remote_path=remote_path,
+                server_side=server_side,
+                force_conflicts=force_conflicts,
+            )
+        except Exception as e:
+            # Hard failure (kubectl itself failed)
+            for obj in objects:
+                kind = obj.get("kind", "<unknown>")
+                name = obj.get("metadata", {}).get("name", "<unknown>")
+                ns = obj.get("metadata", {}).get("namespace", "default")
+
+                if self.logger:
+                    self.logger.log_event(
+                        "kubectl.apply.failed",
+                        kind=kind,
+                        name=name,
+                        namespace=ns,
+                        error=str(e),
+                    )
+            raise
+
+        # Success path — report each object
+        for obj in objects:
+            kind = obj.get("kind", "<unknown>")
+            name = obj.get("metadata", {}).get("name", "<unknown>")
+            ns = obj.get("metadata", {}).get("namespace", "default")
+
+            if self.logger:
+                self.logger.log_event(
+                    "kubectl.apply.success",
+                    kind=kind,
+                    name=name,
+                    namespace=ns,
+                )
+
 
     def get_names(
         self,
@@ -238,23 +306,223 @@ class KubectlRunner:
             )
 
 
-    def run(self, cmd, *, capture_output: bool = False):
+    def run(self, args: list[str]) -> tuple[int, str, str]:
+        cmd = ["kubectl"] + args
+
+        proc = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+
+        return proc.returncode, proc.stdout, proc.stderr
+
+    def apply_file_server_side(
+        self,
+        path: str,
+        *,
+        force_conflicts: bool = True,
+    ) -> None:
         """
-        Run a kubectl command.
-
-        Args:
-            cmd: list[str] or str (without 'kubectl')
-            capture_output: whether to return stdout/stderr
-
-        Returns:
-            (rc, stdout, stderr)
+        Server-side apply avoids storing the huge
+        kubectl.kubernetes.io/last-applied-configuration annotation,
+        which can break large CRDs (Prometheus Operator CRDs are common offenders).
         """
-        if isinstance(cmd, list):
-            cmd = " ".join(cmd)
+        extra = " --force-conflicts" if force_conflicts else ""
+        rc, out, err = self._run(f"apply --server-side{extra} -f {path}")
+        if rc != 0:
+            raise KubectlError(f"kubectl server-side apply failed: {err or out}")
 
-        rc, stdout, stderr = self._run(cmd)
+    def wait_for_statefulset_ready(
+        self,
+        *,
+        name: str,
+        namespace: str,
+        retries: int = 60,
+        delay: int = 5,
+    ) -> None:
+        """
+        Wait until a StatefulSet has all replicas ready.
+        """
+        for attempt in range(1, retries + 1):
+            rc, out, err = self._run(
+                f"get statefulset {name} -n {namespace} -o json"
+            )
 
-        if capture_output:
-            return rc, stdout, stderr
+            if rc != 0:
+                raise KubectlError(
+                    f"kubectl get statefulset {name} failed: {err or out}"
+                )
 
-        return rc, "", ""
+            data = json.loads(out)
+
+            spec_replicas = data.get("spec", {}).get("replicas", 0)
+            status = data.get("status", {})
+
+            ready = status.get("readyReplicas", 0)
+            current = status.get("currentReplicas", 0)
+
+            if ready == spec_replicas and current == spec_replicas:
+                print(
+                    f"[kubectl] StatefulSet {name} ready "
+                    f"({ready}/{spec_replicas}) ✓"
+                )
+                return
+
+            print(
+                f"[kubectl] Waiting for StatefulSet {name} "
+                f"({ready}/{spec_replicas}) "
+                f"[attempt {attempt}/{retries}]"
+            )
+            time.sleep(delay)
+
+        raise KubectlError(
+            f"Timed out waiting for StatefulSet {name} in namespace {namespace}"
+        )
+
+    def wait_for(
+        self,
+        *,
+        kind: str,
+        name: str,
+        namespace: str | None = None,
+        timeout_seconds: int = 60,
+        interval_seconds: int = 5,
+    ) -> None:
+        import time
+
+        start = time.time()
+
+        while True:
+            args = ["get", kind, name]
+            if namespace:
+                args.extend(["-n", namespace])
+
+            rc, stdout, stderr = self.run(
+                args,
+                capture_output=True,
+            )
+
+            if rc == 0:
+                return
+
+            if time.time() - start > timeout_seconds:
+                raise TimeoutError(
+                    f"Timed out waiting for {kind}/{name} "
+                    f"in namespace {namespace}. Last error: {stderr.strip()}"
+                )
+
+            time.sleep(interval_seconds)
+
+    def wait_for_condition(
+        self,
+        *,
+        api_version: str,
+        kind: str,
+        name: str,
+        namespace: str,
+        condition_type: str,
+        condition_status: str = "True",
+        timeout_seconds: int = 120,
+    ) -> None:
+        """
+        Wrapper around:
+        kubectl wait --for=condition=TYPE=STATUS
+        """
+
+        condition = f"condition={condition_type}={condition_status}"
+
+        cmd = [
+            "wait",
+            f"--for={condition}",
+            f"{kind.lower()}/{name}",
+            "-n",
+            namespace,
+            f"--timeout={timeout_seconds}s",
+        ]
+
+        # apiVersion isn't directly passed to kubectl wait,
+        # but included here for symmetry & future CRD handling
+        self.run(cmd)
+
+
+    def get_object(
+        self,
+        *,
+        api_version: str,
+        kind: str,
+        name: str,
+        namespace: Optional[str] = None,
+    ) -> Optional[dict]:
+        args = [
+            "get",
+            kind.lower(),
+            name,
+            "-o",
+            "json",
+        ]
+
+        if namespace:
+            args.extend(["-n", namespace])
+
+        try:
+            rc, stdout, stderr = self.run(args)
+        except RuntimeError as e:
+            if "NotFound" in str(e):
+                return None
+            raise
+
+        if not stdout:
+            print(f"[kubectl] get_object: No stdout")
+            print(f"[kubectl] get_object: {stderr}")
+            return None
+
+        print(f"[kubectl] get_object: {json.loads(stdout)}")
+
+        return json.loads(stdout)
+
+    def b64decode_str(self, b64: str) -> str:
+        return base64.b64decode(b64).decode("utf-8", errors="replace")
+
+    def resource_exists(
+        self,
+        *,
+        kind: str,
+        name: str,
+        namespace: str | None = None,
+    ) -> bool:
+        """
+        Check whether a Kubernetes resource exists.
+
+        Works for core resources and CRDs (e.g. Istio VirtualService).
+        """
+        args = ["get", kind, name]
+        if namespace:
+            args.extend(["-n", namespace])
+
+        rc, _, _ = self.run(args)
+        return rc == 0
+
+    def wait_for_deployment_ready(
+        self,
+        name: str,
+        namespace: str,
+        timeout: int = 300,
+    ):
+        """
+        Wait until a Deployment has all desired replicas available.
+        """
+        print(f"[kubectl] Waiting for deployment/{name} in {namespace}")
+
+        self.run(
+            [
+                "rollout",
+                "status",
+                f"deployment/{name}",
+                "-n",
+                namespace,
+                f"--timeout={timeout}s",
+            ]
+        )

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from daalu.bootstrap.infrastructure.engine.component import InfraComponent
+from daalu.bootstrap.engine.component import InfraComponent
 
 
 class RabbitMQClusterOperatorComponent(InfraComponent):
@@ -41,20 +41,21 @@ class RabbitMQClusterOperatorComponent(InfraComponent):
         self.github_token = github_token
         self.wait_for_pods = True
 
+        self._values: Dict = {}
+
     # ------------------------------------------------------------------
     # CRDs must exist before Helm
     # ------------------------------------------------------------------
     def pre_install(self, kubectl) -> None:
         crd_root = (
             self.assets_dir
-            / "charts"
             / "rabbitmq-cluster-operator"
             / "crds"
         )
 
         for subdir in [
             "messaging-topology-operator",
-            "rabbitmq-cluster",
+            "cluster-operator",
         ]:
             path = crd_root / subdir
             if not path.exists():

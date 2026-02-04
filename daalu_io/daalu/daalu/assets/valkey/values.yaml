@@ -19,7 +19,7 @@ replica:
     - key: node-role.kubernetes.io/control-plane
       operator: Exists
       effect: NoSchedule
-  podAntiAffinityPreset: hard
+  podAntiAffinityPreset: disabled
 
 sentinel:
   enabled: true

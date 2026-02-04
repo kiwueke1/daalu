@@ -30,6 +30,7 @@ py_library(
         "@pip//paramiko",
         "@pip//jinja2",
         "@pip//pymysql:pkg",
+        "@pip//requests:pkg",
     ],
 )
 

@@ -9,7 +9,7 @@ from typing import Optional
 
 import yaml
 
-from daalu.bootstrap.infrastructure.engine.component import InfraComponent
+from daalu.bootstrap.engine.component import InfraComponent
 
 
 def _gen_password(length: int = 32) -> str:
@@ -45,6 +45,8 @@ class PerconaXtraDBClusterComponent(InfraComponent):
 
         self.spec_path = spec_path
         self.wait_for_pods = False
+
+        self._values: Dict = {}
 
         raw = yaml.safe_load(spec_path.read_text())
 

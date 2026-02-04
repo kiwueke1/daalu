@@ -2,7 +2,7 @@ apiVersion: cluster.x-k8s.io/v1beta2
 kind: Cluster
 metadata:
   name: auto-openstack-infra
-  namespace: metal3
+  namespace: baremetal-operator-system
 spec:
   clusterNetwork:
     pods:
@@ -24,10 +24,10 @@ apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: Metal3Cluster
 metadata:
   name: auto-openstack-infra
-  namespace: metal3
+  namespace: baremetal-operator-system
 spec:
   controlPlaneEndpoint:
-    host: 192.168.0.249
+    host: 10.10.0.249
     port: 6443
   noCloudProvider: true
 ---
@@ -35,25 +35,25 @@ apiVersion: ipam.metal3.io/v1alpha1
 kind: IPPool
 metadata:
   name: provisioning-pool
-  namespace: metal3
+  namespace: baremetal-operator-system
 spec:
   clusterName: auto-openstack-infra
   namePrefix: auto-openstack-infra-prov
   pools:
-  - end: 172.22.0.200
-    start: 172.22.0.100
-  prefix: 24
+  - end: 10.10.50.200
+    start: 10.10.50.100
+  prefix: 16
 ---
 apiVersion: ipam.metal3.io/v1alpha1
 kind: IPPool
 metadata:
   name: externalv4-pool
-  namespace: metal3
+  namespace: baremetal-operator-system
 spec:
   clusterName: auto-openstack-infra
-  gateway: 192.168.0.1
+  gateway: 10.10.0.100
   namePrefix: auto-openstack-infra-bmv4
   pools:
-  - end: 192.168.111.40
-    start: 192.168.111.20
-  prefix: 24
+  - end: 10.10.0.245
+    start: 10.10.0.220
+  prefix: 16

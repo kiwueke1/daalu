@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, List
 
-from daalu.bootstrap.infrastructure.engine.component import InfraComponent
+from daalu.bootstrap.engine.component import InfraComponent
 from daalu.cli.helper import (
     inventory_path,
     read_group_from_inventory,

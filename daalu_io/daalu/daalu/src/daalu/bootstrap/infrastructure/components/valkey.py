@@ -7,7 +7,7 @@ from typing import Dict, Optional
 
 import yaml
 
-from daalu.bootstrap.infrastructure.engine.component import InfraComponent
+from daalu.bootstrap.engine.component import InfraComponent
 
 
 class ValkeyComponent(InfraComponent):

@@ -1,7 +1,7 @@
 # src/daalu/bootstrap/infrastructure/components/argocd.py
 
 from pathlib import Path
-from daalu.bootstrap.infrastructure.engine.component import InfraComponent
+from daalu.bootstrap.engine.component import InfraComponent
 
 class ArgoCDComponent(InfraComponent):
     def __init__(self, *, values_path: Path, kubeconfig: str):
@@ -21,6 +21,7 @@ class ArgoCDComponent(InfraComponent):
         self.values_path = values_path
         self.wait_for_pods = True
         self.min_running_pods = 1
+        self.enable_argocd = False
 
     def values(self) -> dict:
         return self.load_values_file(self.values_path)

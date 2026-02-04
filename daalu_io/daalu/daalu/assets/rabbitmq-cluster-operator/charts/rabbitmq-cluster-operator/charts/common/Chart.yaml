@@ -1,23 +1,18 @@
 annotations:
-  category: Infrastructure
-  licenses: Apache-2.0
+  artifacthub.io/changes: |2
+        - kind: fixed
+          description: "Fix YAML parse error caused by whitespace control in selectorLabels broken in #914"
+  license: Apache-2.0
 apiVersion: v2
-appVersion: 2.30.0
-description: A Library Helm Chart for grouping common logic between bitnami charts.
-  This chart is not deployable by itself.
-home: https://bitnami.com
-icon: https://dyltqmyl993wv.cloudfront.net/downloads/logos/bitnami-mark.png
-keywords:
-- common
-- helper
-- template
-- function
-- bitnami
+appVersion: 2.1.2
+description: A library chart for common templates and helper functions
+home: https://www.cloudpirates.io
 maintainers:
-- name: Broadcom, Inc. All Rights Reserved.
-  url: https://github.com/bitnami/charts
+- email: hello@cloudpirates.io
+  name: CloudPirates GmbH & Co. KG
+  url: https://www.cloudpirates.io
 name: common
 sources:
-- https://github.com/bitnami/charts/tree/main/bitnami/common
+- https://github.com/CloudPirates-io/helm-charts/tree/main/charts/common
 type: library
-version: 2.13.3
+version: 2.1.2

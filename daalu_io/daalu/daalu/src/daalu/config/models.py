@@ -3,6 +3,12 @@
 from typing import Dict, List, Optional, Literal
 from pydantic import BaseModel, HttpUrl, Field
 from pathlib import Path
+from daalu.bootstrap.shared.keycloak.models import KeycloakIAMConfig
+from daalu.bootstrap.monitoring.models import KeycloakMonitoringConfig
+from daalu.config.monitoring import MonitoringConfig
+from daalu.bootstrap.openstack.models import KeycloakOpenstackConfig
+
+
 
 class RepoSpec(BaseModel):
     name: str
@@ -143,3 +149,30 @@ class ClusterConfig(BaseModel):
         return {r.name: r for r in self.releases}
 
 
+class KeycloakConfig(BaseModel):
+    """
+    Top-level Keycloak config.
+    """
+    k8s_namespace: str = "openstack"
+    iam: Optional[KeycloakIAMConfig] = None
+    monitoring: Optional[KeycloakMonitoringConfig] = None
+    openstack: Optional[KeycloakOpenstackConfig] = None
+
+    model_config = {
+        "extra": "forbid"
+    }
+
+class DaaluConfig(BaseModel):
+    environment: Literal["dev", "staging", "prod"] = "dev"
+    context: Optional[str] = None
+
+    cluster_api: Optional[ClusterAPI] = None
+    repos: List[RepoSpec] = Field(default_factory=list)
+    releases: List[ReleaseSpec] = Field(default_factory=list)
+
+    keycloak: Optional[KeycloakConfig] = None
+    monitoring: Optional[MonitoringConfig] = None
+
+    model_config = {
+        "extra": "forbid"
+    }

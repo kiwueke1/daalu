@@ -46,6 +46,16 @@ from daalu.observers.dispatcher import EventBus
 from daalu.observers.logger import LoggerObserver
 from daalu.observers.jsonfile import JsonFileObserver
 from daalu.observers.events import new_ctx, LifecycleEvent
+from daalu.bootstrap.monitoring.manager import MonitoringManager
+from daalu.bootstrap.monitoring.registry import build_monitoring_components
+from daalu.bootstrap.monitoring.models import parse_monitoring_flag
+from daalu.bootstrap.shared.keycloak.models import KeycloakIAMConfig, KeycloakAdminAuth, KeycloakRealmSpec, KeycloakClientSpec
+from daalu.bootstrap.openstack.models import parse_openstack_flag
+from daalu.bootstrap.openstack.registry import build_openstack_components
+from daalu.bootstrap.openstack.manager import OpenStackManager
+
+
+
 
 
 # ------------------------------------------------------------------------------
@@ -69,6 +79,7 @@ ALL_TARGETS: Set[str] = {
     "ceph",
     "csi",
     "infrastructure",
+    "monitoring",
     "openstack",
 }
 
@@ -366,6 +377,62 @@ def deploy_infrastructure(
     ).deploy(components)
 
 
+def deploy_monitoring(
+    *,
+    cfg,
+    helm: HelmCliRunner,
+    ssh: SSHRunner,
+    workspace_root: Path,
+    infra_flag: Optional[str],
+    kubeconfig_path: str,
+) -> None:
+    """
+    Deploy monitoring components (e.g. node-feature-discovery).
+    Uses --infra flag for component selection.
+    """
+    typer.echo("\n[monitoring] Installing monitoring components...")
+
+    selection = parse_monitoring_flag(infra_flag)
+
+    components = build_monitoring_components(
+        selection=selection,
+        workspace_root=workspace_root,
+        kubeconfig_path=kubeconfig_path,
+        cfg=cfg,
+    )
+
+
+    MonitoringManager(
+        helm=helm,
+        ssh=ssh,
+    ).deploy(components)
+
+
+def deploy_openstack(
+    *,
+    cfg,
+    helm: HelmCliRunner,
+    ssh: SSHRunner,
+    workspace_root: Path,
+    infra_flag: Optional[str],
+    kubeconfig_path: str,
+):
+    typer.echo("\n[openstack] Installing OpenStack components...")
+
+    selection = parse_openstack_flag(infra_flag)
+
+    components = build_openstack_components(
+        cfg=cfg,
+        selection=selection,
+        workspace_root=workspace_root,
+        kubeconfig_path=kubeconfig_path,
+    )
+
+    OpenStackManager(
+        helm=helm,
+        ssh=ssh,
+    ).deploy(components)
+
 # ------------------------------------------------------------------------------
 # Deploy command
 # ------------------------------------------------------------------------------
@@ -410,7 +477,8 @@ def deploy(
     typer.echo("")
 
 
-    cfg = load_config(config)
+    #cfg = load_config(config)
+    cfg: DaaluConfig = load_config(config)
     install_plan = resolve_install_plan(install)
 
     # ------------------------------------------------------------------------------
@@ -519,6 +587,31 @@ def deploy(
         #-----------------------------------------------------------------------------
         if "infrastructure" in install_plan:
             deploy_infrastructure(
+                helm=helm,
+                ssh=ssh,
+                workspace_root=WORKSPACE_ROOT,
+                infra_flag=infra,
+                kubeconfig_path=kubeconfig_path,
+            )
+        
+        #------------------------------------------------------------------
+        # 6) Monitoring
+        #------------------------------------------------------------------
+        if "monitoring" in install_plan:
+            deploy_monitoring(
+                cfg=cfg,
+                helm=helm,
+                ssh=ssh,
+                workspace_root=WORKSPACE_ROOT,
+                infra_flag=infra,
+                kubeconfig_path=kubeconfig_path
+            )
+        # ------------------------------------------------------------------------------
+        # 7) OpenStack
+        # ------------------------------------------------------------------------------
+        if "openstack" in install_plan:
+            deploy_openstack(
+                cfg=cfg,
                 helm=helm,
                 ssh=ssh,
                 workspace_root=WORKSPACE_ROOT,

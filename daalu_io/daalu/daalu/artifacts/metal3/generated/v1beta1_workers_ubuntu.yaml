@@ -5,10 +5,10 @@ metadata:
     cluster.x-k8s.io/cluster-name: auto-openstack-infra
     nodepool: nodepool-0
   name: auto-openstack-infra
-  namespace: metal3
+  namespace: baremetal-operator-system
 spec:
   clusterName: auto-openstack-infra
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       cluster.x-k8s.io/cluster-name: auto-openstack-infra
@@ -37,23 +37,23 @@ apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: Metal3MachineTemplate
 metadata:
   name: auto-openstack-infra-workers
-  namespace: metal3
+  namespace: baremetal-operator-system
 spec:
   template:
     spec:
       dataTemplate:
         name: auto-openstack-infra-workers-template
       image:
-        checksum: 3f574e954edb288a536eafa037d5d7313cb7dd542f8e5993a02d7ce202512457
+        checksum: 61895579cbb6dc579bd406ea5dc63d148d6714afd32976b9da3ea0daf5212d5a
         checksumType: sha256
         format: raw
-        url: http://172.22.0.1/images/UBUNTU_24.04_NODE_IMAGE_K8S_v1.35.0-raw.img
+        url: http://10.10.0.9/UBUNTU_24.04_NODE_IMAGE_K8S_v1.33.0-raw.img
 ---
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: Metal3DataTemplate
 metadata:
   name: auto-openstack-infra-workers-template
-  namespace: metal3
+  namespace: baremetal-operator-system
 spec:
   clusterName: auto-openstack-infra
   metaData:
@@ -99,7 +99,7 @@ apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
 kind: KubeadmConfigTemplate
 metadata:
   name: auto-openstack-infra-workers
-  namespace: metal3
+  namespace: baremetal-operator-system
 spec:
   template:
     spec:
@@ -121,7 +121,7 @@ spec:
           registries = ['docker.io']
 
           [registries.insecure]
-          registries = ['192.168.111.1:5000']
+          registries = ['10.10.0.9:5000']
         path: /etc/containers/registries.conf
       joinConfiguration:
         nodeRegistration:

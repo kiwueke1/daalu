@@ -1,5 +1,0 @@
-# src/daalu/bootstrap/infrastructure/assets/istio/base-values.yaml
-
-# leave empty for now until overrides are required
-
-global: {}

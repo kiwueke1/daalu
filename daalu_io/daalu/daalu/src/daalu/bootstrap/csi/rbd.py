@@ -2,6 +2,8 @@
 
 import json
 from pathlib import Path
+from copy import deepcopy
+
 from daalu.bootstrap.csi.base import CSIBase
 from daalu.bootstrap.csi.helm_values import rbd_values
 from daalu.bootstrap.csi.events import (
@@ -9,6 +11,27 @@ from daalu.bootstrap.csi.events import (
 )
 from daalu.config.models import RepoSpec
 from daalu.helm.charts import ensure_chart_remote
+
+import yaml
+
+
+def load_yaml_file(path: Path) -> dict:
+    if not path.exists():
+        raise FileNotFoundError(f"CSI values file not found: {path}")
+    with path.open() as f:
+        return yaml.safe_load(f) or {}
+
+
+def deep_merge(dst: dict, src: dict):
+    """
+    Recursively merge src into dst (in place).
+    """
+    for key, value in src.items():
+        if isinstance(value, dict) and isinstance(dst.get(key), dict):
+            deep_merge(dst[key], value)
+        else:
+            dst[key] = value
+
 
 class CephRbdCsiDriver(CSIBase):
     def __init__(
@@ -30,8 +53,6 @@ class CephRbdCsiDriver(CSIBase):
         )
         self.helm = helm
 
-
-
     def deploy(self, cfg):
         self.bus.emit(CSIStarted(
             stage="init",
@@ -50,6 +71,9 @@ class CephRbdCsiDriver(CSIBase):
         )
         self.helm.update_repos()
 
+        # ------------------------------------------------------------------
+        # Base dynamic values (generated)
+        # ------------------------------------------------------------------
         values = rbd_values(
             fsid=fsid,
             monitors=mons,
@@ -57,6 +81,22 @@ class CephRbdCsiDriver(CSIBase):
             key=key,
             pool=cfg.ceph_pool,
         )
+
+        # ------------------------------------------------------------------
+        # Load static CSI Helm overrides (placement, tolerations, affinity)
+        # ------------------------------------------------------------------
+        static_values_path = (
+            Path(__file__).resolve().parents[4]
+            / "assets"
+            / "csi"
+            / "values.yaml"
+        )
+
+        static_values = load_yaml_file(static_values_path)
+
+        merged_values = deepcopy(values)
+        deep_merge(merged_values, static_values)
+        values = merged_values
 
         self.bus.emit(CSIProgress(
             stage="helm",
@@ -66,12 +106,6 @@ class CephRbdCsiDriver(CSIBase):
 
         charts_base = Path.home() / ".daalu" / "helm" / "charts"
 
-        #chart_path = ensure_chart(
-        #    repo="ceph-csi",
-        #    chart="ceph-csi-rbd",
-        #    version="3.11.0",
-        #    target_dir=charts_base,
-        #)
         chart_path = ensure_chart_remote(
             ssh=self.ssh,
             repo_name="ceph-csi",
@@ -116,7 +150,6 @@ class CephRbdCsiDriver(CSIBase):
             raise RuntimeError("no monitors discovered from ceph mon dump")
 
         return fsid, mons
-
 
     def _ensure_user(self, cfg):
         # Ensure pool exists (idempotent)

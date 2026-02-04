@@ -1,19 +1,37 @@
 environment: dev
-context: kind-kind    # kubectl context or leave null and pass --context in CLI
+context: kubernetes-admin@kubernetes   # kubectl context or leave null and pass --context in CLI
 
 cluster_api:
   cluster_name: auto-openstack-infra
-  namespace: default
+  namespace: baremetal-operator-system
+
+  # Kubernetes pod network (unchanged – internal to cluster)
   pod_cidr: 10.201.0.0/16
   pod_subnet: 10.201.0.0/16
-  control_plane_vip: 192.168.0.249
+
+  # Control plane virtual IP on the 10.10.x network
+  control_plane_vip: 10.10.0.249
+
+  # Nodes allowed to host control-plane / workers
   allowed_nodes: [pve-2, pve-3]
+
+  # DNS for nodes (can stay public or switch to local later)
   dns_servers: [8.8.8.8, 8.8.4.4]
-  ip_range: 192.168.0.170-192.168.0.180
-  gateway: 192.168.0.1
-  prefix: 24
-  vip_interface: ens18
-  cert_sans: ["192.168.0.199","kubernetes","localhost"]
+
+  # Node IP allocation range on the 10.10.x network
+  ip_range: 10.10.0.170-10.10.0.185
+  gateway: 10.10.0.100
+  prefix: 16
+
+  # Interface used for VIP + kube-apiserver traffic
+  vip_interface: ens19
+
+  # SANs for kube-apiserver cert
+  cert_sans:
+    - "10.10.0.249"
+    - "kubernetes"
+    - "localhost"
+
   network_bridge: vmbr0
   source_node: pve-2
   template_id: 10001
@@ -22,8 +40,8 @@ cluster_api:
   kube_vip_image: ghcr.io/kube-vip/kube-vip:v0.7.1
   control_plane_replicas: 1
   control_plane_count: 1
-  worker_replicas: 2
-  worker_count: 2
+  worker_replicas: 1
+  worker_count: 1
   control_plane_disk_gb: 300
   worker_disk_gb: 300
   control_plane_memory_mib: 62000
@@ -49,33 +67,15 @@ cluster_api:
   capm3_release_branch: release-1.11
   capm3_version: v1beta1
   metal3_templates_path: assets/metal3/templates
-  metal3_namespace: metal3
-  metal3:
-    nodes:
-      - name: cp01
-        role: control-plane
-        nics:
-          - eno1
-          - eno2
-
-      - name: cp02
-        role: worker
-        nics:
-          - eno1
-          - eno2
-
-      - name: cp03
-        role: worker
-        nics:
-          - eno1
-          - eno2
+  metal3_namespace: baremetal-operator-system
   image_username: kez
   image_password_hash: "$6$XXyZJ8BwjBrvzVOo$O7OoAQDRngVwNbeG7CjwUe.zUxktYPcLZ.JWUerfkc58jty6c86U9s2WqTuAMOSECK/ZOKnq8rzwMXlspKkrw."
   service_cidr: 10.96.0.0/12
   mgmt_host: 192.168.0.89
   mgmt_user: kez
-  ironic_http_base: http://172.22.0.1/images
-  image_url: http://172.22.0.1/images/UBUNTU_24.04_NODE_IMAGE_K8S_v1.35.0-raw.img
+  ironic_http_base: http://10.10.0.9
+  image_url: http://10.10.0.9/UBUNTU_24.04_NODE_IMAGE_K8S_v1.33.0-raw.img
+
 
 repos: []                    # local charts don't need repos
 
@@ -98,3 +98,57 @@ releases:
       files: ["${WORKSPACE_ROOT}/helm-values/keystone.yaml"]
     dependencies: ["ingress"]
 
+keycloak:
+  monitoring:
+    base_url: "https://keycloak.daalu.io"
+    admin_realm: "master"
+    admin_client_id: "admin-cli"
+    username: "admin"
+    password: "Onyekachi1010?"
+    verify_tls: true
+
+    realm: "daalu"
+    display_name: "Daalu"
+
+    grafana_root_url: "https://grafana.daalu.io"
+    grafana_redirect_uris:
+      - "https://grafana.daalu.io/login/generic_oauth"
+      - "https://grafana.daalu.io/*"
+
+  openstack:
+    base_url: "https://keycloak.daalu.io"
+    admin_realm: "master"
+    admin_client_id: "admin-cli"
+    username: "admin"
+    password: "Onyekachi1010?"
+    verify_tls: true
+
+    realm: "daalu"
+    display_name: "Daalu"
+    github_token: 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
+    oidc_issuer_url: "https://keycloak.daalu.io/realms/daalu"
+    oauth2_proxy_ssl_insecure_skip_verify: false
+    domains:
+      - name: daalu
+        label: Daalu
+        keycloak_realm: daalu
+        totp_default_action: true
+        client:
+          id: keystone
+          roles: []
+          oauth2_proxy: false
+          redirect_uris:
+            - "https://identity.daalu.io/v3/auth/OS-FEDERATION/identity_providers/redirect"
+
+
+    grafana_root_url: "https://grafana.daalu.io"
+    grafana_redirect_uris:
+      - "https://grafana.daalu.io/login/generic_oauth"
+      - "https://grafana.daalu.io/*"
+
+monitoring:
+  thanos:
+    bucket: thanos
+    endpoint: thanos-minio.monitoring.svc.cluster.local:9000
+    access_key: admin
+    secret_key: admin1010

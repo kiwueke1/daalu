@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 
 import yaml
 
-from daalu.bootstrap.infrastructure.engine.component import InfraComponent
+from daalu.bootstrap.engine.component import InfraComponent
 
 
 @dataclass(frozen=True)

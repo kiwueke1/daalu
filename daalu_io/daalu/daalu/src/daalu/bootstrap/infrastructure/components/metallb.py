@@ -1,5 +1,5 @@
 from pathlib import Path
-from daalu.bootstrap.infrastructure.engine.component import InfraComponent
+from daalu.bootstrap.engine.component import InfraComponent
 
 
 class MetalLBComponent(InfraComponent):
@@ -18,7 +18,7 @@ class MetalLBComponent(InfraComponent):
             version=None,
             namespace="metallb-system",
             release_name="metallb",
-            local_chart_dir=Path.home() / ".daalu/helm/charts",
+            local_chart_dir=assets_dir / "charts",
             remote_chart_dir=Path("/usr/local/src"),
             kubeconfig=kubeconfig,
         )

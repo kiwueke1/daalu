@@ -1,3 +1,11 @@
+_________ .__                   ._____________.__               __
+\_   ___ \|  |   ____  __ __  __| _/\______   \__|___________ _/  |_  ____   ______
+/    \  \/|  |  /  _ \|  |  \/ __ |  |     ___/  \_  __ \__  \\   __\/ __ \ /  ___/
+\     \___|  |_(  <_> )  |  / /_/ |  |    |   |  ||  | \// __ \|  | \  ___/ \___ \
+ \______  /____/\____/|____/\____ |  |____|   |__||__|  (____  /__|  \___  >____  >
+        \/                       \/                          \/          \/     \/
+
+
 CHART NAME: {{ .Chart.Name }}
 CHART VERSION: {{ .Chart.Version }}
 APP VERSION: {{ .Chart.AppVersion }}
@@ -6,7 +14,7 @@ APP VERSION: {{ .Chart.AppVersion }}
 
 Watch the RabbitMQ Cluster Operator and RabbitMQ Messaging Topology Operator Deployment status using the command:
 
-    kubectl get deploy -w --namespace {{ include "common.names.namespace" . }} -l app.kubernetes.io/name={{ include "common.names.name" . }},app.kubernetes.io/instance={{ .Release.Name }}
+    kubectl get deploy -w --namespace {{ include "cloudpirates.namespace" . }} -l app.kubernetes.io/name={{ include "cloudpirates.name" . }},app.kubernetes.io/instance={{ .Release.Name }}
 
 {{- if .Values.clusterOperator.rbac.create }}
 {{- if .Values.clusterOperator.watchAllNamespaces }}
@@ -16,7 +24,7 @@ You can limit allowed namespaces by setting clusterOperator.watchAllNamespaces =
 {{- else }}
 
 RabbitMQ Cluster Operator can ONLY access resources in the following namespaces:
-{{ $namespaces := .Values.clusterOperator.watchAllNamespaces | default (list (include "common.names.namespace" .)) }}
+{{ $namespaces := .Values.clusterOperator.watchAllNamespaces | default (list (include "cloudpirates.namespace" .)) }}
 {{- range $namespace := $namespaces }}
   - {{ $namespace }}
 {{- end }}
@@ -34,7 +42,7 @@ You can limit allowed namespaces by setting msgTopologyOperator.watchAllNamespac
 {{- else }}
 
 RabbitMQ Messaging Topology Operator can ONLY access resources in the following namespaces:
-{{ $namespaces := .Values.msgTopologyOperator.watchAllNamespaces | default (list (include "common.names.namespace" .)) }}
+{{ $namespaces := .Values.msgTopologyOperator.watchAllNamespaces | default (list (include "cloudpirates.namespace" .)) }}
 {{- range $namespace := $namespaces }}
   - {{ $namespace }}
 {{- end }}
@@ -43,3 +51,4 @@ RabbitMQ Messaging Topology Operator won't be able to access resources in other 
 
 {{- end }}
 {{- end }}
+

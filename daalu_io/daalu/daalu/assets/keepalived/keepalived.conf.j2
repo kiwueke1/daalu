@@ -1,0 +1,21 @@
+global_defs {
+  default_interface {{ keepalived_interface }}
+}
+
+vrrp_instance VI_1 {
+  interface {{ keepalived_interface }}
+
+  state BACKUP
+  virtual_router_id {{ keepalived_vrid }}
+  priority 150
+  nopreempt
+
+  virtual_ipaddress {
+    {{ keepalived_vip }}
+  }
+
+  authentication {
+    auth_type PASS
+    auth_pass {{ keepalived_password }}
+  }
+}

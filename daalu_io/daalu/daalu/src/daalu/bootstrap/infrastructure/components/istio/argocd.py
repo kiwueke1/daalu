@@ -3,7 +3,7 @@
 from pathlib import Path
 import urllib.request
 
-from daalu.bootstrap.infrastructure.engine.component import InfraComponent
+from daalu.bootstrap.engine.component import InfraComponent
 
 
 class IstioArgoCDComponent(InfraComponent):

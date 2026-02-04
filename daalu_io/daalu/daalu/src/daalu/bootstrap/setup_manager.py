@@ -124,7 +124,54 @@ class SetupManager:
     # Cilium via Helm
     # ------------------------------------------------------------------
 
-    def install_cilium(self, opts: SetupOptions, control_plane_ip: str) -> None:
+    def install_cilium_test(self, opts: SetupOptions, api_host: str, api_port: int) -> None:
+        os.environ["KUBECONFIG"] = str(opts.workload_kubeconfig)
+
+        helm = HelmCliRunner(kube_context=None)
+
+        helm.add_repo(CILIUM_REPO)
+        helm.update_repos()
+
+        values = {
+            "ipam": {"mode": "kubernetes"},
+            "kubeProxyReplacement": True,
+
+            # 🔑 THIS IS THE FIX
+            "k8sServiceHost": "10.10.0.249",
+            #"k8sServiceHost": api_host,
+            "k8sServicePort": api_port,
+
+            "hostServices": {"enabled": True},
+            "externalIPs": {"enabled": True},
+            "nodePort": {"enabled": True},
+            "hostPort": {"enabled": True},
+
+            "image": {"pullPolicy": "IfNotPresent"},
+            "operator": {"replicas": 1},
+
+            "prometheus": {"enabled": True},
+            "hubble": {
+                "enabled": True,
+                "relay": {"enabled": True},
+                "ui": {"enabled": True},
+            },
+        }
+        print(f'values for cilium is {values}')
+
+        rel = ReleaseSpec(
+            name="cilium",
+            namespace="kube-system",
+            chart="cilium/cilium",
+            values=ValuesRef(inline=values),
+            create_namespace=True,
+            atomic=True,
+            wait=True,
+            timeout_seconds=900,
+        )
+
+        helm.upgrade_install(rel)
+
+    def install_cilium_1(self, opts: SetupOptions, control_plane_ip: str) -> None:
         os.environ["KUBECONFIG"] = str(opts.workload_kubeconfig)
 
         helm = HelmCliRunner(kube_context=None)
@@ -266,11 +313,85 @@ class SetupManager:
                 check=False,
             )
 
+    def get_api_endpoint_from_kubeconfig(self, opts: SetupOptions) -> tuple[str, int]:
+        """
+        Extract API server host/port from workload kubeconfig.
+        This must be the control-plane VIP (not node InternalIP).
+        """
+        import yaml
+        import re
+
+        cfg = yaml.safe_load(opts.workload_kubeconfig.read_text())
+        server = cfg["clusters"][0]["cluster"]["server"]
+        # e.g. https://10.10.0.249:6443
+
+        m = re.match(r"^https?://([^:/]+)(?::(\d+))?$", server)
+        if not m:
+            raise RuntimeError(f"Unexpected kubeconfig server format: {server}")
+
+        host = m.group(1)
+        port = int(m.group(2) or 6443)
+
+        return host, port
+
+
     # ------------------------------------------------------------------
     # Orchestrator
     # ------------------------------------------------------------------
 
     def run(self, opts: SetupOptions) -> None:
+        bus = EventBus([])
+        run_ctx = new_ctx(env="setup", context=self.mgmt_context or "default")
+
+        bus.emit(SetupStarted(cluster_name=opts.cluster_name, **run_ctx))
+
+        try:
+            # 1. Generate kubeconfig
+            self.generate_kubeconfig(opts)
+            bus.emit(KubeconfigGenerated(cluster_name=opts.cluster_name, **run_ctx))
+
+            # 2. Discover API endpoint FROM KUBECONFIG (VIP)
+            api_host, api_port = self.get_api_endpoint_from_kubeconfig(opts)
+            bus.emit(
+                ControlPlaneDiscovered(
+                    cluster_name=opts.cluster_name,
+                    ip=api_host,
+                    **run_ctx,
+                )
+            )
+
+            # 3. Install Cilium using VIP
+            print("starting cilium install from run method")
+            self.install_cilium(opts, api_host, api_port)
+            bus.emit(
+                CiliumInstalled(
+                    cluster_name=opts.cluster_name,
+                    ip=api_host,
+                    **run_ctx,
+                )
+            )
+
+            # 4. Wait for Cilium
+            self.wait_for_cilium(opts)
+            bus.emit(CiliumReady(cluster_name=opts.cluster_name, **run_ctx))
+
+            # 5. Hosts + inventory
+            nodes = self.update_hosts_and_inventory(opts)
+            bus.emit(HostsUpdated(cluster_name=opts.cluster_name, count=len(nodes), **run_ctx))
+
+            # 6. Labels / taints
+            self.label_and_taint_nodes(opts, nodes)
+            bus.emit(NodesLabeled(cluster_name=opts.cluster_name, count=len(nodes), **run_ctx))
+
+            bus.emit(SetupSummary(cluster_name=opts.cluster_name, status="OK", **run_ctx))
+
+        except Exception as e:
+            bus.emit(SetupFailed(cluster_name=opts.cluster_name, error=str(e), **run_ctx))
+            bus.emit(SetupSummary(cluster_name=opts.cluster_name, status="FAILED", error=str(e), **run_ctx))
+            raise
+
+
+    def run_1(self, opts: SetupOptions) -> None:
         bus = EventBus([])
         run_ctx = new_ctx(env="setup", context=self.mgmt_context or "default")
 

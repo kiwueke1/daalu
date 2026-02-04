@@ -1,7 +1,7 @@
 # src/daalu/bootstrap/infrastructure/components/jenkins.py
 
 from pathlib import Path
-from daalu.bootstrap.infrastructure.engine.component import InfraComponent
+from daalu.bootstrap.engine.component import InfraComponent
 
 
 class JenkinsComponent(InfraComponent):

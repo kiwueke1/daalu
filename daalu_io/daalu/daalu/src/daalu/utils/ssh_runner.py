@@ -23,6 +23,9 @@ class SSHRunner:
         sudo: bool = False,
         timeout: Optional[int] = None,
     ) -> tuple[int, str, str]:
+        #print("=== SSH DEBUG ===")
+        #print("Command:", cmd)
+        #print("=================")
         if sudo:
             cmd = f"sudo -H -E bash -c '{cmd}'"
 
@@ -62,18 +65,20 @@ class SSHRunner:
     def close(self) -> None:
         self.client.close()
 
-    def put_dir(self, local_dir: Path, remote_dir: Path, *, sudo: bool = False) -> None:
+    def put_dir(self, local_dir: Path, remote_dir: Path, *, release_name: str | None = None, sudo: bool = False,) -> None:
         """
         Recursively upload a directory to the remote host using SFTP.
         """
+        scoped_local = local_dir / release_name
+        scoped_remote = remote_dir / release_name
         if sudo:
             tmp = Path(f"/tmp/.daalu.upload.{os.getpid()}")
-            self.put_dir(local_dir, tmp, sudo=False)
+            self.put_dir(local_dir, tmp, release_name=release_name, sudo=False)
             self.run(f"rm -rf {remote_dir} && mv {tmp} {remote_dir}", sudo=True)
 
             print(
                 f"[ssh] Uploaded directory (sudo): "
-                f"{local_dir} → {remote_dir}"
+                f"{scoped_local} → {scoped_remote}"
             )
             return
 

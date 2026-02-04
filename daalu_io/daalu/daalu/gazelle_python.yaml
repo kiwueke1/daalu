@@ -8,7 +8,9 @@ manifest:
   modules_mapping:
     annotated_types: annotated_types
     bcrypt: bcrypt
+    certifi: certifi
     cffi: cffi
+    charset_normalizer: charset_normalizer
     click: click
     colorama: colorama
     copier: copier
@@ -16,6 +18,7 @@ manifest:
     dunamai: dunamai
     funcy: funcy
     google.protobuf: protobuf
+    idna: idna
     iniconfig: iniconfig
     invoke: invoke
     jinja2: jinja2
@@ -40,12 +43,14 @@ manifest:
     pymysql: pymysql
     pytest: pytest
     questionary: questionary
+    requests: requests
     rich: rich
     shellingham: shellingham
     temporalio: temporalio
     typer: typer
     typing_extensions: typing_extensions
     typing_inspection: typing_inspection
+    urllib3: urllib3
     wcwidth: wcwidth
     yaml: pyyaml
   pip_repository:

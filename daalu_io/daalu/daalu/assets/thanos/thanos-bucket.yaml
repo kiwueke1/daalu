@@ -1,0 +1,27 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: create-thanos-bucket
+  namespace: object-storage
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: mc
+          image: minio/mc:RELEASE.2025-08-13T08-35-41Z-cpuv1
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+
+              echo "Configuring MinIO alias..."
+              mc alias set minio http://minio.object-storage.svc.cluster.local:9000 admin admin1010
+
+              echo "Creating bucket if it does not exist..."
+              mc mb --ignore-existing minio/thanos
+
+              echo "Bucket state:"
+              mc ls minio

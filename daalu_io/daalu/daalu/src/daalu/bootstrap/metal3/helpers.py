@@ -1,3 +1,5 @@
+# src/daalu/bootstrap/metal3/helpers.py
+
 from __future__ import annotations
 
 import time
@@ -286,6 +288,7 @@ def deploy_cni(
         raise ValueError(f"Unsupported CNI: {cni}")
 
     # 1) Get control-plane IP (InternalIP)
+    print("starting cilium install from deploy_cni method")
     result = runner.run(
         [
             "kubectl",
@@ -302,7 +305,9 @@ def deploy_cni(
         check=True,
     )
 
-    control_plane_ip = (result.stdout or "").strip()
+    #control_plane_ip = (result.stdout or "").strip()
+    
+    control_plane_ip = "10.10.0.249"
     if not control_plane_ip:
         raise RuntimeError("Failed to determine control plane IP for CNI install")
 

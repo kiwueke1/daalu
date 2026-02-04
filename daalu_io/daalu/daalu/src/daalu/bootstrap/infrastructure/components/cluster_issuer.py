@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import List, Optional
 import yaml
 
-from daalu.bootstrap.infrastructure.engine.component import InfraComponent
+from daalu.bootstrap.engine.component import InfraComponent
 
 
 @dataclass

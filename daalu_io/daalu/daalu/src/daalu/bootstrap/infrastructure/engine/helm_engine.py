@@ -1,12 +1,12 @@
-# src/daalu/bootstrap/infrastructure/engine/helm_engine.py
+# src/daalu.bootstrap.engine.helm_engine.py
 
 from __future__ import annotations
 
-from daalu.bootstrap.infrastructure.engine.chart_manager import prepare_chart
-from daalu.bootstrap.infrastructure.engine.values import deep_merge
+from daalu.bootstrap.engine.chart_manager import prepare_chart
+from daalu.bootstrap.engine.values import deep_merge
 from daalu.kube.kubectl import KubectlRunner
 from daalu.config.models import RepoSpec
-from daalu.bootstrap.infrastructure.engine.infra_logging import InfraJsonlLogger
+from daalu.bootstrap.engine.infra_logging import InfraJsonlLogger
 
 
 class HelmInfraEngine:
@@ -21,7 +21,7 @@ class HelmInfraEngine:
         """
         return {}
 
-    def deploy(self, component):
+    def deploy_1(self, component):
         # ---------------- Context ----------------
         if self.logger:
             self.logger.set_component(component.name)
@@ -156,8 +156,7 @@ class HelmInfraEngine:
                 )
             raise
 
-
-    def deploy_1(self, component):
+    def deploy(self, component):
         # ---------------- Context ----------------
         if self.logger:
             self.logger.set_component(component.name)
@@ -176,10 +175,28 @@ class HelmInfraEngine:
 
         try:
             # ============================================================
-            # Helm-backed components
+            # 1. Pre-install (ALWAYS runs)
+            # ============================================================
+            if self.logger:
+                self.logger.set_stage("pre_install")
+                self.logger.log_event(
+                    "infra.component.pre_install.start",
+                    component=component.name,
+                )
+
+            component.pre_install(kubectl)
+
+            if self.logger:
+                self.logger.log_event(
+                    "infra.component.pre_install.success",
+                    component=component.name,
+                )
+
+            # ============================================================
+            # 2. Helm-backed components
             # ============================================================
             if component.uses_helm:
-                # ---------------- 1. Helm repo ----------------
+                # ---------------- Helm repo ----------------
                 if component.local_chart_dir is None:
                     if self.logger:
                         self.logger.set_stage("helm.repo")
@@ -198,9 +215,7 @@ class HelmInfraEngine:
                     )
                     self.helm.update_repos()
 
-
-
-                # ---------------- 2. Chart prep ----------------
+                # ---------------- Chart prep ----------------
                 if self.logger:
                     self.logger.set_stage("chart.prepare")
 
@@ -215,7 +230,7 @@ class HelmInfraEngine:
                         chart=str(chart_path),
                     )
 
-                # ---------------- 3. Values layering ----------------
+                # ---------------- Values layering ----------------
                 if self.logger:
                     self.logger.set_stage("values.merge")
 
@@ -224,8 +239,7 @@ class HelmInfraEngine:
                     component.values(),
                 )
 
-
-                # ---------------- 4. Install / upgrade ----------------
+                # ---------------- Install / upgrade ----------------
                 if self.logger:
                     self.logger.set_stage("helm.install_or_upgrade")
 
@@ -237,7 +251,7 @@ class HelmInfraEngine:
                     kubeconfig=component.kubeconfig,
                 )
 
-                # ---------------- 5. Wait ----------------
+                # ---------------- Wait ----------------
                 if component.wait_for_pods:
                     if self.logger:
                         self.logger.set_stage("kubectl.wait")
@@ -248,7 +262,7 @@ class HelmInfraEngine:
                     )
 
             # ============================================================
-            # Kubectl-only components (no Helm)
+            # 3. Kubectl-only components (no Helm)
             # ============================================================
             else:
                 if self.logger:
@@ -258,7 +272,9 @@ class HelmInfraEngine:
                         component=component.name,
                     )
 
-            # ---------------- 6. Post-install (always) ----------------
+            # ============================================================
+            # 4. Post-install (ALWAYS runs)
+            # ============================================================
             if self.logger:
                 self.logger.set_stage("post_install")
 
@@ -278,5 +294,3 @@ class HelmInfraEngine:
                     error=str(e),
                 )
             raise
-
- 

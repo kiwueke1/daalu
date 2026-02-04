@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import List
 
 from daalu.bootstrap.infrastructure.models import InfraSelection
-from daalu.bootstrap.infrastructure.engine.component import InfraComponent
+from daalu.bootstrap.engine.component import InfraComponent
 from daalu.bootstrap.infrastructure.components.metallb import MetalLBComponent
 from daalu.bootstrap.infrastructure.components.argocd import ArgoCDComponent
 from daalu.bootstrap.infrastructure.components.jenkins import JenkinsComponent
@@ -33,6 +33,10 @@ from daalu.bootstrap.infrastructure.components.kubernetes_node_labels import (
 )
 from daalu.bootstrap.infrastructure.components.valkey import ValkeyComponent
 from daalu.bootstrap.infrastructure.components.keycloak import KeycloakComponent
+from daalu.bootstrap.infrastructure.components.keepalived import (
+    KeepalivedComponent,
+)
+
 
 
 def infra_asset_path_1(
@@ -225,6 +229,18 @@ def build_infrastructure_components(
                     workspace_root,
                     component="keycloak",
                     filename="values.yaml",
+                ),
+                kubeconfig=kubeconfig_path,
+            )
+        )
+
+    if selection.components is None or "keepalived" in selection.components:
+        components.append(
+            KeepalivedComponent(
+                assets_dir=infra_asset_path(
+                    workspace_root,
+                    component="keepalived",
+                    filename="",
                 ),
                 kubeconfig=kubeconfig_path,
             )

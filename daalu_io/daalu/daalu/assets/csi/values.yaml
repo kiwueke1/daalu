@@ -1,0 +1,19 @@
+provisioner:
+  nodeSelector:
+    openstack-control-plane: enabled
+
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - ceph-csi-rbd-provisioner
+          topologyKey: kubernetes.io/hostname

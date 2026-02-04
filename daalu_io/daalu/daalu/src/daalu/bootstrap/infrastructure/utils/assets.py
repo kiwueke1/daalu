@@ -1,17 +1,15 @@
 # src/daalu/bootstrap/infrastructure/utils/assets.py
 
-from __future__ import annotations
 from pathlib import Path
+from typing import Optional
 
+
+daalu_artifacts = Path("~/.daalu").expanduser()
 
 def infra_asset_path(
-    workspace_root: Path,
+    daalu_assets: Path,
     component: str,
-    filename: str = "config.yaml",
+    filename: Optional[str] = None,
 ) -> Path:
-    return (
-        workspace_root
-        / "assets"
-        / component
-        / filename
-    )
+    base = daalu_assets / "assets" / component
+    return base / filename if filename else base

@@ -1,0 +1,50 @@
+# -------------------------------------------------------------------
+# Global image settings (optional but keeps parity with Atmosphere)
+# -------------------------------------------------------------------
+global:
+  imageRegistry: docker.io
+
+# -------------------------------------------------------------------
+# RabbitMQ server image (UPSTREAM, not Bitnami)
+# -------------------------------------------------------------------
+rabbitmqImage:
+  repository: rabbitmq
+  tag: "3.13.1"   # pin this explicitly
+
+# -------------------------------------------------------------------
+# Credential updater image
+# -------------------------------------------------------------------
+credentialUpdaterImage:
+  repository: rabbitmqoperator/credential-updater
+  tag: "1.0.4"
+
+# -------------------------------------------------------------------
+# RabbitMQ Cluster Operator
+# -------------------------------------------------------------------
+clusterOperator:
+  fullnameOverride: rabbitmq-cluster-operator
+
+  nodeSelector:
+    openstack-control-plane: enabled
+
+  image:
+    repository: rabbitmqoperator/cluster-operator
+    tag: "2.8.0"
+
+# -------------------------------------------------------------------
+# Messaging Topology Operator
+# -------------------------------------------------------------------
+msgTopologyOperator:
+  fullnameOverride: rabbitmq-messaging-topology-operator
+
+  nodeSelector:
+    openstack-control-plane: enabled
+
+  image:
+    repository: rabbitmqoperator/messaging-topology-operator
+    tag: "1.14.0"
+
+# -------------------------------------------------------------------
+# TLS / Cert-Manager integration
+# -------------------------------------------------------------------
+useCertManager: true

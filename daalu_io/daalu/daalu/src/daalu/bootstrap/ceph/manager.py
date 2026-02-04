@@ -445,11 +445,11 @@ class CephManager:
             return
 
         for host in hosts:
-            print(f"[ceph] Adding OSD disk /dev/vda on host {host.hostname}")
+            print(f"[ceph] Adding OSD disk /dev/sdb on host {host.hostname}")
 
             self._run(
                 cli,
-                f"cephadm shell -- ceph orch daemon add osd {host.hostname}:/dev/vda",
+                f"cephadm shell -- ceph orch daemon add osd {host.hostname}:/dev/sdb",
                 sudo=True,
             )
 
