@@ -11,6 +11,7 @@ import base64
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
+import time
 import paramiko
 import subprocess
 
@@ -396,7 +397,25 @@ class SshBootstrapper(NodeBootstrapper):
         """
         for i, host in enumerate(hosts, 1):
             log.info("[nodes] Bootstrapping %s (%d/%d)...", host.hostname, i, len(hosts))
-            h = self._connect(host)
+            # Retry SSH connection — freshly provisioned nodes may not be ready yet
+            h = None
+            for attempt in range(1, 31):
+                try:
+                    h = self._connect(host)
+                    break
+                except (paramiko.ssh_exception.AuthenticationException,
+                        paramiko.ssh_exception.SSHException,
+                        OSError) as e:
+                    if attempt == 30:
+                        raise RuntimeError(
+                            f"Failed to SSH into {host.address} as '{host.username}' "
+                            f"after 30 attempts: {e}"
+                        ) from e
+                    log.info(
+                        "[%s] SSH not ready (attempt %d/30, %s: %s), retrying in 20s...",
+                        host.hostname, attempt, type(e).__name__, e,
+                    )
+                    time.sleep(20)
             try:
                 if plan.run_apparmor:
                     log.info("[%s] Running apparmor setup...", host.hostname)

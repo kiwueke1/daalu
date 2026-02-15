@@ -33,20 +33,37 @@ def fetch_cluster_kubeconfig(
         label="fetch_cluster_kubeconfig",
     )
 
-    result = runner.run(
-        [
-            "kubectl",
-            "get",
-            "secret",
-            f"{cluster_name}-kubeconfig",
-            "-n",
-            namespace,
-            "-o",
-            "jsonpath={.data.value}",
-        ],
-        capture_output=True,
-        check=True,
-    )
+    cmd = [
+        "kubectl",
+        "get",
+        "secret",
+        f"{cluster_name}-kubeconfig",
+        "-n",
+        namespace,
+        "-o",
+        "jsonpath={.data.value}",
+    ]
+
+    retries = 30
+    delay = 20
+    for attempt in range(1, retries + 1):
+        result = runner.run(cmd, capture_output=True, check=False)
+        if result.returncode == 0 and (result.stdout or "").strip():
+            break
+        log.info(
+            "Waiting for kubeconfig secret to be ready (attempt %d/%d)...",
+            attempt, retries,
+        )
+        print(
+            f"  Waiting for kubeconfig secret '{cluster_name}-kubeconfig' "
+            f"to be ready ({attempt}/{retries}, retrying in {delay}s)..."
+        )
+        time.sleep(delay)
+    else:
+        raise RuntimeError(
+            f"Kubeconfig secret '{cluster_name}-kubeconfig' not available "
+            f"after {retries * delay}s"
+        )
 
     out_path.write_bytes(base64.b64decode(result.stdout or ""))
     return out_path
@@ -290,29 +307,42 @@ def deploy_cni(
     if cni != "cilium":
         raise ValueError(f"Unsupported CNI: {cni}")
 
-    # 1) Get control-plane IP (InternalIP)
+    # 1) Get control-plane IP (InternalIP) — wait for node to be available
     log.debug("starting cilium install from deploy_cni method")
-    result = runner.run(
-        [
-            "kubectl",
-            "--kubeconfig",
-            str(kubeconfig),
-            "get",
-            "nodes",
-            "-l",
-            "node-role.kubernetes.io/control-plane",
-            "-o",
-            "jsonpath={.items[0].status.addresses[?(@.type=='InternalIP')].address}",
-        ],
-        capture_output=True,
-        check=True,
-    )
+    cp_cmd = [
+        "kubectl",
+        "--kubeconfig",
+        str(kubeconfig),
+        "get",
+        "nodes",
+        "-l",
+        "node-role.kubernetes.io/control-plane",
+        "-o",
+        "jsonpath={.items[0].status.addresses[?(@.type=='InternalIP')].address}",
+    ]
 
-    #control_plane_ip = (result.stdout or "").strip()
-    
-    control_plane_ip = "10.10.0.249"
+    retries = 60
+    delay = 20
+    control_plane_ip = ""
+    for attempt in range(1, retries + 1):
+        result = runner.run(cp_cmd, capture_output=True, check=False)
+        control_plane_ip = (result.stdout or "").strip()
+        if result.returncode == 0 and control_plane_ip:
+            break
+        log.info(
+            "Waiting for control-plane node to be available (attempt %d/%d)...",
+            attempt, retries,
+        )
+        print(
+            f"  Waiting for control-plane node to be available "
+            f"({attempt}/{retries}, retrying in {delay}s)..."
+        )
+        time.sleep(delay)
+
     if not control_plane_ip:
-        raise RuntimeError("Failed to determine control plane IP for CNI install")
+        raise RuntimeError(
+            f"Failed to determine control plane IP after {retries * delay}s"
+        )
 
     # 2) Add Cilium repo
     runner.run(

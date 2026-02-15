@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import logging
 import paramiko
 from typing import List, Optional, Tuple
 import sys
@@ -8,6 +9,8 @@ import datetime
 from pathlib import Path
 from .models import CephHost, CephConfig
 from datetime import datetime
+
+log = logging.getLogger("daalu")
 
 
 from ...observers.dispatcher import EventBus
@@ -61,7 +64,7 @@ class CephManager:
         line = f"[{timestamp}] {message}"
 
         # Print to CLI (high-level summary)
-        log.debug(line, flush=True)
+        log.debug(line)
 
         # Write to deployment log file
         with open(self._log_file, "a", encoding="utf-8") as f:

@@ -71,8 +71,22 @@ class CSIManager:
         log.debug(f"[csi] Helm installed successfully: {out.strip()}")
 
     # ------------------------------------------------------------------
+    def _ensure_rbd_module(self) -> None:
+        """Load the rbd kernel module on all ceph hosts."""
+        for host in self.ceph_hosts:
+            log.info("[csi] Loading rbd kernel module on %s...", host.hostname)
+            host_ssh = open_ssh(host)
+            try:
+                host_ssh.run("modprobe rbd", sudo=True)
+            finally:
+                host_ssh.close()
+
+    # ------------------------------------------------------------------
     def deploy(self, cfg) -> None:
         log.debug(f"csi primary host is {self.primary_host}")
+
+        # Ensure rbd kernel module is loaded on all nodes
+        self._ensure_rbd_module()
 
         ssh = open_ssh(
             self.primary_host,

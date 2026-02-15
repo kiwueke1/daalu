@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "daalu"
 classifiers = ["Private :: Do Not Upload"]
@@ -11,6 +15,9 @@ version = "0"
 # of dependency versions are not compatible.
 dependencies = [
 ]
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 # See https://docs.astral.sh/ruff/configuration/
 [tool.ruff]

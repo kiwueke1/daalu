@@ -9,7 +9,6 @@ from typing import Optional, List, Set, Tuple
 import typer
 import paramiko
 
-from daalu.hpc.cli import cli as hpc_cli
 from daalu.config.loader import load_config
 from daalu.helm.cli_runner import HelmCliRunner
 
@@ -64,7 +63,6 @@ from daalu.bootstrap.openstack.manager import OpenStackManager
 # ------------------------------------------------------------------------------
 
 app = typer.Typer(help="Daalu Deployment CLI")
-app.add_typer(hpc_cli, name="hpc")
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[3]
 os.environ.setdefault("WORKSPACE_ROOT", str(WORKSPACE_ROOT))
@@ -540,6 +538,12 @@ def deploy(
     if "cluster-api" in install_plan:
         typer.echo("\n[cluster-api] Installing Cluster API...")
 
+        # Use CLI --ssh-key to derive ssh_public_key_path if not set in config
+        if ssh_key and cfg.cluster_api and not str(cfg.cluster_api.ssh_public_key_path).strip("."):
+            pub_key_path = Path(f"{ssh_key}.pub")
+            if pub_key_path.expanduser().is_file():
+                cfg.cluster_api.ssh_public_key_path = pub_key_path
+
         provider = getattr(cfg.cluster_api, "provider", "proxmox")
 
         if provider == "metal3":
@@ -560,12 +564,20 @@ def deploy(
     # 2) Node bootstrap
     # ------------------------------------------------------------------------------
     if "nodes" in install_plan:
+        # Use image_username from cluster_api config if --ssh-username was not
+        # explicitly provided (i.e. still the default "ubuntu").  Metal3 nodes
+        # are provisioned with image_username, so we must SSH as that user.
+        effective_ssh_user = ssh_username
+        if ssh_username == "ubuntu" and cfg.cluster_api and getattr(cfg.cluster_api, "image_username", None):
+            effective_ssh_user = cfg.cluster_api.image_username
+            typer.echo(f"[nodes] Using image_username '{effective_ssh_user}' from cluster config for SSH")
+
         deploy_nodes(
             cfg=cfg,
             workspace_root=WORKSPACE_ROOT,
             cluster_name=cluster_name,
             node_tags=node_tags,
-            ssh_username=ssh_username,
+            ssh_username=effective_ssh_user,
             ssh_key=ssh_key,
             domain_suffix=domain_suffix,
             managed_user=managed_user,
@@ -587,6 +599,22 @@ def deploy(
         )
 
         ssh = SSHRunner(client)
+
+        # Ensure helm is installed on the remote node
+        typer.echo("[setup] Ensuring helm is installed on remote node...")
+        rc, out, _ = ssh.run("which helm", sudo=False)
+        if rc != 0:
+            typer.echo("[setup] Helm not found, installing...")
+            rc, out, err = ssh.run(
+                "curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash",
+                sudo=True,
+            )
+            if rc != 0:
+                raise RuntimeError(f"Failed to install helm on remote node: {err}")
+            typer.echo("[setup] Helm installed successfully")
+        else:
+            typer.echo(f"[setup] Helm already installed at {out.strip()}")
+
         helm = HelmCliRunner(ssh=ssh, kube_context=context or cfg.context)
 
         kubeconfig_path = f"/tmp/kubeconfig-{cfg.cluster_api.cluster_name}.yaml"

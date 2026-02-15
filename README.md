@@ -2,17 +2,39 @@
 
 **Daalu powers independent cloud infrastructure — automated, production-grade, and fully under your control.**
 
-Daalu is a Python-based orchestration platform for deploying and managing private cloud infrastructure anywhere. It automates the full lifecycle of bare-metal Kubernetes clusters, OpenStack services, Ceph storage, monitoring stacks, and HPC workloads — from initial provisioning to day-2 operations — enabling organizations to build serious cloud infrastructure without dependency on hyperscalers.
+Daalu is a Python-based orchestration platform for deploying and managing private or public cloud infrastructure anywhere. It automates the full lifecycle of bare-metal Kubernetes clusters, OpenStack services, Ceph storage, monitoring stacks, and HPC workloads — from initial provisioning to day-2 operations — enabling organizations to build serious cloud infrastructure without dependency on hyperscalers.
 
 ## What It Does
 
-- **Bare-metal provisioning** — Provisions Kubernetes clusters on Proxmox or Metal3 using Cluster API
+- **Bare-metal provisioning** — Onboards bare metal servers into Kubernetes with Metal3 ClusterAPI provider; Proxmox/libvirt VMs for development.
 - **OpenStack deployment** — Deploys a full OpenStack control plane (Keystone, Nova, Neutron, Glance, Heat, Cinder, Manila, Octavia, Horizon, Barbican, and more) via Helm charts
 - **Ceph storage** — Bootstraps Ceph clusters and configures RBD CSI drivers
 - **Identity management** — Integrates Keycloak for SSO/OIDC across Grafana and OpenStack
 - **Monitoring** — Deploys Prometheus, Grafana, Loki, OpenSearch, and Thanos for metrics and log aggregation
 - **Infrastructure services** — MetalLB, Ingress-NGINX, ArgoCD, Istio, cert-manager, and more
 - **HPC orchestration** — GPU cluster management with Volcano, Ray, and Slurm schedulers
+
+---
+
+---
+
+## Final End Product
+
+- **Kubernetes control plane** — A production Kubernetes cluster running directly on bare-metal servers using Cluster API and Metal3.
+
+- **OpenStack cloud layer** — A fully operational OpenStack control plane providing compute (Nova), networking (Neutron), image services (Glance), block and object storage (Cinder, Manila), and orchestration capabilities.
+
+- **Distributed storage backend** — A Ceph-backed storage system with RBD CSI integration for persistent volumes and cloud storage services.
+
+- **Integrated operations stack** — Centralized identity (OIDC/SSO), monitoring, logging, and GitOps-based lifecycle management.
+
+- **HPC and GPU compute capability** — Optional GPU-enabled nodes and distributed schedulers (Volcano, Ray, Slurm) for large-scale compute and AI workloads.
+
+- **End-to-end AI/ML workload support** — An environment capable of supporting the full lifecycle of machine learning systems: data ingestion, distributed training, experiment tracking, model serving, and production deployment.
+
+In practical terms, the system transforms physical servers into a self-hosted cloud and HPC platform capable of running both general infrastructure workloads and advanced AI/ML environments (similar in functional scope to Kubeflow, but built directly on bare-metal infrastructure).
+
+
 
 ## Project Structure
 

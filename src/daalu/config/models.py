@@ -195,6 +195,7 @@ class DaaluConfig(BaseModel):
     ceph: Optional[CephConfig] = None
     monitoring: Optional[MonitoringConfig] = None
     openstack: Optional[OpenStackConfig] = None
+    openstack_secrets: Optional[Dict[str, str]] = None
 
     model_config = {
         "extra": "forbid"
