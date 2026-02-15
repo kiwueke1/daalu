@@ -5,6 +5,9 @@ import yaml
 
 from daalu.bootstrap.engine.component import InfraComponent
 from daalu.utils.helpers import load_yaml_file
+import logging
+
+log = logging.getLogger("daalu")
 
 
 class IPMIExporterComponent(InfraComponent):
@@ -33,7 +36,7 @@ class IPMIExporterComponent(InfraComponent):
 
 
     def post_install(self, kubectl):
-        print("installing ipmi-components")
+        log.debug("installing ipmi-components")
         kubectl.apply_objects([
             {
                 "apiVersion": "v1",

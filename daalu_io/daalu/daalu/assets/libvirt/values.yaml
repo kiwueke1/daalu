@@ -1,0 +1,63 @@
+images:
+  tags:
+    libvirt: docker.io/openstackhelm/libvirt:2024.1-ubuntu_jammy
+    libvirt_tls_sidecar: ghcr.io/vexxhost/atmosphere/libvirt-tls-sidecar:latest
+    libvirt_exporter: vexxhost/libvirtd-exporter:latest
+    ceph_config_helper: docker.io/openstackhelm/ceph-config-helper:ubuntu_jammy_18.2.2-1-20240312
+    dep_check: quay.io/airshipit/kubernetes-entrypoint:v1.0.0
+    kubectl: docker.io/bitnami/kubectl:latest
+
+conf:
+  ceph:
+    enabled: true
+    cinder:
+      user: cinder
+      secret_uuid: 457eb676-33da-42ec-9a8c-9293d545c337
+  libvirt:
+    listen_tcp: "0"
+    listen_tls: "1"
+    listen_addr: 0.0.0.0
+    auth_tcp: "none"
+    ca_file: "/etc/pki/CA/cacert.pem"
+    cert_file: "/etc/pki/libvirt/servercert.pem"
+    key_file: "/etc/pki/libvirt/private/serverkey.pem"
+    auth_unix_rw: "none"
+    log_level: "3"
+    log_outputs: "1:file:/var/log/libvirt/libvirtd.log"
+  qemu:
+    default_tls_x509_verify: "1"
+    vnc_tls: "1"
+    stdio_handler: "file"
+    user: "nova"
+    group: "kvm"
+    default_tls_x509_cert_dir: /etc/pki/qemu
+
+issuers:
+  libvirt:
+    kind: Issuer
+    name: libvirt-api
+  vencrypt:
+    kind: Issuer
+    name: libvirt-vnc
+
+manifests:
+  role_cert_manager: true
+
+pod:
+  sidecars:
+    libvirt_exporter: true
+  probes:
+    libvirt:
+      libvirt:
+        liveness:
+          enabled: true
+          params:
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 5
+        readiness:
+          enabled: true
+          params:
+            initialDelaySeconds: 15
+            periodSeconds: 60
+            timeoutSeconds: 5

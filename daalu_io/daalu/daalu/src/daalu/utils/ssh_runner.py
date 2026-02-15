@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+import logging
 import paramiko
 import os
 from typing import Optional
+
+log = logging.getLogger("daalu")
 
 
 class SSHCommandError(RuntimeError):
@@ -76,10 +79,7 @@ class SSHRunner:
             self.put_dir(local_dir, tmp, release_name=release_name, sudo=False)
             self.run(f"rm -rf {remote_dir} && mv {tmp} {remote_dir}", sudo=True)
 
-            print(
-                f"[ssh] Uploaded directory (sudo): "
-                f"{scoped_local} → {scoped_remote}"
-            )
+            log.debug("[ssh] Uploaded directory (sudo): %s → %s", scoped_local, scoped_remote)
             return
 
         sftp = self.client.open_sftp()
@@ -88,10 +88,7 @@ class SSHRunner:
         finally:
             sftp.close()
 
-        print(
-            f"[ssh] Uploaded directory: "
-            f"{local_dir} → {remote_dir}"
-        )
+        log.debug("[ssh] Uploaded directory: %s → %s", local_dir, remote_dir)
 
     def _put_dir_recursive(self, sftp, local: Path, remote: Path):
         try:

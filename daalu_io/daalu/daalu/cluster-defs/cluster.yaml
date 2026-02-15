@@ -100,7 +100,7 @@ releases:
 
 keycloak:
   monitoring:
-    base_url: "https://keycloak.daalu.io"
+    base_url: "https://auth.daalu.io"
     admin_realm: "master"
     admin_client_id: "admin-cli"
     username: "admin"
@@ -116,7 +116,7 @@ keycloak:
       - "https://grafana.daalu.io/*"
 
   openstack:
-    base_url: "https://keycloak.daalu.io"
+    base_url: "https://auth.daalu.io"
     admin_realm: "master"
     admin_client_id: "admin-cli"
     username: "admin"
@@ -126,7 +126,7 @@ keycloak:
     realm: "daalu"
     display_name: "Daalu"
     github_token: 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
-    oidc_issuer_url: "https://keycloak.daalu.io/realms/daalu"
+    oidc_issuer_url: "https://auth.daalu.io/realms/daalu"
     oauth2_proxy_ssl_insecure_skip_verify: false
     domains:
       - name: daalu
@@ -145,6 +145,15 @@ keycloak:
     grafana_redirect_uris:
       - "https://grafana.daalu.io/login/generic_oauth"
       - "https://grafana.daalu.io/*"
+
+ceph:
+  # Pool replication settings — set to 1 for dev (single OSD), 3 for production
+  pool_replication_size: 1
+  pool_min_size: 1
+
+openstack:
+  network_backend: ovn
+  ovn_bgp_agent_enabled: false
 
 monitoring:
   thanos:

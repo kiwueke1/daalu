@@ -1,0 +1,20 @@
+network:
+  public: "192.168.0.0/24"
+  cluster: "192.168.0.0/24"
+
+conf:
+  ceph:
+    global:
+      # fsid is injected at runtime from 'ceph mon dump'
+      fsid: ""
+
+manifests:
+  configmap_bin: false
+  configmap_bin_common: false
+  deployment_rbd_provisioner: false
+  deployment_csi_rbd_provisioner: false
+  deployment_cephfs_provisioner: false
+  job_cephfs_client_key: false
+  job_namespace_client_key_cleaner: false
+  job_namespace_client_key: false
+  storageclass: false

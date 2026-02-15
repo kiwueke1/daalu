@@ -5,6 +5,9 @@ from pathlib import Path
 from daalu.bootstrap.engine.component import InfraComponent
 from daalu.utils.helpers import load_yaml_file
 from daalu.utils.helpers import kubectl
+import logging
+
+log = logging.getLogger("daalu")
 
 
 class MemcachedComponent(InfraComponent):
@@ -81,5 +84,5 @@ class MemcachedComponent(InfraComponent):
         )
 
     def values(self) -> dict:
-        print(f"values are {self._values}")
+        log.debug(f"values are {self._values}")
         return self._values

@@ -94,8 +94,11 @@ class ThanosComponent(InfraComponent):
             namespace=self.namespace,
             timeout_seconds=60,
         )
-        thanos_bucket_job_path = self.assets_dir/"thanos-bucket.yaml"
-        kubectl.apply_file(thanos_bucket_job_path)
+        thanos_bucket_job_path = self.assets_dir / "thanos-bucket.yaml"
+        kubectl.apply_content(
+            content=thanos_bucket_job_path.read_text(),
+            remote_path="/tmp/thanos-bucket.yaml",
+        )
 
     # ---------------------------------------------------------
     # Helm values (used by HelmInfraEngine)

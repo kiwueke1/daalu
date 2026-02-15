@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -12,6 +13,8 @@ try:
     from jinja2 import Environment, FileSystemLoader
 except Exception:
     Environment = None  # optional dep; tests will skip template rendering if missing
+
+log = logging.getLogger("daalu")
 
 
 def _kubectl_json(args: List[str], kube_context: Optional[str] = None, kubeconfig: Optional[str] = None) -> dict:
@@ -30,7 +33,7 @@ def _kubectl_json(args: List[str], kube_context: Optional[str] = None, kubeconfi
 def get_node_names(workload_kubeconfig: str) -> List[str]:
     data = _kubectl_json(["get", "nodes"], kubeconfig=workload_kubeconfig)
     processed_data = [item["metadata"]["name"] for item in data.get("items", [])]
-    print(f"node data is {processed_data}")
+    log.debug(f"node data is {processed_data}")
     return [item["metadata"]["name"] for item in data.get("items", [])]
 
 
@@ -42,7 +45,7 @@ def get_node_internal_ip(
     Retrieve the InternalIP of a Kubernetes Node using `kubectl get node <name> -o json`.
     Reuses _kubectl_json for execution and optional context/kubeconfig handling.
     """
-    print(f"Grabbing node IP for {node_name}")
+    log.debug(f"Grabbing node IP for {node_name}")
 
     try:
         data = _kubectl_json(
@@ -50,28 +53,28 @@ def get_node_internal_ip(
             kubeconfig=kubeconfig,
         )
     except RuntimeError as e:
-        print(f"Error fetching node info: {e}")
+        log.debug(f"Error fetching node info: {e}")
         return None
 
     addrs = data.get("status", {}).get("addresses", [])
-    print(f"Node IP addresses: {addrs}")
+    log.debug(f"Node IP addresses: {addrs}")
 
     for a in addrs:
         if a.get("type") == "InternalIP":
             return a.get("address")
 
-    print(f"No InternalIP found for node {node_name}")
+    log.debug(f"No InternalIP found for node {node_name}")
     return None
 
 
 def get_machine_internal_ip(mgmt_context: Optional[str], machine_name: str) -> Optional[str]:
     # Machines live on the management cluster; ask for a single Machine by name
     #try:
-    print(f"grabbing machine ip for {machine_name}")
+    log.debug(f"grabbing machine ip for {machine_name}")
     data = _kubectl_json(["get", "machines", machine_name])
     #except RuntimeError:        return None
     addrs = data.get("status", {}).get("addresses", [])
-    print(f"machine ip addresses {addrs}")
+    log.debug(f"machine ip addresses {addrs}")
     for a in addrs:
         if a.get("type") == "InternalIP":
             return a.get("address")
@@ -96,7 +99,7 @@ def build_hosts_entries(
         if ip:
             out.append((ip, n))
 
-    print(f"hosts entries is {out}")
+    log.debug(f"hosts entries is {out}")
     return out
 
 def build_hosts_entries_1(
@@ -110,7 +113,7 @@ def build_hosts_entries_1(
         ip = get_machine_internal_ip(mgmt_context, n)
         if ip:
             out.append((ip, n))
-    print(f"hosts entries is {out}")
+    log.debug(f"hosts entries is {out}")
     return out
 
 def update_hosts_file(
@@ -172,7 +175,7 @@ def render_inventory_templates(
     ctx = {
         "hosts_entries": [{"ip": ip, "hostname": hn} for ip, hn in entries],
     }
-    print(f'ctx is {ctx}')
+    log.debug(f'ctx is {ctx}')
     if extra_vars:
         ctx.update(extra_vars)
 

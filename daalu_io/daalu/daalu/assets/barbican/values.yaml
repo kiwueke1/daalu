@@ -1,0 +1,66 @@
+# =========================         
+# Barbican – USER VALUES
+# =========================
+
+barbican:
+  # ------------------------------------------------------------------
+  # REQUIRED
+  # ------------------------------------------------------------------
+  kek: "admin10"
+
+  # ------------------------------------------------------------------
+  # API scaling
+  # ------------------------------------------------------------------
+  replicas:
+    api: 3
+
+  # ------------------------------------------------------------------
+  # Image override (optional)
+  # ------------------------------------------------------------------
+  image:
+    tag: "2024.1-ubuntu_jammy"
+
+# --------------------------------------------------------------------
+# Pod-level configuration (top-level, NOT under barbican:)
+# --------------------------------------------------------------------
+pod:
+  tolerations:
+    barbican:
+      enabled: true
+      tolerations:
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+        - key: node.kubernetes.io/not-ready
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 300
+        - key: node.kubernetes.io/unreachable
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 300
+
+# --------------------------------------------------------------------
+# Node selector (must match control-plane nodes)
+# --------------------------------------------------------------------
+nodeSelector:
+  openstack-control-plane: enabled
+
+# --------------------------------------------------------------------
+# Disable ingress (Atmosphere parity)
+# --------------------------------------------------------------------
+manifests:
+  ingress_api: false
+  service_ingress_api: false
+  network_policy: true
+
+  
+images:
+  tags:
+    barbican_api: docker.io/openstackhelm/barbican:2024.1-ubuntu_jammy
+    barbican_db_sync: docker.io/openstackhelm/barbican:2024.1-ubuntu_jammy
+    barbican_ks_user: docker.io/openstackhelm/barbican:2024.1-ubuntu_jammy
+    barbican_rabbit_init: docker.io/openstackhelm/barbican:2024.1-ubuntu_jammy

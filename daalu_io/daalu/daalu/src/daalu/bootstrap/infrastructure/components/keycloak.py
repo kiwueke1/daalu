@@ -13,6 +13,9 @@ import base64
 
 
 from daalu.bootstrap.engine.component import InfraComponent
+import logging
+
+log = logging.getLogger("daalu")
 
 
 class KeycloakComponent(InfraComponent):
@@ -101,8 +104,8 @@ class KeycloakComponent(InfraComponent):
 
     # ------------------------------------------------------------------
     def pre_install(self, kubectl) -> None:
-        print("Running keycloak pre-install steps...")
-        print("Bootstrapping database via Kubernetes Job...")
+        log.debug("Running keycloak pre-install steps...")
+        log.debug("Bootstrapping database via Kubernetes Job...")
 
         job_name = "keycloak-mysql-bootstrap"
         pxc_ns = "openstack"
@@ -111,7 +114,7 @@ class KeycloakComponent(InfraComponent):
         # ------------------------------------------------------------------
         # Ensure auth-system namespace exists (idempotent)
         # ------------------------------------------------------------------
-        print(f"Ensuring namespace '{auth_ns}' exists...")
+        log.debug(f"Ensuring namespace '{auth_ns}' exists...")
 
         kubectl.apply_objects(
             [
@@ -126,7 +129,7 @@ class KeycloakComponent(InfraComponent):
         )
 
         kubectl.run(["get", "namespace", auth_ns])
-        print(f" Namespace '{auth_ns}' is present")
+        log.debug(f" Namespace '{auth_ns}' is present")
 
 
         sql = f"""
@@ -175,7 +178,7 @@ class KeycloakComponent(InfraComponent):
                                 "args": [
                                     (
                                         "set -euo pipefail\n"
-                                        f'printf "%s\\n" "{sql.replace(chr(34), "\\\"")}" | '
+                                        'printf "%s\\n" "' + sql.replace('"', '\\"') + '" | '
                                         "mysql "
                                         "-h percona-xtradb-haproxy.openstack.svc.cluster.local "
                                         "-P 3306 "
@@ -217,7 +220,6 @@ class KeycloakComponent(InfraComponent):
         # ------------------------------------------------------------------
         rc, out, err = kubectl.run(
             ["logs", f"job/{job_name}", "-n", pxc_ns],
-            capture_output=True,
         )
 
         if rc != 0:
@@ -225,13 +227,13 @@ class KeycloakComponent(InfraComponent):
                 f"MySQL bootstrap job failed:\n{err}"
             )
 
-        print(out.strip())
-        print("✅ Database and user ensured")
+        log.debug(out.strip())
+        log.debug("✅ Database and user ensured")
 
         # ------------------------------------------------------------------
         # Secret for Keycloak DB password
         # ------------------------------------------------------------------
-        print(
+        log.debug(
             f"Creating/ensuring secret 'keycloak-externaldb' "
             f"in namespace '{self.namespace}'..."
         )
@@ -248,6 +250,7 @@ class KeycloakComponent(InfraComponent):
                     "type": "Opaque",
                     "stringData": {
                         "db-password": self.db_password,
+                        "db-username": self.db_user,
                     },
                 }
             ]
@@ -257,13 +260,13 @@ class KeycloakComponent(InfraComponent):
             ["get", "secret", "keycloak-externaldb", "-n", self.namespace]
         )
 
-        print("✅ Secret 'keycloak-externaldb' is present and ready")
+        log.debug("✅ Secret 'keycloak-externaldb' is present and ready")
 
     def pre_install_1(self, kubectl) -> None:
         """
         Prepare database and user (exact Ansible parity).
         """
-        print("Running keycloak pre-install steps...")
+        log.debug("Running keycloak pre-install steps...")
         mysql_host = self._get_pxc_service_ip(kubectl)
         self._wait_for_mysql(mysql_host)
 
@@ -299,6 +302,7 @@ class KeycloakComponent(InfraComponent):
                     "type": "Opaque",
                     "stringData": {
                         "db-password": self.db_password,
+                        "db-username": self.db_user,
                     },
                 }
             ]

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 from pathlib import Path
 from typing import Optional, List, Set, Tuple
 
@@ -219,7 +220,8 @@ def deploy_nodes(
     managed_user_password: str,
 ) -> None:
     """
-    Bootstrap nodes via SSH based on inventory + tags.
+    Bootstrap nodes via SSH based on inventory + tags,
+    then label nodes for OpenStack scheduling.
     """
     typer.echo("\n[nodes] Bootstrapping nodes...")
 
@@ -244,6 +246,7 @@ def deploy_nodes(
 
     opts = NodeBootstrapOptions(
         cluster_name=cluster_name,
+        cluster_namespace=cfg.cluster_api.namespace,
         kubeconfig_content=kubeconfig_text,
         domain_suffix=domain_suffix,
         managed_user=managed_user,
@@ -251,6 +254,45 @@ def deploy_nodes(
     )
 
     SshBootstrapper().bootstrap(hosts, plan, opts)
+
+    # ------------------------------------------------------------------
+    # Label nodes so CSI / OpenStack components can schedule
+    # ------------------------------------------------------------------
+    typer.echo("\n[nodes] Labeling nodes...")
+
+    kubeconfig_path = f"/tmp/kubeconfig-{cfg.cluster_api.cluster_name}.yaml"
+    controllers = {h for h, _ in read_group_from_inventory(inv, "controllers")}
+    computes = {h for h, _ in read_group_from_inventory(inv, "computes")}
+
+    for node in controllers | computes:
+        labels = ["openvswitch=enabled"]
+        if node in controllers:
+            labels.append("openstack-control-plane=enabled")
+        if node in computes:
+            labels.append("openstack-compute-node=enabled")
+
+        subprocess.run(
+            [
+                "kubectl", "--kubeconfig", kubeconfig_path,
+                "label", "node", node,
+                *labels,
+                "--overwrite",
+            ],
+            check=True,
+        )
+        typer.echo(f"  labeled {node}: {', '.join(labels)}")
+
+        # Remove NoSchedule taint from control-plane nodes
+        if node in controllers:
+            subprocess.run(
+                [
+                    "kubectl", "--kubeconfig", kubeconfig_path,
+                    "taint", "node", node,
+                    "node-role.kubernetes.io/control-plane:NoSchedule-",
+                ],
+                check=False,  # may not exist
+            )
+            typer.echo(f"  removed control-plane NoSchedule taint from {node}")
 
 
 def connect_controller_ssh(
@@ -416,8 +458,11 @@ def deploy_openstack(
     workspace_root: Path,
     infra_flag: Optional[str],
     kubeconfig_path: str,
+    phase: Optional[str] = None,
 ):
     typer.echo("\n[openstack] Installing OpenStack components...")
+    if phase:
+        typer.echo(f"[openstack] Running phase: {phase}")
 
     selection = parse_openstack_flag(infra_flag)
 
@@ -426,12 +471,13 @@ def deploy_openstack(
         selection=selection,
         workspace_root=workspace_root,
         kubeconfig_path=kubeconfig_path,
+        ssh=ssh,
     )
 
     OpenStackManager(
         helm=helm,
         ssh=ssh,
-    ).deploy(components)
+    ).deploy(components, phase=phase)
 
 # ------------------------------------------------------------------------------
 # Deploy command
@@ -465,10 +511,15 @@ def deploy(
     ceph_image: Optional[str] = typer.Option(None, "--ceph-image"),
     dry_run: bool = typer.Option(False, "--dry-run"),
     debug: bool = typer.Option(False, "--debug"),
+    phase: Optional[str] = typer.Option(
+        None,
+        "--phase",
+        help="Run only a specific deploy phase: pre_install, helm, or post_install",
+    ),
 ):
     typer.echo(f"Workspace root: {WORKSPACE_ROOT}")
 
-    logger, run_id, log_path = init_logging()
+    logger, run_id, log_path = init_logging(verbose=debug)
 
     typer.echo("")
     typer.secho("Daalu Deployment Started", bold=True)
@@ -484,7 +535,7 @@ def deploy(
     # ------------------------------------------------------------------------------
     # 1) Cluster API
     # ------------------------------------------------------------------------------
-    print(f"install plan is {install_plan}")
+    logger.debug("install plan: %s", install_plan)
 
     if "cluster-api" in install_plan:
         typer.echo("\n[cluster-api] Installing Cluster API...")
@@ -539,10 +590,15 @@ def deploy(
         helm = HelmCliRunner(ssh=ssh, kube_context=context or cfg.context)
 
         kubeconfig_path = f"/tmp/kubeconfig-{cfg.cluster_api.cluster_name}.yaml"
-        ssh.put_file(
-            local_path=kubeconfig_path,
-            remote_path=kubeconfig_path,
-        )
+        if os.path.isfile(kubeconfig_path):
+            ssh.put_file(
+                local_path=kubeconfig_path,
+                remote_path=kubeconfig_path,
+            )
+        else:
+            logger.warning(
+                "Local kubeconfig %s not found – skipping upload", kubeconfig_path
+            )
 
 
         # ------------------------------------------------------------------------------
@@ -617,6 +673,7 @@ def deploy(
                 workspace_root=WORKSPACE_ROOT,
                 infra_flag=infra,
                 kubeconfig_path=kubeconfig_path,
+                phase=phase,
             )
 
     finally:

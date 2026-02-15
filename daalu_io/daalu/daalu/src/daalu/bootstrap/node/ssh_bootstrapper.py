@@ -16,6 +16,9 @@ import subprocess
 
 from .interface import NodeBootstrapper
 from .models import Host, NodeBootstrapPlan, NodeBootstrapOptions
+import logging
+
+log = logging.getLogger("daalu")
 
 
 @dataclass
@@ -203,7 +206,7 @@ class SshBootstrapper(NodeBootstrapper):
         # Namespace:
         #   MUST be the Cluster API namespace (Metal3 usually uses "metal3")
         #
-        namespace = getattr(opts, "cluster_namespace", "metal3")
+        namespace = opts.cluster_namespace
         secret_name = f"{opts.cluster_name}-kubeconfig"
 
         cmd = [
@@ -326,17 +329,28 @@ class SshBootstrapper(NodeBootstrapper):
         sudo_line = f"{opts.managed_user} ALL=(ALL) NOPASSWD:ALL"
         self._put_content(h, sudo_line + "\n", f"/etc/sudoers.d/{opts.managed_user}", mode=0o440, sudo=True)
 
-        # hostname
-        short_hostname = host.hostname.split(".", 1)[0]
-        self._run(h, f"hostnamectl set-hostname {short_hostname}", sudo=True)
-        #self._run(h, f"hostnamectl set-hostname {host.hostname}", sudo=True)
-
-        # ens18 IP and /etc/hosts entry
-        code, out, _ = self._run(h, "ip -4 addr show ens18 | awk '/inet /{print $2}' | cut -d/ -f1", sudo=False)
-        ip = out.strip().splitlines()[0] if out.strip() else ""
-        if ip:
+        # hostname — use short name for hostnamectl
+        if "." in host.hostname:
+            short_hostname = host.hostname.split(".", 1)[0]
+            fqdn = host.hostname
+        else:
+            short_hostname = host.hostname
             fqdn = f"{host.hostname}.{opts.domain_suffix}"
-            self._append_line(h, f"{ip} {fqdn} {host.hostname}", "/etc/hosts", sudo=True)
+
+        self._run(h, f"hostnamectl set-hostname {short_hostname}", sudo=True)
+
+        # /etc/hosts — clean up stale image-build hostname (e.g. UBUNTU_24.04_NODE_IMAGE_...)
+        # and ensure the 127.0.0.1 line only has "localhost"
+        self._run(
+            h,
+            r"sed -i 's/^127\.0\.0\.1.*/127.0.0.1 localhost/' /etc/hosts",
+            sudo=True,
+        )
+
+        # Add FQDN entry using the known address from inventory
+        # so that `hostname -f` resolves correctly
+        hosts_entry = f"{host.address} {fqdn} {short_hostname}"
+        self._append_line(h, hosts_entry, "/etc/hosts", sudo=True)
 
     def role_inotify_limits(self, h: _SSHHandles, host: Host, opts: NodeBootstrapOptions):
         """
@@ -380,20 +394,26 @@ class SshBootstrapper(NodeBootstrapper):
         """
         Connect to each host and run the requested roles.
         """
-        print(f'hosts in bootstrap method is {hosts}')
-        for host in hosts:
+        for i, host in enumerate(hosts, 1):
+            log.info("[nodes] Bootstrapping %s (%d/%d)...", host.hostname, i, len(hosts))
             h = self._connect(host)
             try:
                 if plan.run_apparmor:
+                    log.info("[%s] Running apparmor setup...", host.hostname)
                     self.role_apparmor_setup(h, host, opts)
                 if plan.run_netplan:
+                    log.info("[%s] Configuring netplan...", host.hostname)
                     self.role_netplan_config(h, host, opts)
                 if plan.run_ssh_and_hostname:
+                    log.info("[%s] Configuring SSH and hostname...", host.hostname)
                     self.role_ssh_and_hostname(h, host, opts)
                 if plan.run_inotify_limits:
+                    log.info("[%s] Setting inotify limits...", host.hostname)
                     self.role_inotify_limits(h, host, opts)
                 if plan.run_istio_modules:
+                    log.info("[%s] Loading istio kernel modules...", host.hostname)
                     self.role_istio_modules(h, host, opts)
+                log.info("[%s] Bootstrap complete", host.hostname)
             finally:
                 self._close(h)
 

@@ -10,6 +10,9 @@ from daalu.cli.helper import (
     inventory_path,
     read_group_from_inventory,
 )
+import logging
+
+log = logging.getLogger("daalu")
 
 
 class KubernetesNodeLabelsComponent(InfraComponent):
@@ -78,7 +81,7 @@ class KubernetesNodeLabelsComponent(InfraComponent):
 
             # Remove NoSchedule taint for control-plane nodes
             if node in controllers:
-                print(f"Removing NoSchedule taint from controller node {node}")
+                log.debug(f"Removing NoSchedule taint from controller node {node}")
                 kubectl.patch(
                     api_version="v1",
                     kind="Node",

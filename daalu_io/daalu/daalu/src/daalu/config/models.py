@@ -149,6 +149,27 @@ class ClusterConfig(BaseModel):
         return {r.name: r for r in self.releases}
 
 
+class CephConfig(BaseModel):
+    """
+    Ceph storage tunables.
+    Set pool_replication_size=1 for dev (single OSD), 3 for production.
+    """
+    pool_replication_size: int = 3
+    pool_min_size: int = 2
+
+    model_config = {"extra": "forbid"}
+
+
+class OpenStackConfig(BaseModel):
+    """
+    OpenStack deployment tunables.
+    """
+    network_backend: Literal["ovn", "linuxbridge"] = "ovn"
+    ovn_bgp_agent_enabled: bool = False
+
+    model_config = {"extra": "forbid"}
+
+
 class KeycloakConfig(BaseModel):
     """
     Top-level Keycloak config.
@@ -171,7 +192,9 @@ class DaaluConfig(BaseModel):
     releases: List[ReleaseSpec] = Field(default_factory=list)
 
     keycloak: Optional[KeycloakConfig] = None
+    ceph: Optional[CephConfig] = None
     monitoring: Optional[MonitoringConfig] = None
+    openstack: Optional[OpenStackConfig] = None
 
     model_config = {
         "extra": "forbid"

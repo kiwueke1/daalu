@@ -26,9 +26,9 @@ grafana:
       client_id: $__file{/etc/secrets/keycloak/client_id}
       client_secret: $__file{/etc/secrets/keycloak/client_secret}
       scopes: openid profile email roles
-      auth_url: https://keycloak.daalu.io/realms/daalu/protocol/openid-connect/auth
-      token_url: https://keycloak.daalu.io/realms/daalu/protocol/openid-connect/token
-      api_url: https://keycloak.daalu.io/realms/daalu/protocol/openid-connect/userinfo
+      auth_url: https://auth.daalu.io/realms/daalu/protocol/openid-connect/auth
+      token_url: https://auth.daalu.io/realms/daalu/protocol/openid-connect/token
+      api_url: https://auth.daalu.io/realms/daalu/protocol/openid-connect/userinfo
       login_attribute_path: preferred_username
       email_attribute_path: email
 

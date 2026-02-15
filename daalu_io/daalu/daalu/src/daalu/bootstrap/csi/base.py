@@ -12,6 +12,9 @@ import paramiko
 from daalu.observers.dispatcher import EventBus
 from daalu.observers.events import new_ctx
 from daalu.bootstrap.ceph.models import CephHost
+import logging
+
+log = logging.getLogger("daalu")
 
 
 class CSIBase:
@@ -154,7 +157,7 @@ class CSIBase:
     def _log(self, message: str) -> None:
         ts = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
         line = f"[{ts}] {message}"
-        print(line, flush=True)
+        log.debug(line, flush=True)
         with open(self.log_file, "a", encoding="utf-8") as f:
             f.write(line + "\n")
 

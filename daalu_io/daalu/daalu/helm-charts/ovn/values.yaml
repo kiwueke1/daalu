@@ -88,7 +88,7 @@ conf:
   #   br-private: eth0
   #   br-public: eth1
   auto_bridge_add:
-    br-ex: ens20
+    br-ex: eno1
   #auto_bridge_add: {}
   ovn_network_logging_parser_uwsgi:
     uwsgi:
@@ -202,7 +202,7 @@ conf:
 pod:
   # NOTE: should be same as nova.pod.use_fqdn.compute
   use_fqdn:
-    compute: true
+    compute: false
   security_context:
     ovn_northd:
       container:

@@ -11,6 +11,7 @@ def init_logging(
     *,
     base_dir: Path | None = None,
     name: str = "daalu",
+    verbose: bool = False,
 ) -> tuple[logging.Logger, str, Path]:
     """
     Initializes:
@@ -41,9 +42,9 @@ def init_logging(
     fh.setLevel(logging.DEBUG)
     fh.setFormatter(formatter)
 
-    # Console = IMPORTANT ONLY
+    # Console = INFO by default, DEBUG when --debug is passed
     ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO)
+    ch.setLevel(logging.DEBUG if verbose else logging.INFO)
     ch.setFormatter(formatter)
 
     logger.addHandler(fh)

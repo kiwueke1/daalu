@@ -129,6 +129,12 @@ filegroup(
     visibility = ["//visibility:public"],
 )
 
+filegroup(
+    name = "assets",
+    srcs = glob(["assets/**"]),
+    visibility = ["//visibility:public"],
+)
+
 py_test(
     name = "test_ceph_manager",
     srcs = ["tests/bootstrap/test_ceph_manager.py"],

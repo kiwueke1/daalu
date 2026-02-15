@@ -12,6 +12,9 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 from daalu.bootstrap.engine.component import InfraComponent
 from daalu.utils.helpers import wait_for_node_interface_ipv4
+import logging
+
+log = logging.getLogger("daalu")
 
 
 def _render_jinja_dir(*, root: Path) -> Environment:
@@ -76,7 +79,7 @@ class KeepalivedComponent(InfraComponent):
 
     def pre_install(self, kubectl) -> None:
         if not self._values.get("keepalived_enabled", True):
-            print("[keepalived] Disabled, skipping")
+            log.debug("[keepalived] Disabled, skipping")
             return
 
         # Required config
@@ -109,7 +112,7 @@ class KeepalivedComponent(InfraComponent):
 
         # Apply (your kubectl wrapper should support applying raw YAML)
         # If you don't have apply_yaml, use apply_file with a temp file.
-        kubectl.apply_content(manifests, remote_path="/tmp/keepalived.yaml")
+        kubectl.apply_content(content=manifests, remote_path="/tmp/keepalived.yaml")
 
         # Replace the old wait-for-ip initContainer with a Daalu-level wait
         wait_cfg = self._values.get("wait_for_interface_ipv4", {}) or {}

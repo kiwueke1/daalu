@@ -2,11 +2,14 @@ from __future__ import annotations
 from abc import ABC
 from dataclasses import dataclass
 from pathlib import Path
+import logging
 import yaml
 from typing import Optional
 import urllib.request
 import time
 import requests
+
+log = logging.getLogger("daalu")
 
 
 
@@ -40,6 +43,7 @@ class InfraComponent(ABC):
 
     # uses_helm boolean differentiates components that dont require Helm actions.
     uses_helm: bool = True
+    requires_public_ingress: bool = False
 
     # Optional hooks
     wait_for_pods: bool = True
@@ -157,7 +161,8 @@ class InfraComponent(ABC):
         """
             # Istio exposure (if enabled)
         self._ensure_virtualservice(kubectl)
-        self._validate_ingress()
+        if self.requires_public_ingress:
+            self._validate_ingress()
         if self.enable_argocd:
             self._onboard_to_argocd(kubectl)
 
@@ -183,17 +188,16 @@ class InfraComponent(ABC):
             )
 
         vs_name = f"{self.name}-vs"
-        print(f"virtualservice is {vs_name}")
 
         if kubectl.resource_exists(
             kind="virtualservice.networking.istio.io",
             name=vs_name,
             namespace=self.istio_namespace,
         ):
-            print(f"[{self.name}] Istio VirtualService already exists ✓")
+            log.debug("[%s] Istio VirtualService already exists", self.name)
             return
 
-        print(f"[{self.name}] Creating Istio VirtualService...")
+        log.debug("[%s] Creating Istio VirtualService...", self.name)
 
         manifest = {
             "apiVersion": "networking.istio.io/v1beta1",
@@ -228,7 +232,7 @@ class InfraComponent(ABC):
         }
 
         kubectl.apply_objects([manifest])
-        print(f"[{self.name}] Istio VirtualService created ✓")
+        log.debug("[%s] Istio VirtualService created", self.name)
 
 
 
@@ -247,13 +251,13 @@ class InfraComponent(ABC):
 
         expected = getattr(self, "istio_expected_status", 200)
 
-        print(f"[{self.name}] Validating external access via Istio: {url}")
+        log.debug("[%s] Validating external access via Istio: %s", self.name, url)
 
         for i in range(120):
             try:
                 r = requests.get(url, verify=False, timeout=2)
                 if r.status_code == expected:
-                    print(f"[{self.name}] External access reachable ✓")
+                    log.debug("[%s] External access reachable", self.name)
                     return
             except Exception:
                 pass

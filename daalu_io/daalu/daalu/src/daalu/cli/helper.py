@@ -6,6 +6,9 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from daalu.bootstrap.node.models import NodeBootstrapPlan,Host
+import logging
+
+log = logging.getLogger("daalu")
 
 
 def _default_workspace_root() -> Path:
@@ -22,7 +25,7 @@ def inventory_path(workspace_root: Optional[Path] = None) -> Path:
     return root / "cloud-config" / "inventory" / "openstack_hosts.ini"
 
 def read_hosts_from_inventory(path: Path) -> list[Host]:
-    hosts: list[Host] = []
+    seen: dict[str, Host] = {}
     current_group: Optional[str] = None
 
     for line in path.read_text().splitlines():
@@ -38,6 +41,9 @@ def read_hosts_from_inventory(path: Path) -> list[Host]:
 
         parts = line.split()
         hostname = parts[0]
+
+        if hostname in seen:
+            continue
 
         vars_: dict[str, str] = {}
         for item in parts[1:]:
@@ -65,16 +71,15 @@ network:
         - {int2_ip}/24
 """
 
-        hosts.append(
-            Host(
-                hostname=hostname,
-                address=address,
-                username="",          # filled later by caller
-                netplan_content=netplan_content,
-            )
+        host = Host(
+            hostname=hostname,
+            address=address,
+            username="",          # filled later by caller
+            netplan_content=netplan_content,
         )
+        seen[hostname] = host
 
-    return hosts
+    return list(seen.values())
 
 
 def read_hosts_from_inventory_1(inv_path: Path) -> List[Tuple[str, str]]:
@@ -84,7 +89,7 @@ def read_hosts_from_inventory_1(inv_path: Path) -> List[Tuple[str, str]]:
     """
     hosts: List[Tuple[str, str]] = []
     if not inv_path.exists():
-        print('no hosts found, testing')
+        log.debug('no hosts found, testing')
         return hosts
 
     DOMAIN_SUFFIX = ".net.daalu.io"  # ✅ define suffix to remove
@@ -151,7 +156,7 @@ def maybe_read_kubeconfig_text(
         path = Path(kubeconfig_path)
         return path.read_text()
     except Exception as e:
-        print(f"[debug] failed to read kubeconfig {kubeconfig_path}: {e}")
+        log.debug(f"[debug] failed to read kubeconfig {kubeconfig_path}: {e}")
         return None
 
 def maybe_read_kubeconfig_text_1(kubeconfig_path: Path = Path("/var/lib/tmp/kubeconfig")) -> Optional[str]:

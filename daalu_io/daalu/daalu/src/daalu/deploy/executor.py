@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional
@@ -27,6 +28,8 @@ from ..observers.events import (
     RollbackResult,
     DeploySummary,
 )
+
+log = logging.getLogger("daalu")
 
 
 @dataclass
@@ -101,7 +104,7 @@ def deploy_all(
     run_ctx = new_ctx(env=cfg.environment, context=cfg.context)
 
     # 1) Repos
-    print("starting repo update")
+    log.debug("starting repo update")
     for repo in cfg.repos:
         helm.add_repo(repo, debug=options.debug)
         bus.emit(RepoAdded(name=repo.name, url=str(repo.url), **run_ctx))
@@ -109,12 +112,12 @@ def deploy_all(
     bus.emit(ReposUpdated(**run_ctx))
 
     # 2) Plan (planner also emits PlanComputed/PlanFailed)
-    print("making plan")
+    log.debug("making plan")
     ordered = plan(cfg, bus=bus, run_ctx=run_ctx)
-    print(ordered)
+    log.debug(ordered)
 
     try:
-        print("deploying")
+        log.debug("deploying")
         # 3) Deploy in order
         for rel in ordered:
             bus.emit(ReleaseStarted(name=rel.name, namespace=rel.namespace, chart=rel.chart, **run_ctx))

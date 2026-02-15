@@ -72,13 +72,16 @@ class PerconaXtraDBClusterComponent(InfraComponent):
         """
         secret_name = self.cluster_spec.get("secretsName", "percona-xtradb")
 
-        if kubectl.get(
-            api_version="v1",
-            kind="Secret",
-            name=secret_name,
-            namespace=self.namespace,
-        ):
-            return
+        try:
+            if kubectl.get(
+                api_version="v1",
+                kind="Secret",
+                name=secret_name,
+                namespace=self.namespace,
+            ):
+                return
+        except RuntimeError:
+            pass  # Secret doesn't exist yet — create it below
 
         kubectl.apply_objects([
             {

@@ -13,6 +13,9 @@ from daalu.bootstrap.shared.keycloak.models import KeycloakIAMConfig
 from daalu.bootstrap.iam.keycloak import KeycloakIAMManager
 from daalu.bootstrap.shared.keycloak.models import KeycloakIAMConfig
 from daalu.utils.serialize import to_jsonable
+import logging
+
+log = logging.getLogger("daalu")
 
 
 
@@ -61,7 +64,7 @@ class KubePrometheusStackComponent(InfraComponent):
         return self.load_values_file(self.values_path)
 
     def _install_crds(self, kubectl):
-        print("[kube-prometheus] Installing CRDs...")
+        log.debug("[kube-prometheus] Installing CRDs...")
         try:
             local = self.assets_dir() / "crds"
             remote = "/tmp/daalu/kube-prometheus-stack/crds"
@@ -73,13 +76,13 @@ class KubePrometheusStackComponent(InfraComponent):
                 kubectl.ssh.put_file(crd, path, sudo=True)
                 kubectl.apply_file_server_side(path)
 
-            print("[kube-prometheus] CRDs installed ✓")
+            log.debug("[kube-prometheus] CRDs installed ✓")
         except Exception as e:
-            print(f"[kube-prometheus] CRDs FAILED ✗: {e}")
+            log.debug(f"[kube-prometheus] CRDs FAILED ✗: {e}")
             raise
 
     def _read_etcd_certs(self, kubectl) -> dict:
-        print("[kube-prometheus] Reading etcd certificates...")
+        log.debug("[kube-prometheus] Reading etcd certificates...")
         certs = {}
         paths = {
             "ca.crt": "/etc/kubernetes/pki/etcd/ca.crt",
@@ -93,11 +96,11 @@ class KubePrometheusStackComponent(InfraComponent):
                 raise RuntimeError(err)
             certs[name] = base64.b64encode(out.encode()).decode()
 
-        print("[kube-prometheus] etcd certs read ✓")
+        log.debug("[kube-prometheus] etcd certs read ✓")
         return certs
 
     def _create_etcd_secret(self, kubectl, certs: dict):
-        print("[kube-prometheus] Creating etcd TLS secret...")
+        log.debug("[kube-prometheus] Creating etcd TLS secret...")
         kubectl.apply_objects([
             {
                 "apiVersion": "v1",
@@ -109,17 +112,17 @@ class KubePrometheusStackComponent(InfraComponent):
                 "data": certs,
             }
         ])
-        print("[kube-prometheus] etcd secret created ✓")
+        log.debug("[kube-prometheus] etcd secret created ✓")
 
     def _wait_for_keycloak(self, kubectl):
-        print("[keycloak] Waiting for Keycloak StatefulSet...")
+        log.debug("[keycloak] Waiting for Keycloak StatefulSet...")
         kubectl.wait_for_statefulset_ready(
             name="keycloak",
             namespace="auth-system",
             retries=120,
             delay=5,
         )
-        print("[keycloak] Keycloak ready ✓")
+        log.debug("[keycloak] Keycloak ready ✓")
 
     def _create_grafana_keycloak_secret(self, kubectl):
         """
@@ -127,7 +130,7 @@ class KubePrometheusStackComponent(InfraComponent):
         Name MUST be: grafana-keycloak-client
         """
 
-        print("[kube-prometheus] Creating Grafana Keycloak secret...")
+        log.debug("[kube-prometheus] Creating Grafana Keycloak secret...")
         iam = self._iam
         if not iam:
             raise RuntimeError("Keycloak IAM not initialized before Grafana secret creation")
@@ -162,12 +165,12 @@ class KubePrometheusStackComponent(InfraComponent):
             }
         ])
 
-        print("[kube-prometheus] Grafana Keycloak secret created ✓")
+        log.debug("[kube-prometheus] Grafana Keycloak secret created ✓")
 
 
     def _debug_keycloak_config(self):
-        print("[keycloak] Config:")
-        print(json.dumps(to_jsonable(self.keycloak_config), indent=2))
+        log.debug("[keycloak] Config:")
+        log.debug(json.dumps(to_jsonable(self.keycloak_config), indent=2))
 
     def _ensure_keycloak(self):
         if not self.keycloak_config:
@@ -199,23 +202,16 @@ class KubePrometheusStackComponent(InfraComponent):
                 continue
 
             kubectl.apply_objects([{
-                "apiVersion": "secretgen.carvel.dev/v1alpha1",
-                "kind": "SecretTemplate",
+                "apiVersion": "v1",
+                "kind": "Secret",
                 "metadata": {
                     "name": f"{self.release_name}-{client.id}-oauth2-proxy",
                     "namespace": self.namespace,
                 },
-                "spec": {
-                    # REQUIRED by SecretTemplate CRD
-                    "inputResources": [],
-
-                    "template": {
-                        "stringData": {
-                            "OAUTH2_PROXY_PROVIDER": "keycloak-oidc",
-                            "OAUTH2_PROXY_CLIENT_ID": client.id,
-                            "OAUTH2_PROXY_REDIRECT_URL": client.redirect_uris[0],
-                        }
-                    },
+                "stringData": {
+                    "OAUTH2_PROXY_PROVIDER": "keycloak-oidc",
+                    "OAUTH2_PROXY_CLIENT_ID": client.id,
+                    "OAUTH2_PROXY_REDIRECT_URL": client.redirect_uris[0],
                 },
             }])
 
@@ -235,7 +231,7 @@ class KubePrometheusStackComponent(InfraComponent):
         # 3) Keycloak + OAuth (OPTIONAL)
         # ------------------------------------------------
         if not self.keycloak_config:
-            print("[kube-prometheus] Keycloak config not provided — skipping IAM setup")
+            log.debug("[kube-prometheus] Keycloak config not provided — skipping IAM setup")
             #kubectl.logger.info(
             #    "[kube-prometheus] Keycloak config not provided — skipping IAM setup"
             #)

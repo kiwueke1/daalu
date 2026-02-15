@@ -7,6 +7,9 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
+import logging
+
+log = logging.getLogger("daalu")
 
 # Where metal3-dev-env's ironic HTTP server serves images from (ON THE MGMT HOST)
 IRONIC_IMAGE_DIR = Path("/opt/metal3-dev-env/ironic/html/images")
@@ -163,23 +166,23 @@ class Metal3ImageManager:
         if self._remote is None:
             # -------- Local mode --------
             if not image_path.exists():
-                print(f"[image] Downloading {image_name}")
+                log.debug(f"[image] Downloading {image_name}")
                 _run_local(
                     ["wget", "-q", f"{self.image_location}/{image_name}", "-O", str(image_path)],
                     sudo=self.use_sudo,
                 )
-            print(f"[image] ✓ qcow2 image ensured: {image_name}")
+            log.debug(f"[image] ✓ qcow2 image ensured: {image_name}")
 
             if not raw_image_path.exists():
-                print(f"[image] Converting {image_name} -> {raw_image_name}")
+                log.debug(f"[image] Converting {image_name} -> {raw_image_name}")
                 _run_local(
                     ["qemu-img", "convert", "-O", "raw", str(image_path), str(raw_image_path)],
                     sudo=self.use_sudo,
                 )
-            print(f"[image] ✓ raw image ensured: {raw_image_name}")
+            log.debug(f"[image] ✓ raw image ensured: {raw_image_name}")
 
             if not sha_path.exists():
-                print("[image] Calculating sha256 checksum")
+                log.debug("[image] Calculating sha256 checksum")
                 sha = subprocess.check_output(
                     ["sha256sum", str(raw_image_path)], text=True
                 ).split()[0]
@@ -189,7 +192,7 @@ class Metal3ImageManager:
             else:
                 sha = sha_path.read_text(encoding="utf-8").strip()
 
-            print("[image] ✓ sha256 checksum ensured")
+            log.debug("[image] ✓ sha256 checksum ensured")
 
             return ImageMetadata(
                 image_name=image_name,
@@ -208,7 +211,7 @@ class Metal3ImageManager:
         raw = str(raw_image_path)
         sha_file = str(sha_path)
 
-        print(f"[image] Ensuring qcow2 image exists on mgmt host: {image_name}")
+        log.debug(f"[image] Ensuring qcow2 image exists on mgmt host: {image_name}")
         r.run_check(
             [
                 "bash",
@@ -220,9 +223,9 @@ class Metal3ImageManager:
             ],
             sudo=True,
         )
-        print(f"[image] ✓ qcow2 image ensured on mgmt host: {image_name}")
+        log.debug(f"[image] ✓ qcow2 image ensured on mgmt host: {image_name}")
 
-        print(f"[image] Ensuring raw image exists on mgmt host: {raw_image_name}")
+        log.debug(f"[image] Ensuring raw image exists on mgmt host: {raw_image_name}")
         r.run_check(
             [
                 "bash",
@@ -234,9 +237,9 @@ class Metal3ImageManager:
             ],
             sudo=True,
         )
-        print(f"[image] ✓ raw image ensured on mgmt host: {raw_image_name}")
+        log.debug(f"[image] ✓ raw image ensured on mgmt host: {raw_image_name}")
 
-        print("[image] Ensuring sha256 checksum exists on mgmt host")
+        log.debug("[image] Ensuring sha256 checksum exists on mgmt host")
         r.run_check(
             [
                 "bash",
@@ -250,7 +253,7 @@ class Metal3ImageManager:
         )
 
         checksum = r.run(["cat", sha_file], sudo=True).strip()
-        print("[image] ✓ sha256 checksum ensured on mgmt host")
+        log.debug("[image] ✓ sha256 checksum ensured on mgmt host")
 
         return ImageMetadata(
             image_name=image_name,

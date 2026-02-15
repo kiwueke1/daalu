@@ -184,7 +184,7 @@ def wait_for_node_interface_ipv4(
                     f"[wait_for_node_interface_ipv4] node={node} iface={interface} "
                     f"attempt={attempt}/{retries} ok={ok}"
                 )
-                print(msg)
+                log.debug(msg)
                 if runner.logger:
                     runner.logger.info(msg)
 
@@ -202,7 +202,7 @@ def wait_for_node_interface_ipv4(
         f"[wait_for_node_interface_ipv4] SUCCESS: IPv4 present on '{interface}' "
         f"for nodes selector '{node_selector}'"
     )
-    print(success)
+    log.debug(success)
     if runner.logger:
         runner.logger.info(success)
 
@@ -323,7 +323,7 @@ def wait_for_nodes_ready(
                 f"[wait_for_nodes_ready] Attempt {attempt}/{retries}: "
                 f"{ready}/{expected_count} nodes Ready"
             )
-            print(msg)
+            log.debug(msg)
             if runner.logger:
                 runner.logger.info(msg)
 
@@ -342,7 +342,7 @@ def wait_for_nodes_ready(
                 check=True,
             ).stdout
 
-            print(nodes_out)
+            log.debug(nodes_out)
             if runner.logger:
                 runner.logger.info("\n" + nodes_out)
 
@@ -351,7 +351,7 @@ def wait_for_nodes_ready(
                 f"[wait_for_nodes_ready] SUCCESS: "
                 f"All {expected_count} nodes are Ready"
             )
-            print(success_msg)
+            log.debug(success_msg)
             if runner.logger:
                 runner.logger.info(success_msg)
 
@@ -369,7 +369,7 @@ def wait_for_nodes_ready(
                 check=True,
             ).stdout
 
-            print(final_nodes)
+            log.debug(final_nodes)
             if runner.logger:
                 runner.logger.info("\n" + final_nodes)
 
@@ -481,7 +481,7 @@ def deploy_cni(
         raise ValueError(f"Unsupported CNI: {cni}")
 
     # 1) Get control-plane IP (InternalIP)
-    print("starting cilium install from deploy_cni method")
+    log.debug("starting cilium install from deploy_cni method")
     result = runner.run(
         [
             "kubectl",
@@ -585,7 +585,7 @@ def wait_for_cni_ready(
             f"{running}/{total} Cilium pods Running"
         )
 
-        print(msg)
+        log.debug(msg)
         if runner.logger:
             runner.logger.info(msg)
 
@@ -609,13 +609,13 @@ def wait_for_cni_ready(
                 check=True,
             ).stdout
 
-            print(pods_out)
+            log.debug(pods_out)
             if runner.logger:
                 runner.logger.info("\n" + pods_out)
 
         if total > 0 and running == total:
             success_msg = "[wait_for_cni_ready] SUCCESS: All Cilium pods are Running"
-            print(success_msg)
+            log.debug(success_msg)
             if runner.logger:
                 runner.logger.info(success_msg)
             return
@@ -643,7 +643,7 @@ def update_hosts_and_inventory_old(
     import ipaddress
     from pathlib import Path
 
-    print("Updating hosts and inventory...")
+    log.debug("Updating hosts and inventory...")
 
     runner = CommandRunner(
         logger=getattr(ctx, "logger", None),
@@ -785,7 +785,7 @@ def update_hosts_and_inventory(
     import ipaddress
     from pathlib import Path
 
-    print("Updating hosts and inventory...")
+    log.debug("Updating hosts and inventory...")
 
     runner = CommandRunner(
         logger=getattr(ctx, "logger", None),
@@ -936,7 +936,7 @@ def update_hosts_and_inventory_1(
     import ipaddress
     from pathlib import Path
 
-    print("Updating hosts and inventory...")
+    log.debug("Updating hosts and inventory...")
 
     runner = CommandRunner(
         logger=getattr(ctx, "logger", None),
@@ -1109,6 +1109,9 @@ from daalu.bootstrap.openstack.endpoints import (
     OpenStackHelmEndpointsConfig,
 )
 from daalu.bootstrap.openstack.secrets_manager import SecretsManager
+import logging
+
+log = logging.getLogger("daalu")
 
 
 def build_openstack_endpoints(

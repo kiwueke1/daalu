@@ -4,6 +4,9 @@ from __future__ import annotations
 from daalu.bootstrap.csi.rbd import CephRbdCsiDriver
 from daalu.bootstrap.ceph.models import CephHost
 from daalu.utils.ssh import open_ssh
+import logging
+
+log = logging.getLogger("daalu")
 
 
 class CSIManager:
@@ -37,7 +40,7 @@ class CSIManager:
         if rc == 0:
             return  # Helm already installed
 
-        print("[csi] Helm not found on remote host, installing Helm...")
+        log.debug("[csi] Helm not found on remote host, installing Helm...")
 
         install_cmd = (
             "set -euo pipefail; "
@@ -65,11 +68,11 @@ class CSIManager:
         if rc != 0:
             raise RuntimeError(f"Helm installed but not usable: {err or out}")
 
-        print(f"[csi] Helm installed successfully: {out.strip()}")
+        log.debug(f"[csi] Helm installed successfully: {out.strip()}")
 
     # ------------------------------------------------------------------
     def deploy(self, cfg) -> None:
-        print(f"csi primary host is {self.primary_host}")
+        log.debug(f"csi primary host is {self.primary_host}")
 
         ssh = open_ssh(
             self.primary_host,

@@ -4,7 +4,7 @@
 applications:
   - name: keycloak
     hostnames:
-      - keycloak.daalu.io
+      - auth.daalu.io
     traffic_namespace: istio-ingress
     original_svc_namespace: auth-system
 

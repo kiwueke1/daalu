@@ -39,6 +39,7 @@ class NodeBootstrapOptions:
     Global options for the bootstrapper.
     """
     cluster_name: str = "openstack-infra"          # used if kubeconfig_content is None
+    cluster_namespace: str = "baremetal-operator-system"  # namespace where the kubeconfig secret lives
     kubeconfig_content: Optional[str] = None       # if provided, copy this to nodes; else fetch via clusterctl
     kubeconfig_remote_path: str = "/home/{username}/.kube/config"
     domain_suffix: str = "net.daalu.io"

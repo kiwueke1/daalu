@@ -50,7 +50,20 @@ if [ -z "${tunnel_interface}" ] ; then
     tunnel_interface=$(ip -4 route list ${tunnel_network_cidr} | awk -F 'dev' '{ print $2; exit }' \
         | awk '{ print $1 }') || exit 1
 fi
-ovs-vsctl set open . external_ids:ovn-encap-ip="$(get_ip_address_from_interface ${tunnel_interface})"
+ENCAP_IP=$(get_ip_address_from_interface ${tunnel_interface})
+ovs-vsctl set open . external_ids:ovn-encap-ip="$ENCAP_IP"
+
+# Ensure geneve packets use the correct encap IP as source address.
+# Nodes with secondary IPs (e.g. VIPs) on the tunnel interface can cause the
+# kernel to pick a wrong source IP for geneve, breaking BFD between chassis.
+tunnel_subnet=$(ip -4 -o addr s "${tunnel_interface}" | awk '{ print $4; exit }')
+if [ -n "$tunnel_subnet" ]; then
+  tunnel_prefix=${tunnel_subnet#*/}
+  tunnel_net=$(ip -4 route list dev "${tunnel_interface}" scope link proto kernel | awk '{ print $1; exit }')
+  if [ -n "$tunnel_net" ]; then
+    ip route replace $tunnel_net dev "${tunnel_interface}" src "$ENCAP_IP" || true
+  fi
+fi
 
 # Get the stored system-id from the Kubernetes node annotation
 stored_system_id=$(get_stored_system_id)
@@ -123,6 +136,11 @@ do
   then
     ovs-vsctl --may-exist add-port $bridge $iface
   fi
+  # Bring the bridge UP so provider network traffic can flow
+  ip link set $bridge up
+  # Add a default NORMAL flow for L2 forwarding between the physical NIC and
+  # the OVN patch port.  Without this, br-ex silently drops all packets.
+  ovs-ofctl -O OpenFlow13 add-flow $bridge "priority=0,actions=NORMAL"
 done
 
 /usr/local/bin/ovsinit /tmp/auto_bridge_add

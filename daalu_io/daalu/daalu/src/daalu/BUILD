@@ -41,6 +41,9 @@ py_binary(
     srcs = [
         "cli/app.py",
     ],
+    data = [
+        "//:assets",
+    ],
     deps = [
         ":daalu",   # this is the full daalu package
         "@pip//typer:pkg",

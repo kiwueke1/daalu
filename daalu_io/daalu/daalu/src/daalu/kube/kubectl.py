@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 import yaml
 import base64
@@ -12,6 +13,8 @@ from typing import Any
 
 
 from daalu.utils.ssh_runner import SSHRunner
+
+log = logging.getLogger("daalu")
 
 
 class KubectlError(RuntimeError):
@@ -119,14 +122,51 @@ class KubectlRunner:
         retries: int = 20,
         delay: int = 10,
     ) -> None:
-        for _ in range(retries):
-            if self.count_running_pods(namespace) >= min_running:
+        for attempt in range(retries):
+            running = self.count_running_pods(namespace)
+            if running >= min_running:
                 return
+            if attempt > 0 and attempt % 3 == 0:
+                # Every 30s, log a progress update with pod statuses
+                summary = self._pod_status_summary(namespace)
+                log.info(
+                    "[kubectl] Still waiting for pods in '%s' (%d/%d running) — %s",
+                    namespace, running, min_running, summary,
+                )
             time.sleep(delay)
 
+        # On timeout, include detailed pod status in the error
+        summary = self._pod_status_summary(namespace)
         raise KubectlError(
-            f"Timed out waiting for {min_running} pods in namespace '{namespace}'"
+            f"Timed out waiting for {min_running} pods in namespace '{namespace}'. "
+            f"Pod status: {summary}"
         )
+
+    def _pod_status_summary(self, namespace: str) -> str:
+        """Return a brief summary of pod phases and container reasons."""
+        try:
+            pods = self.get_pods(namespace)
+        except Exception:
+            return "unable to fetch pods"
+
+        if not pods:
+            return "no pods found"
+
+        parts = []
+        for p in pods:
+            name = p.get("metadata", {}).get("name", "?")
+            phase = p.get("status", {}).get("phase", "Unknown")
+            # Check container statuses for waiting reasons (e.g. ImagePullBackOff)
+            reasons = []
+            for cs in p.get("status", {}).get("containerStatuses", []):
+                waiting = cs.get("state", {}).get("waiting")
+                if waiting and waiting.get("reason"):
+                    reasons.append(waiting["reason"])
+            if reasons:
+                parts.append(f"{name}: {phase} ({', '.join(reasons)})")
+            else:
+                parts.append(f"{name}: {phase}")
+        return "; ".join(parts)
 
     def apply_url(
         self,
@@ -145,8 +185,7 @@ class KubectlRunner:
             f"KUBECONFIG={self.kubeconfig} kubectl apply -f -"
         )
 
-        # Debug print (safe — but consider redacting tokens later)
-        print(f"[kubectl.apply_url] Executing on controller:\n{cmd}\n")
+        log.debug("[kubectl.apply_url] Executing on controller:\n%s", cmd)
 
         rc, out, err = self.ssh.run(cmd, sudo=True)
         if rc != 0:
@@ -220,19 +259,10 @@ class KubectlRunner:
         namespace: str,
         api_version: str | None = None,
     ) -> list[str]:
-        args = [
-            "get",
-            kind,
-            "-n",
-            namespace,
-            "-o",
-            "jsonpath={.items[*].metadata.name}",
-        ]
+        api_flag = f" --api-version={api_version}" if api_version else ""
+        cmd = f"get {kind}{api_flag} -n {namespace} -o jsonpath={{.items[*].metadata.name}}"
 
-        if api_version:
-            args.insert(1, f"--api-version={api_version}")
-
-        rc, out, err = self._run(args)
+        rc, out, err = self._run(cmd)
 
         if rc != 0:
             return []
@@ -254,20 +284,11 @@ class KubectlRunner:
         Patch a Kubernetes object (merge or strategic merge).
         Mirrors kubernetes.core.k8s state=patched.
         """
-        args = [
-            "patch",
-            kind.lower(),
-            name,
-            "--type",
-            patch_type,
-            "-p",
-            yaml.safe_dump(patch),
-        ]
+        patch_json = json.dumps(patch)
+        ns_flag = f" -n {namespace}" if namespace else ""
+        cmd = f"patch {kind.lower()} {name} --type {patch_type} -p '{patch_json}'{ns_flag}"
 
-        if namespace:
-            args.extend(["-n", namespace])
-
-        return self._run(args)
+        return self._run(cmd)
 
 
 
@@ -365,16 +386,15 @@ class KubectlRunner:
             current = status.get("currentReplicas", 0)
 
             if ready == spec_replicas and current == spec_replicas:
-                print(
-                    f"[kubectl] StatefulSet {name} ready "
-                    f"({ready}/{spec_replicas}) ✓"
+                log.debug(
+                    "[kubectl] StatefulSet %s ready (%d/%d)",
+                    name, ready, spec_replicas,
                 )
                 return
 
-            print(
-                f"[kubectl] Waiting for StatefulSet {name} "
-                f"({ready}/{spec_replicas}) "
-                f"[attempt {attempt}/{retries}]"
+            log.debug(
+                "[kubectl] Waiting for StatefulSet %s (%d/%d) [attempt %d/%d]",
+                name, ready, spec_replicas, attempt, retries,
             )
             time.sleep(delay)
 
@@ -391,19 +411,14 @@ class KubectlRunner:
         timeout_seconds: int = 60,
         interval_seconds: int = 5,
     ) -> None:
-        import time
-
         start = time.time()
 
         while True:
-            args = ["get", kind, name]
+            cmd = f"get {kind} {name}"
             if namespace:
-                args.extend(["-n", namespace])
+                cmd += f" -n {namespace}"
 
-            rc, stdout, stderr = self.run(
-                args,
-                capture_output=True,
-            )
+            rc, stdout, stderr = self._run(cmd)
 
             if rc == 0:
                 return
@@ -434,18 +449,12 @@ class KubectlRunner:
 
         condition = f"condition={condition_type}={condition_status}"
 
-        cmd = [
-            "wait",
-            f"--for={condition}",
-            f"{kind.lower()}/{name}",
-            "-n",
-            namespace,
-            f"--timeout={timeout_seconds}s",
-        ]
+        cmd = (
+            f"wait --for={condition} {kind.lower()}/{name} "
+            f"-n {namespace} --timeout={timeout_seconds}s"
+        )
 
-        # apiVersion isn't directly passed to kubectl wait,
-        # but included here for symmetry & future CRD handling
-        self.run(cmd)
+        self._run(cmd)
 
 
     def get_object(
@@ -456,32 +465,30 @@ class KubectlRunner:
         name: str,
         namespace: Optional[str] = None,
     ) -> Optional[dict]:
-        args = [
-            "get",
-            kind.lower(),
-            name,
-            "-o",
-            "json",
-        ]
-
+        cmd = f"get {kind.lower()} {name} -o json"
         if namespace:
-            args.extend(["-n", namespace])
+            cmd += f" -n {namespace}"
 
         try:
-            rc, stdout, stderr = self.run(args)
+            rc, stdout, stderr = self._run(cmd)
         except RuntimeError as e:
             if "NotFound" in str(e):
                 return None
             raise
 
-        if not stdout:
-            print(f"[kubectl] get_object: No stdout")
-            print(f"[kubectl] get_object: {stderr}")
+        if rc != 0:
+            if "NotFound" in (stderr or ""):
+                return None
+            log.debug("[kubectl] get_object failed: rc=%d stderr=%s", rc, stderr)
             return None
 
-        print(f"[kubectl] get_object: {json.loads(stdout)}")
+        if not stdout:
+            log.debug("[kubectl] get_object: No stdout, stderr=%s", stderr)
+            return None
 
-        return json.loads(stdout)
+        obj = json.loads(stdout)
+        log.debug("[kubectl] get_object: %s/%s", obj.get("kind"), obj.get("metadata", {}).get("name"))
+        return obj
 
     def b64decode_str(self, b64: str) -> str:
         return base64.b64decode(b64).decode("utf-8", errors="replace")
@@ -498,11 +505,11 @@ class KubectlRunner:
 
         Works for core resources and CRDs (e.g. Istio VirtualService).
         """
-        args = ["get", kind, name]
+        cmd = f"get {kind} {name}"
         if namespace:
-            args.extend(["-n", namespace])
+            cmd += f" -n {namespace}"
 
-        rc, _, _ = self.run(args)
+        rc, _, _ = self._run(cmd)
         return rc == 0
 
     def wait_for_deployment_ready(
@@ -514,15 +521,8 @@ class KubectlRunner:
         """
         Wait until a Deployment has all desired replicas available.
         """
-        print(f"[kubectl] Waiting for deployment/{name} in {namespace}")
+        log.debug("[kubectl] Waiting for deployment/%s in %s", name, namespace)
 
-        self.run(
-            [
-                "rollout",
-                "status",
-                f"deployment/{name}",
-                "-n",
-                namespace,
-                f"--timeout={timeout}s",
-            ]
+        self._run(
+            f"rollout status deployment/{name} -n {namespace} --timeout={timeout}s"
         )

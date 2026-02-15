@@ -10,6 +10,9 @@ from typing import Any, Dict, List, Optional
 import yaml
 
 from daalu.bootstrap.engine.component import InfraComponent
+import logging
+
+log = logging.getLogger("daalu")
 
 
 @dataclass(frozen=True)
@@ -242,7 +245,10 @@ class CertManagerComponent(InfraComponent):
         cfg = self._load_config()
 
         # 1) Cloudflare token secret (cert-manager namespace)
-        kubectl.apply_content(self._dump_multi([self._cloudflare_secret(token=cfg.cloudflare_api_token)]))
+        kubectl.apply_content(
+            content=self._dump_multi([self._cloudflare_secret(token=cfg.cloudflare_api_token)]),
+            remote_path="/tmp/cert-manager-cloudflare-secret.yaml",
+        )
 
         # 2) ClusterIssuers
         issuer_docs = [
@@ -254,18 +260,27 @@ class CertManagerComponent(InfraComponent):
             )
             for i in cfg.cluster_issuers
         ]
-        kubectl.apply_content(self._dump_multi(issuer_docs))
+        kubectl.apply_content(
+            content=self._dump_multi(issuer_docs),
+            remote_path="/tmp/cert-manager-cluster-issuers.yaml",
+        )
 
         # 3) Ensure namespaces for certificates exist
         ns_names = sorted({c.namespace for c in cfg.certificates if c.namespace})
         ns_docs = [self._namespace(n) for n in ns_names]
         if ns_docs:
-            kubectl.apply_content(self._dump_multi(ns_docs))
+            kubectl.apply_content(
+                content=self._dump_multi(ns_docs),
+                remote_path="/tmp/cert-manager-namespaces.yaml",
+            )
 
         # 4) Certificates
         cert_docs = [self._certificate(c) for c in cfg.certificates]
         if cert_docs:
-            kubectl.apply_content(self._dump_multi(cert_docs))
+            kubectl.apply_content(
+                content=self._dump_multi(cert_docs),
+                remote_path="/tmp/cert-manager-certificates.yaml",
+            )
 
         # 5) Optional: Argo CD onboarding (kept, but off by default)
         if cfg.argocd_onboard.enabled:
@@ -304,7 +319,7 @@ class CertManagerComponent(InfraComponent):
                     "kubectl.apply_url() not available. "
                     "Either add apply_url to your kubectl wrapper or use local_manifest."
                 )
-            print(f"cert-manager github url is {onboard.github_raw_url}")
+            log.debug(f"cert-manager github url is {onboard.github_raw_url}")
 
             kubectl.apply_url(
                 onboard.github_raw_url,

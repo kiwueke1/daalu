@@ -12,6 +12,11 @@ endpoints:
       public: https
       internal: http
       admin: http
+    service:
+      type:
+        public: LoadBalancer
+        internal: ClusterIP
+        admin: ClusterIP
 
 
 images:
@@ -37,22 +42,16 @@ pod:
     keystone_api:
       keystone_api:
         volumeMounts:
-          - name: keystone-openid-metadata
-            mountPath: /var/lib/apache2/oidc
           - name: ca-certificates
             mountPath: /etc/ssl/certs/ca-certificates.crt
             readOnly: true
         volumes:
-          - name: keystone-openid-metadata
-            emptyDir: {}
           - name: ca-certificates
             hostPath:
               path: /etc/ssl/certs/ca-certificates.crt
 
 conf:
   keystone:
-    identity:
-      driver: sql
     DEFAULT:
       admin_token: null
       log_config_append: null
@@ -106,7 +105,8 @@ conf:
       LimitRequestFieldSize 16384
 
       OIDCClaimPrefix "OIDC-"
-      OIDCMetadataDir /var/lib/apache2/oidc
+      OIDCProviderMetadataURL https://auth.daalu.io/realms/daalu/.well-known/openid-configuration
+      OIDCClientID keystone
       OIDCSSLValidateServer On
       OIDCCryptoPassphrase CHANGE_ME_KEYSTONE_CLIENT_SECRET
       OIDCRedirectURI https://keystone.daalu.io/v3/auth/OS-FEDERATION/identity_providers/redirect
@@ -135,19 +135,22 @@ conf:
       <Location /v3/auth/OS-FEDERATION/identity_providers/daalu/protocols/openid/websso>
         Require valid-user
         AuthType openid-connect
-        OIDCDiscoverURL https://keycloak.daalu.io/realms/daalu
+        OIDCDiscoverURL https://auth.daalu.io/realms/daalu
       </Location>
     </VirtualHost>
 
   ks_domains:
-    - name: daalu
+    daalu:
+      name: daalu
       description: Daalu
       enabled: true
+
       identity_providers:
-        - name: daalu
+        daalu:
+          name: daalu
           protocol: openid
           remote_ids:
-            - https://keycloak.daalu.io/realms/daalu
+            - https://auth.daalu.io/realms/daalu
 
 manifests:
   job_credential_cleanup: false
@@ -188,3 +191,9 @@ bootstrap:
     project_name: admin
     user_domain_name: Default
     project_domain_name: Default
+
+secrets:
+  identity:
+    admin: keystone-keystone-admin
+    keystone: keystone-keystone-admin
+    test: keystone-keystone-test

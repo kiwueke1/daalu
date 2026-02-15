@@ -61,7 +61,7 @@ class CephManager:
         line = f"[{timestamp}] {message}"
 
         # Print to CLI (high-level summary)
-        print(line, flush=True)
+        log.debug(line, flush=True)
 
         # Write to deployment log file
         with open(self._log_file, "a", encoding="utf-8") as f:
@@ -182,10 +182,10 @@ class CephManager:
         # Check if Docker or Podman exists
         rc, out, err = self._run(cli, "command -v docker || command -v podman", sudo=True)
         if rc == 0:
-            print(f"[ceph] Container engine already present: {out.strip()}")
+            log.debug(f"[ceph] Container engine already present: {out.strip()}")
             return
 
-        print("[ceph] No container engine found, installing Docker...")
+        log.debug("[ceph] No container engine found, installing Docker...")
 
         install_script = (
             "curl -fsSL https://get.docker.com -o /tmp/get-docker.sh && "
@@ -203,7 +203,7 @@ class CephManager:
         rc, out, err = self._run(cli, "docker --version", sudo=True)
         if rc != 0:
             raise RuntimeError(f"[ceph] Docker verification failed: {err or out}")
-        print(f"[ceph] Docker installed successfully: {out.strip()}")
+        log.debug(f"[ceph] Docker installed successfully: {out.strip()}")
 
 
     def _install_cephadm(self, cli) -> None:
@@ -226,7 +226,7 @@ class CephManager:
         # Verify cephadm can run and report version
         rc, out, err = self._run(cli, "cephadm version", sudo=True)
         if rc == 0:
-            print(f"[ceph] cephadm installed successfully: {out.strip()}")
+            log.debug(f"[ceph] cephadm installed successfully: {out.strip()}")
         else:
             raise RuntimeError(f"[ceph] cephadm installation verification failed: {err or out}")
 
@@ -238,7 +238,7 @@ class CephManager:
 
         image = cfg.image or f"quay.io/ceph/ceph:v{cfg.version}"
         primary = hosts[0]
-        print(f"ceph primary host is {primary}")
+        log.debug(f"ceph primary host is {primary}")
         others = hosts[1:]
         cli = self._connect(primary)
 
@@ -445,7 +445,7 @@ class CephManager:
             return
 
         for host in hosts:
-            print(f"[ceph] Adding OSD disk /dev/sdb on host {host.hostname}")
+            log.debug(f"[ceph] Adding OSD disk /dev/sdb on host {host.hostname}")
 
             self._run(
                 cli,
@@ -460,7 +460,7 @@ class CephManager:
         rc, out, err = self._run(cli, "cephadm shell -- ceph -s", sudo=True)
         if rc == 0:
             self.bus.emit(CephSucceeded(stage="completed", message="Ceph deployment completed successfully", **self.run_ctx))
-            print(out)
+            log.debug(out)
         else:
             self.bus.emit(CephFailed(stage="health_check", error=err or out, **self.run_ctx))
 
@@ -501,6 +501,9 @@ class CephManager:
 
     python3 - <<EOF
     from pathlib import Path
+import logging
+
+log = logging.getLogger("daalu")
     p = Path("$f")
     txt = p.read_text()
     txt = txt.replace(

@@ -1,0 +1,78 @@
+images:
+  tags:
+    bootstrap: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    db_init: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    db_drop: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    neutron_db_sync: docker.io/openstackhelm/neutron:2024.1-ubuntu_jammy
+    rabbit_init: docker.io/rabbitmq:3.13-management
+    ks_user: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    ks_service: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    ks_endpoints: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    neutron_server: docker.io/openstackhelm/neutron:2024.1-ubuntu_jammy
+    neutron_policy_server: docker.io/openstackhelm/neutron:2024.1-ubuntu_jammy
+    neutron_rpc_server: docker.io/openstackhelm/neutron:2024.1-ubuntu_jammy
+    neutron_dhcp: docker.io/openstackhelm/neutron:2024.1-ubuntu_jammy
+    neutron_metadata: docker.io/openstackhelm/neutron:2024.1-ubuntu_jammy
+    neutron_ovn_metadata: docker.io/openstackhelm/neutron:2024.1-ubuntu_jammy
+    neutron_ovn_vpn: docker.io/openstackhelm/neutron:2024.1-ubuntu_jammy
+    neutron_l3: docker.io/openstackhelm/neutron:2024.1-ubuntu_jammy
+    neutron_l2gw: docker.io/openstackhelm/neutron:2024.1-ubuntu_jammy
+    neutron_openvswitch_agent: docker.io/openstackhelm/neutron:2024.1-ubuntu_jammy
+    neutron_linuxbridge_agent: docker.io/openstackhelm/neutron:2024.1-ubuntu_jammy
+    neutron_bagpipe_bgp: docker.io/openstackhelm/neutron:2024.1-ubuntu_jammy
+    neutron_bgp_dragent: docker.io/openstackhelm/neutron:2024.1-ubuntu_jammy
+    neutron_ironic_agent: docker.io/openstackhelm/neutron:2024.1-ubuntu_jammy
+    neutron_ironic_agent_init: docker.io/openstackhelm/neutron:2024.1-ubuntu_jammy
+    neutron_netns_cleanup_cron: docker.io/openstackhelm/neutron:2024.1-ubuntu_jammy
+pod:
+  replicas:
+    server: 3
+    rpc_server: 3
+  sidecars:
+    neutron_policy_server: false
+conf:
+  neutron:
+    DEFAULT:
+      api_workers: 8
+      dhcp_agents_per_network: 3
+      log_config_append: null
+      rpc_workers: 8
+      rpc_response_timeout: 600
+      service_plugins: qos,router,segments,trunk,vpnaas
+    cors:
+      allowed_origin: "*"
+    database:
+      connection_recycle_time: 600
+      max_overflow: 50
+      max_pool_size: 5
+      pool_timeout: 30
+    nova:
+      live_migration_events: true
+    ironic:
+      valid_interfaces: internal
+    oslo_messaging_notifications:
+      driver: noop
+    service_providers:
+      service_provider: "VPN:strongswan:neutron_vpnaas.services.vpn.service_drivers.ipsec.IPsecVPNDriver:default"
+  dhcp_agent:
+    DEFAULT:
+      enable_isolated_metadata: true
+  l3_agent:
+    AGENT:
+      extensions: vpnaas
+    vpnagent:
+      vpn_device_driver: neutron_vpnaas.services.vpn.device_drivers.strongswan_ipsec.StrongSwanDriver
+  plugins:
+    ml2_conf:
+      ml2:
+        extension_drivers: dns_domain_ports,port_security,qos
+        type_drivers: flat,gre,vlan,vxlan
+      ml2_type_gre:
+        tunnel_id_ranges: "1:1000"
+      ml2_type_vlan:
+        network_vlan_ranges: "external:1:4094"
+  rabbitmq:
+    policies: []
+manifests:
+  ingress_server: false
+  service_ingress_server: false

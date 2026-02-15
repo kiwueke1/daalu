@@ -7,6 +7,9 @@ from pathlib import Path
 from typing import Any, Optional
 
 import yaml
+import logging
+
+log = logging.getLogger("daalu")
 
 
 def _b64encode_str(s: str) -> str:
@@ -88,26 +91,9 @@ class SecretsManager:
             raise ValueError(f"Missing required secret key in secrets.yaml: {key}")
         return v
 
+
+
     def _discover_service_passwords_1(self) -> None:
-        self.service_db_passwords.clear()
-        self.service_rabbit_passwords.clear()
-
-        for k, v in self._raw.items():
-            sv = _as_str(v)
-
-            for pat in self.DB_KEY_PATTERNS:
-                m = re.match(pat, k)
-                if m and sv:
-                    svc = m.group("svc")
-                    self.service_db_passwords[svc] = sv
-
-            for pat in self.RABBIT_KEY_PATTERNS:
-                m = re.match(pat, k)
-                if m and sv:
-                    svc = m.group("svc")
-                    self.service_rabbit_passwords[svc] = sv
-
-    def _discover_service_passwords(self) -> None:
         self.service_db_passwords.clear()
         self.service_rabbit_passwords.clear()
 
@@ -126,16 +112,110 @@ class SecretsManager:
                 m = re.match(pat, normalized)
                 if m:
                     svc = m.group("svc")
+
+                    log.debug("\n[DB PASSWORD MATCH]")
+                    log.debug(f"  Pattern : {pat}")
+                    log.debug(f"  Raw key : {normalized}")
+                    log.debug(f"  Service : {svc}")
+                    log.debug(f"  Value   : ***")
+
                     self.service_db_passwords[svc] = sv
+
 
             # --- RabbitMQ passwords ---
             for pat in self.RABBIT_KEY_PATTERNS:
                 m = re.match(pat, normalized)
                 if m:
                     svc = m.group("svc")
+
+                    log.debug("\n[RABBITMQ PASSWORD MATCH]")
+                    log.debug(f"  Pattern : {pat}")
+                    log.debug(f"  Raw key : {normalized}")
+                    log.debug(f"  Service : {svc}")
+                    log.debug(f"  Value   : ***")
+
                     self.service_rabbit_passwords[svc] = sv
 
-    # -------------------------
+
+    def _discover_service_passwords(self) -> None:
+        self.service_db_passwords.clear()
+        self.service_rabbit_passwords.clear()
+
+        # ------------------------------------------------------------------
+        # 1. REGEX-BASED DISCOVERY (static / legacy secrets)
+        # ------------------------------------------------------------------
+        for k, v in self._raw.items():
+            sv = _as_str(v)
+            if not sv:
+                continue
+
+            normalized = k
+            if normalized.startswith("openstack_helm_endpoints_"):
+                normalized = normalized[len("openstack_helm_endpoints_"):]
+
+            # --- DB passwords ---
+            for pat in self.DB_KEY_PATTERNS:
+                m = re.match(pat, normalized)
+                if m:
+                    svc = m.group("svc")
+
+                    log.debug("\n[DB PASSWORD MATCH]")
+                    log.debug(f"  Pattern : {pat}")
+                    log.debug(f"  Raw key : {normalized}")
+                    log.debug(f"  Service : {svc}")
+                    log.debug(f"  Value   : ***")
+
+                    self.service_db_passwords[svc] = sv
+
+            # --- RabbitMQ passwords (static) ---
+            for pat in self.RABBIT_KEY_PATTERNS:
+                m = re.match(pat, normalized)
+                if m:
+                    svc = m.group("svc")
+
+                    log.debug("\n[RABBITMQ PASSWORD MATCH]")
+                    log.debug(f"  Pattern : {pat}")
+                    log.debug(f"  Raw key : {normalized}")
+                    log.debug(f"  Service : {svc}")
+                    log.debug(f"  Value   : ***")
+
+                    self.service_rabbit_passwords[svc] = sv
+
+        # ------------------------------------------------------------------
+        # 2. OPERATOR-MANAGED RABBITMQ DISCOVERY (Barbican, Octavia, etc.)
+        # ------------------------------------------------------------------
+        OPERATOR_RABBIT_SECRET_RE = re.compile(
+            r"^rabbitmq-(?P<svc>[a-z0-9_-]+)-default-user$"
+        )
+
+        for k, v in self._raw.items():
+            if not isinstance(v, dict):
+                continue
+
+            m = OPERATOR_RABBIT_SECRET_RE.match(k)
+            if not m:
+                continue
+
+            svc = m.group("svc")
+
+            username = _as_str(v.get("username"))
+            password = _as_str(v.get("password"))
+
+            if not username or not password:
+                continue
+
+            log.debug("\n[RABBITMQ OPERATOR USER DETECTED]")
+            log.debug("  Mode    : operator-managed")
+            log.debug(f"  Service : {svc}")
+            log.debug(f"  Secret  : {k}")
+            log.debug(f"  User    : {username}")
+            log.debug(f"  Pass    : ***")
+
+            # Operator-managed RabbitMQ always wins
+            self.service_rabbit_passwords[svc] = password
+
+
+        # -------------------------
     # Kubernetes Secret creation
     # -------------------------
 

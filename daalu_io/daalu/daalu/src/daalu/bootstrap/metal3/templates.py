@@ -6,6 +6,9 @@ from typing import Dict, Any, Iterable
 from textwrap import dedent
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, TemplateNotFound
+import logging
+
+log = logging.getLogger("daalu")
 
 
 REQUIRED_METAL3_TEMPLATE_FILES = {
@@ -39,7 +42,7 @@ def render_jinja_templates(
         autoescape=False,
         keep_trailing_newline=True,
     )
-    print(f"context is {context}")
+    log.debug(f"context is {context}")
 
     dst_dir.mkdir(parents=True, exist_ok=True)
 

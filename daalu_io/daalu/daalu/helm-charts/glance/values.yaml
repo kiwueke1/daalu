@@ -17,7 +17,7 @@
 
 # radosgw, rbd, swift or pvc
 ---
-storage: swift
+storage: rbd
 
 labels:
   api:
@@ -262,7 +262,7 @@ conf:
     glance_store:
       cinder_catalog_info: volumev3::internalURL
       rbd_store_chunk_size: 8
-      rbd_store_replication: 3
+      rbd_store_replication: 1
       rbd_store_crush_rule: replicated_rule
       rbd_store_pool: glance.images
       rbd_store_user: glance

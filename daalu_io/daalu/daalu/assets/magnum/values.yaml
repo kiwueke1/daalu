@@ -1,0 +1,43 @@
+images:
+  tags:
+    bootstrap: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    db_init: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    db_drop: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    magnum_db_sync: docker.io/openstackhelm/magnum:2024.1-ubuntu_jammy
+    rabbit_init: docker.io/rabbitmq:3.13-management
+    ks_user: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    ks_service: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    ks_endpoints: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    magnum_api: docker.io/openstackhelm/magnum:2024.1-ubuntu_jammy
+    magnum_conductor: docker.io/openstackhelm/magnum:2024.1-ubuntu_jammy
+pod:
+  replicas:
+    api: 3
+    conductor: 3
+conf:
+  magnum:
+    DEFAULT:
+      log_config_append: null
+    api:
+      host: 0.0.0.0
+      port: 9511
+      workers: 4
+    conductor:
+      workers: 4
+    certificates:
+      cert_manager_type: barbican
+    cluster_template:
+      kubernetes_allowed_network_drivers: calico
+      kubernetes_default_network_driver: calico
+    database:
+      connection_recycle_time: 600
+      max_overflow: 50
+      max_pool_size: 5
+      pool_timeout: 30
+    oslo_messaging_notifications:
+      driver: noop
+  rabbitmq:
+    policies: []
+manifests:
+  ingress_api: false
+  service_ingress_api: false

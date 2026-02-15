@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import subprocess
 import tempfile
 from pathlib import Path
@@ -13,6 +14,8 @@ import yaml
 from .interface import IHelm
 from .errors import HelmError, HelmDiffError
 from daalu.config.models import RepoSpec, ReleaseSpec
+
+log = logging.getLogger("daalu")
 
 
 class HelmCliRunner(IHelm):
@@ -85,7 +88,7 @@ class HelmCliRunner(IHelm):
             )
             output = []
             for line in iter(process.stdout.readline, ""):
-                print(line, end="")
+                log.debug(line.rstrip())
                 output.append(line)
             process.wait()
             rc = process.returncode
@@ -144,6 +147,20 @@ class HelmCliRunner(IHelm):
         # Stream live output when debug is enabled
         self._run(argv, capture=False, stream=debug, sudo=True)
 
+
+    def release_is_deployed(self, release_name: str, namespace: str) -> bool:
+        """Check if a helm release exists and is in 'deployed' status."""
+        import json as _json
+
+        argv = self._base() + [
+            "status", release_name, "-n", namespace, "-o", "json",
+        ]
+        try:
+            out = self._run(argv, allow_rc={0}, capture=True, sudo=True)
+            data = _json.loads(out)
+            return data.get("info", {}).get("status") == "deployed"
+        except Exception:
+            return False
 
     def upgrade_install(self, rel: ReleaseSpec, debug: bool = False) -> None:
         argv = (
@@ -333,6 +350,9 @@ class HelmCliRunner(IHelm):
                 raise HelmError(
                     f"helm upgrade/install failed for {name}\nSTDOUT:\n{out}\nSTDERR:\n{err}"
                 )
+
+            if out:
+                log.debug("helm output:\n%s", out)
 
         finally:
             # --- 6. Cleanup ---

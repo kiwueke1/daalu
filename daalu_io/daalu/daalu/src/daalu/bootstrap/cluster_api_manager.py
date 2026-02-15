@@ -20,6 +20,9 @@ from ..observers.events import (
     ClusterAPISummary,
 )
 from ..config.models import ClusterConfig
+import logging
+
+log = logging.getLogger("daalu")
 
 
 class ClusterAPIManager:
@@ -108,7 +111,7 @@ class ClusterAPIManager:
         context = config.cluster_api.model_dump()
 
         for tmpl in ["cluster-api-secret.yaml.j2", "cluster-api.yaml.j2"]:
-            print(f"[ClusterAPI] Applying {tmpl} ...")
+            log.debug(f"[ClusterAPI] Applying {tmpl} ...")
             manifest = renderer.render(tmpl, context)
 
             result = self.runner.run(
@@ -168,7 +171,7 @@ class ClusterAPIManager:
             # -------------------------------------------------------------
             for manifest in (secret_file, cluster_file):
                 cmd = self._kubectl() + ["apply", "-f", str(manifest)]
-                print(f"[ClusterAPI] Applying {manifest} ...")
+                log.debug(f"[ClusterAPI] Applying {manifest} ...")
 
                 result = self.runner.run(
                     cmd,
@@ -196,7 +199,7 @@ class ClusterAPIManager:
                     )
                 )
 
-            print(
+            log.debug(
                 "[ClusterAPI] Manifests applied. Waiting for control plane to be ready..."
             )
 
@@ -249,7 +252,7 @@ class ClusterAPIManager:
                 )
 
                 if cluster_ready and control_plane_ready:
-                    print("[ClusterAPI] Cluster and control plane are ready.")
+                    log.debug("[ClusterAPI] Cluster and control plane are ready.")
                     self.bus.emit(
                         ClusterAPIReady(
                             name=cluster_name,
@@ -274,7 +277,7 @@ class ClusterAPIManager:
 
                 time.sleep(interval)
 
-            print("[ClusterAPI] Bootstrap completed successfully.")
+            log.debug("[ClusterAPI] Bootstrap completed successfully.")
             self.bus.emit(
                 ClusterAPISummary(
                     status="OK",

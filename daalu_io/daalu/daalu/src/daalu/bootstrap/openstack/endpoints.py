@@ -9,6 +9,9 @@ import yaml
 
 from daalu.bootstrap.openstack.secrets_manager import SecretsManager
 from daalu.bootstrap.openstack.rabbitmq import RabbitMQServiceManager
+import logging
+
+log = logging.getLogger("daalu")
 
 
 
@@ -112,7 +115,7 @@ class OpenStackHelmEndpoints:
         Returns an 'endpoints' dict suitable for chart values.
         It includes: identity, oslo_db, oslo_messaging, oslo_cache.
         """
-        print("starting build common endpoints")
+        log.debug("starting build common endpoints")
         percona_root_pw = self.read_percona_root_password(kubectl)
         #rmq_user, rmq_pass = self.read_rabbitmq_user_password(kubectl, service)
         # -------------------------------------------------
@@ -130,28 +133,14 @@ class OpenStackHelmEndpoints:
         # 2) Read operator-generated credentials
         rmq_user, rmq_pass = rabbitmq.get_default_user_credentials(service)
 
-
-        svc_rabbit_pw = self.secrets.service_rabbit_passwords.get(service)
-        if not svc_rabbit_pw:
-            raise ValueError(
-                f"Missing RabbitMQ password for service '{service}'. "
-                f"Add one of: {service}_rabbitmq_password / {service}_rabbit_password "
-                f"to secrets.yaml"
-            )
-
-        # service-scoped passwords are expected from secrets.yaml (inventory)
+        #get barbican rabbit details
         svc_db_pw = self.secrets.service_db_passwords.get(service, "")
-        svc_rabbit_pw = self.secrets.service_rabbit_passwords.get(service, "")
+        svc_rabbit_pw = self.secrets.service_rabbit_passwords.get(service, "") or rmq_pass
 
         if not svc_db_pw:
             raise ValueError(
                 f"Missing DB password for service '{service}'. "
                 f"Add one of: {service}_database_password / {service}_db_password / {service}_mariadb_password / {service}_mysql_password to secrets.yaml"
-            )
-        if not svc_rabbit_pw:
-            raise ValueError(
-                f"Missing RabbitMQ password for service '{service}'. "
-                f"Add one of: {service}_rabbitmq_password / {service}_rabbit_password to secrets.yaml"
             )
 
         memcache_key = self.secrets.get("openstack_helm_endpoints_memcached_secret_key", "")

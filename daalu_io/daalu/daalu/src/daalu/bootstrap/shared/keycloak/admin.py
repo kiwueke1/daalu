@@ -9,6 +9,9 @@ import urllib.parse
 import urllib.request
 
 from daalu.bootstrap.shared.keycloak.models import KeycloakAdminAuth
+import logging
+
+log = logging.getLogger("daalu")
 
 
 class KeycloakError(RuntimeError):
@@ -118,13 +121,13 @@ class KeycloakAdmin:
         headers = self._headers()
 
         # 🔎 DEBUG
-        print("[KeycloakAdmin] realm_exists()")
-        print(f"  base_url   = {self.auth.base_url}")
-        print(f"  admin_url  = {url}")
-        print(f"  realm      = {realm}")
-        print(f"  verify_tls = {self.auth.verify_tls}")
-        print(f"  headers    = {{'Authorization': 'Bearer <redacted>'}}")
-        print("-" * 60)
+        log.debug("[KeycloakAdmin] realm_exists()")
+        log.debug(f"  base_url   = {self.auth.base_url}")
+        log.debug(f"  admin_url  = {url}")
+        log.debug(f"  realm      = {realm}")
+        log.debug(f"  verify_tls = {self.auth.verify_tls}")
+        log.debug(f"  headers    = {{'Authorization': 'Bearer <redacted>'}}")
+        log.debug("-" * 60)
 
         r = _http_request(
             "GET",
@@ -133,8 +136,8 @@ class KeycloakAdmin:
             verify_tls=self.auth.verify_tls,
         )
 
-        print(f"[KeycloakAdmin] response: status={r.status}, body={r.body}")
-        print("-" * 60)
+        log.debug(f"[KeycloakAdmin] response: status={r.status}, body={r.body}")
+        log.debug("-" * 60)
 
         return r.status == 200
 

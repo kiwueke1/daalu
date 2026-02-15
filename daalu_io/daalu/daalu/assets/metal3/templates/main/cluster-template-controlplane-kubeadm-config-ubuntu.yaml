@@ -11,6 +11,7 @@ preKubeadmCommands:
   - netplan apply
   - systemctl enable --now keepalived
   - sleep 30
+  - ENO2_IP=$(ip -4 addr show {{ bmh_nic_names[1] }} | grep -oP 'inet \K[0-9.]+' | head -1) && echo "KUBELET_EXTRA_ARGS=--node-ip=${ENO2_IP}" > /etc/default/kubelet
   - systemctl enable --now crio
   - sleep 30
   - systemctl enable --now kubelet

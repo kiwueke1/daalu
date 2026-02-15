@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import re
@@ -32,6 +33,8 @@ from ..observers.events import (
     SetupFailed,
     SetupSummary,
 )
+
+log = logging.getLogger("daalu")
 
 CILIUM_REPO = RepoSpec(name="cilium", url="https://helm.cilium.io/")
 
@@ -156,7 +159,7 @@ class SetupManager:
                 "ui": {"enabled": True},
             },
         }
-        print(f'values for cilium is {values}')
+        log.debug(f'values for cilium is {values}')
 
         rel = ReleaseSpec(
             name="cilium",
@@ -361,7 +364,7 @@ class SetupManager:
             )
 
             # 3. Install Cilium using VIP
-            print("starting cilium install from run method")
+            log.debug("starting cilium install from run method")
             self.install_cilium(opts, api_host, api_port)
             bus.emit(
                 CiliumInstalled(

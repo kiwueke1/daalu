@@ -1,0 +1,41 @@
+images:
+  tags:
+    bootstrap: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    db_init: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    db_drop: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    manila_db_sync: docker.io/openstackhelm/manila:2024.1-ubuntu_jammy
+    rabbit_init: docker.io/rabbitmq:3.13-management
+    ks_user: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    ks_service: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    ks_endpoints: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    manila_api: docker.io/openstackhelm/manila:2024.1-ubuntu_jammy
+    manila_data: docker.io/openstackhelm/manila:2024.1-ubuntu_jammy
+    manila_scheduler: docker.io/openstackhelm/manila:2024.1-ubuntu_jammy
+    manila_share: docker.io/openstackhelm/manila:2024.1-ubuntu_jammy
+pod:
+  replicas:
+    api: 3
+    scheduler: 3
+conf:
+  manila:
+    DEFAULT:
+      log_config_append: ""
+      osapi_share_workers: 4
+      default_share_type: default
+      default_share_group_type: default
+      enabled_share_backends: generic
+      enabled_share_protocols: NFS
+    database:
+      connection_recycle_time: 600
+      max_overflow: 50
+      max_pool_size: 5
+      pool_timeout: 30
+    oslo_messaging_notifications:
+      driver: noop
+    oslo_messaging_rabbit:
+      rabbit_ha_queues: true
+  rabbitmq:
+    policies: []
+manifests:
+  ingress_api: false
+  service_ingress_api: false

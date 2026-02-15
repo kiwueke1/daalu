@@ -61,6 +61,8 @@ def build_monitoring_components(
         kc = cfg.keycloak.monitoring
 
         keycloak_cfg = KeycloakIAMConfig(
+            k8s_namespace="monitoring",
+            oidc_issuer_url=f"{kc.base_url}/realms/{kc.realm}",
             admin=KeycloakAdminAuth(
                 base_url=kc.base_url,
                 admin_realm=kc.admin_realm,
@@ -216,8 +218,6 @@ def build_monitoring_components(
                 kubeconfig=kubeconfig_path,
             )
         )
-    print(f"components for monitoring are {components}")
-
     if selection.components is None or "minio" in selection.components:
         components.append(
             MinIOComponent(
@@ -252,5 +252,4 @@ def build_monitoring_components(
                 enable_argocd=False,  # flip to True when ready
             )
         )
-    print(f"components from registry are {components}")
     return components

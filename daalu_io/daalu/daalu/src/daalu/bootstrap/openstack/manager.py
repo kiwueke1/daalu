@@ -11,7 +11,7 @@ class OpenStackManager:
         self.helm = helm
         self.ssh = ssh
 
-    def deploy(self, components):
+    def deploy(self, components, *, phase: str | None = None):
         logger = InfraJsonlLogger()
         engine = HelmInfraEngine(
             helm=self.helm,
@@ -20,4 +20,4 @@ class OpenStackManager:
         )
 
         for component in components:
-            engine.deploy(component)
+            engine.deploy(component, phase=phase)
