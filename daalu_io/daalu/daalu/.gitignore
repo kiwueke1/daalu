@@ -16,10 +16,13 @@ MODULE.bazel.lock
 
 # Virtual environments
 *.venv/
+*venv/
 .venv/
+daalu_venv/
 
 # Generated artifacts (contain interpolated secrets)
 artifacts/
+
 
 # ==========================================
 # Secrets — NEVER commit real credentials
