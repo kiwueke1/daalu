@@ -1,6 +1,8 @@
 # Daalu
 
-Daalu is a Python-based orchestration platform for deploying and managing private cloud infrastructure. It automates the full lifecycle of bare-metal Kubernetes clusters, OpenStack services, Ceph storage, monitoring stacks, and HPC workloads — from initial provisioning to day-2 operations.
+**Daalu powers independent cloud infrastructure — automated, production-grade, and fully under your control.**
+
+Daalu is a Python-based orchestration platform for deploying and managing private cloud infrastructure anywhere. It automates the full lifecycle of bare-metal Kubernetes clusters, OpenStack services, Ceph storage, monitoring stacks, and HPC workloads — from initial provisioning to day-2 operations — enabling organizations to build serious cloud infrastructure without dependency on hyperscalers.
 
 ## What It Does
 
