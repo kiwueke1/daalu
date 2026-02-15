@@ -23,8 +23,8 @@ class DeployRequest:
     ssh_username: str = "ubuntu"
     ssh_password: Optional[str] = None
     ssh_key: Optional[str] = None
-    managed_user: str = "kez"
-    managed_user_password: str = "admin10"
+    managed_user: str = "builder"
+    managed_user_password: str = ""
     domain_suffix: str = "net.daalu.io"
     ceph_version: str = "17.2.6"
     ceph_image: Optional[str] = None

@@ -14,7 +14,34 @@ MODULE.bazel.lock
 # Symlinks created by Bazel into the output tree
 /bazel-*
 
-
-
+# Virtual environments
 *.venv/
+.venv/
 
+# Generated artifacts (contain interpolated secrets)
+artifacts/
+
+# ==========================================
+# Secrets — NEVER commit real credentials
+# ==========================================
+cloud-config/secrets.yaml
+secrets.yaml
+!secrets.yaml.example
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+id_rsa
+id_ed25519
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

@@ -92,7 +92,7 @@ objstoreConfig: |
     bucket: thanos
     endpoint: minio.object-storage.svc.cluster.local:9000
     access_key: admin
-    secret_key: admin1010
+    secret_key: ""  # Set at deploy time
     insecure: true
 ## @param indexCacheConfig The [index cache configuration](https://thanos.io/tip/components/store.md/)
 ## Specify content for index-cache.yml
@@ -5114,7 +5114,7 @@ minio:
     rootUser: admin
     ## @param minio.auth.rootPassword Password for MinIO&reg; root user
     ##
-    rootPassword: "admin1010"
+    rootPassword: ""  # Set at deploy time
   ## @param minio.defaultBuckets Comma, semi-colon or space separated list of MinIO&reg; buckets to create
   ##
   defaultBuckets: "thanos"

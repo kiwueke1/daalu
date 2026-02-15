@@ -146,12 +146,12 @@ spec:
     - usermod -aG sudo builder || true
     - echo 'builder ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/90-builder-nopasswd
     - chmod 0440 /etc/sudoers.d/90-builder-nopasswd
-    - bash -lc "echo 'builder:admin10' | chpasswd"
+    - bash -lc "echo 'builder:CHANGEME' | chpasswd"
     users:
     - name: builder
       sudo: ALL=(ALL) NOPASSWD:ALL
       sshAuthorizedKeys:
-      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFN65XT1iOqLGjTGwOHqKf4VtgOebCJzpbD80hGFvdts kez@ironcloud
+      - ssh-ed25519 YOUR_SSH_PUBLIC_KEY_HERE
   machineTemplate:
     infrastructureRef:
       apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
@@ -254,9 +254,9 @@ spec:
       - usermod -aG sudo builder || true
       - echo 'builder ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/90-builder-nopasswd
       - chmod 0440 /etc/sudoers.d/90-builder-nopasswd
-      - bash -lc "echo 'builder:admin10' | chpasswd"
+      - bash -lc "echo 'builder:CHANGEME' | chpasswd"
       users:
       - name: builder
         sudo: ALL=(ALL) NOPASSWD:ALL
         sshAuthorizedKeys:
-        - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFN65XT1iOqLGjTGwOHqKf4VtgOebCJzpbD80hGFvdts kez@ironcloud
+        - ssh-ed25519 YOUR_SSH_PUBLIC_KEY_HERE

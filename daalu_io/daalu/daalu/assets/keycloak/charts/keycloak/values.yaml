@@ -85,7 +85,7 @@ keycloak:
   ## @param keycloak.adminUser Keycloak admin username
   adminUser: admin
   ## @param keycloak.adminPassword Keycloak admin password
-  adminPassword: "Onyekachi1010?"
+  adminPassword: ""  # Set at deploy time
   ## @param keycloak.existingSecret Name of existing secret to use for Keycloak admin credentials
   existingSecret: ""
   ## @param keycloak.secretKeys Secret keys for admin credentials

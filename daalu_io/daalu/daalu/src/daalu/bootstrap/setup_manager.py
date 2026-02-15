@@ -139,9 +139,7 @@ class SetupManager:
             "ipam": {"mode": "kubernetes"},
             "kubeProxyReplacement": True,
 
-            # 🔑 THIS IS THE FIX
-            "k8sServiceHost": "10.10.0.249",
-            #"k8sServiceHost": api_host,
+            "k8sServiceHost": api_host,
             "k8sServicePort": api_port,
 
             "hostServices": {"enabled": True},
@@ -278,8 +276,8 @@ class SetupManager:
             output_openstack_hosts_ini=out_dir / "openstack_hosts.ini",
             extra_vars={
                 "ansible_user": "builder",
-                "ansible_password": "admin10",
-                "ansible_become_password": "admin10",
+                "ansible_password": os.environ.get("DAALU_BUILDER_PASSWORD", ""),
+                "ansible_become_password": os.environ.get("DAALU_BUILDER_PASSWORD", ""),
             },
         )
 

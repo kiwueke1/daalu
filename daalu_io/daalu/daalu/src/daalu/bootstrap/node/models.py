@@ -50,5 +50,5 @@ class NodeBootstrapOptions:
     inotify_max_user_instances: str = "1280"
     inotify_max_user_watches: str = "655360"
     # user creation (ssh_and_hostname)
-    managed_user: str = "kez"
-    managed_user_password_plain: str = "admin10"   # will be hashed on remote using openssl -6
+    managed_user: str = "builder"
+    managed_user_password_plain: str = ""   # Required — will be hashed on remote using openssl -6

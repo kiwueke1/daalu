@@ -38,7 +38,7 @@ extraEnvVars:
 #  port: 3306
 #  database: keycloak
 #  user: keycloak
-#  password: admin10
+#  password: ""  # Set at deploy time
 
 image:
   registry: docker.io

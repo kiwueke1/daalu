@@ -12,14 +12,14 @@ cluster_api:
   # --- Networking ---
   pod_cidr: 192.168.0.0/24
   pod_subnet: 10.20.0.0/16
-  control_plane_vip: 192.168.0.210
+  control_plane_vip: ""           # Your control plane VIP
   allowed_nodes: [pve-2, pve-3]
   dns_servers: [8.8.8.8, 8.8.4.4]
-  ip_range: 192.168.0.170-192.168.0.180
-  gateway: 192.168.0.1
+  ip_range: ""                    # e.g. 192.168.0.170-192.168.0.180
+  gateway: ""                     # e.g. 192.168.0.1
   prefix: 24
   vip_interface: ens18
-  cert_sans: ["192.168.0.210","kubernetes","localhost"]
+  cert_sans: []                   # e.g. ["192.168.0.210","kubernetes","localhost"]
   network_bridge: vmbr0
   source_node: pve-2
   template_id: 10001
@@ -38,14 +38,14 @@ cluster_api:
   worker_sockets: 2
 
   # --- Access and credentials ---
-  builder_password: admin10
-  ssh_public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFN65XT1iOqLGjTGwOHqKf4VtgOebCJzpbD80hGFvdts kez@ironcloud"
+  builder_password: ""            # Set via secrets.yaml or DAALU_BUILDER_PASSWORD env var
+  ssh_public_key: ""              # Your SSH public key
 
   # --- Proxmox backend integration ---
   proxmox_secret_name: ai-train-proxmox-secret
-  proxmox_url: "https://192.168.0.34:8006"
-  proxmox_token: "root@pam!capi"
-  proxmox_secret: "97ecfc71-b6ff-4b83-9c17-c3ebe5c58baa"
+  proxmox_url: ""                 # e.g. https://<proxmox-host>:8006
+  proxmox_token: ""               # e.g. root@pam!<token-name>
+  proxmox_secret: ""              # Proxmox API token secret
 
 # --- GPU Node definitions (for HPC workloads) ---
 nodes:

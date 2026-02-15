@@ -15,7 +15,7 @@ mode: standalone
 
 auth:
   rootUser: admin
-  rootPassword: admin1010
+  rootPassword: ""  # Set at deploy time
 
 persistence:
   enabled: true

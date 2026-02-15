@@ -54,7 +54,7 @@ class KeycloakComponent(InfraComponent):
         # DB config (explicit, not magic)
         self.db_name = "keycloak"
         self.db_user = "keycloak"
-        self.db_password = "admin10"
+        self.db_password = os.environ.get("DAALU_KEYCLOAK_DB_PASSWORD", "")
         self.enable_argocd = False
 
     # ------------------------------------------------------------------
@@ -86,6 +86,9 @@ class KeycloakComponent(InfraComponent):
 
         return base64.b64decode(out.strip()).decode()
 
+    def _get_mysql_root_password_env(self) -> str:
+        return os.environ.get("DAALU_MYSQL_ROOT_PASSWORD", "")
+
     # ------------------------------------------------------------------
     def _wait_for_mysql(self, host: str) -> None:
         for _ in range(120):
@@ -93,7 +96,7 @@ class KeycloakComponent(InfraComponent):
                 conn = pymysql.connect(
                     host=host,
                     user="root",
-                    password="admin10",
+                    password=self._get_mysql_root_password_env(),
                     connect_timeout=5,
                 )
                 conn.close()
@@ -273,7 +276,7 @@ class KeycloakComponent(InfraComponent):
         conn = pymysql.connect(
             host=mysql_host,
             user="root",
-            password="admin10",
+            password=self._get_mysql_root_password_env(),
             autocommit=True,
         )
 

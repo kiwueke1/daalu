@@ -51,14 +51,14 @@ cluster_api:
   control_plane_sockets: 2
   worker_sockets: 2
   pivot: false
-  builder_password: admin10
-  image_password: admin10
-  ssh_public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFN65XT1iOqLGjTGwOHqKf4VtgOebCJzpbD80hGFvdts kez@ironcloud"
-  ssh_public_key_path: /home/kez/.ssh/openstack-key.pub
+  builder_password: ""            # Set via secrets.yaml or DAALU_BUILDER_PASSWORD env var
+  image_password: ""              # Set via secrets.yaml or DAALU_IMAGE_PASSWORD env var
+  ssh_public_key: ""              # Your SSH public key (e.g. ssh-ed25519 AAAA... user@host)
+  ssh_public_key_path: ""         # Path to your SSH public key file
   proxmox_secret_name: openstack-infra-proxmox-secret
-  proxmox_url: "https://192.168.0.34:8006"
-  proxmox_token: "root@pam!capi"
-  proxmox_secret: "97ecfc71-b6ff-4b83-9c17-c3ebe5c58baa"
+  proxmox_url: ""                 # e.g. https://<proxmox-host>:8006
+  proxmox_token: ""               # e.g. root@pam!<token-name>
+  proxmox_secret: ""              # Proxmox API token secret
   provider: metal3
   image_os: ubuntu
   image_flavor: ubuntu
@@ -68,11 +68,11 @@ cluster_api:
   capm3_version: v1beta1
   metal3_templates_path: assets/metal3/templates
   metal3_namespace: baremetal-operator-system
-  image_username: kez
-  image_password_hash: "$6$XXyZJ8BwjBrvzVOo$O7OoAQDRngVwNbeG7CjwUe.zUxktYPcLZ.JWUerfkc58jty6c86U9s2WqTuAMOSECK/ZOKnq8rzwMXlspKkrw."
+  image_username: builder
+  image_password_hash: ""         # Generate with: openssl passwd -6 '<your-password>'
   service_cidr: 10.96.0.0/12
-  mgmt_host: 192.168.0.89
-  mgmt_user: kez
+  mgmt_host: ""                  # Management host IP
+  mgmt_user: ""                   # Management host SSH username
   ironic_http_base: http://10.10.0.9
   image_url: http://10.10.0.9/UBUNTU_24.04_NODE_IMAGE_K8S_v1.33.0-raw.img
 
@@ -100,33 +100,33 @@ releases:
 
 keycloak:
   monitoring:
-    base_url: "https://auth.daalu.io"
+    base_url: "https://auth.example.com"
     admin_realm: "master"
     admin_client_id: "admin-cli"
     username: "admin"
-    password: "Onyekachi1010?"
+    password: ""                  # Keycloak admin password — set in secrets.yaml
     verify_tls: true
 
     realm: "daalu"
     display_name: "Daalu"
 
-    grafana_root_url: "https://grafana.daalu.io"
+    grafana_root_url: "https://grafana.example.com"
     grafana_redirect_uris:
-      - "https://grafana.daalu.io/login/generic_oauth"
-      - "https://grafana.daalu.io/*"
+      - "https://grafana.example.com/login/generic_oauth"
+      - "https://grafana.example.com/*"
 
   openstack:
-    base_url: "https://auth.daalu.io"
+    base_url: "https://auth.example.com"
     admin_realm: "master"
     admin_client_id: "admin-cli"
     username: "admin"
-    password: "Onyekachi1010?"
+    password: ""                  # Keycloak admin password — set in secrets.yaml
     verify_tls: true
 
     realm: "daalu"
     display_name: "Daalu"
-    github_token: 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
-    oidc_issuer_url: "https://auth.daalu.io/realms/daalu"
+    github_token: ""              # Set in secrets.yaml
+    oidc_issuer_url: "https://auth.example.com/realms/daalu"
     oauth2_proxy_ssl_insecure_skip_verify: false
     domains:
       - name: daalu
@@ -138,13 +138,13 @@ keycloak:
           roles: []
           oauth2_proxy: false
           redirect_uris:
-            - "https://identity.daalu.io/v3/auth/OS-FEDERATION/identity_providers/redirect"
+            - "https://identity.example.com/v3/auth/OS-FEDERATION/identity_providers/redirect"
 
 
-    grafana_root_url: "https://grafana.daalu.io"
+    grafana_root_url: "https://grafana.example.com"
     grafana_redirect_uris:
-      - "https://grafana.daalu.io/login/generic_oauth"
-      - "https://grafana.daalu.io/*"
+      - "https://grafana.example.com/login/generic_oauth"
+      - "https://grafana.example.com/*"
 
 ceph:
   # Pool replication settings — set to 1 for dev (single OSD), 3 for production
@@ -159,5 +159,5 @@ monitoring:
   thanos:
     bucket: thanos
     endpoint: thanos-minio.monitoring.svc.cluster.local:9000
-    access_key: admin
-    secret_key: admin1010
+    access_key: ""                # Set in secrets.yaml (thanos_s3_access_key)
+    secret_key: ""                # Set in secrets.yaml (thanos_s3_secret_key)

@@ -1,5 +1,6 @@
 # src/daalu/bootstrap/monitoring/components/opensearch.py
 
+import os
 from pathlib import Path
 from typing import Dict
 
@@ -73,7 +74,7 @@ class OpenSearchComponent(InfraComponent):
                     },
                     "type": "Opaque",
                     "stringData": {
-                        "OPENSEARCH_INITIAL_ADMIN_PASSWORD": "Onyekachi1010?",
+                        "OPENSEARCH_INITIAL_ADMIN_PASSWORD": os.environ.get("DAALU_OPENSEARCH_ADMIN_PASSWORD", ""),
                     },
                 },
             ]

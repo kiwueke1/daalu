@@ -6,7 +6,7 @@ auth:
   existingSecret: ""
   forceNewKeys: false
   forcePassword: false
-  rootPassword: admin1010
+  rootPassword: ""  # Set at deploy time
   rootPasswordSecretKey: ""
   rootUser: admin
   rootUserSecretKey: ""

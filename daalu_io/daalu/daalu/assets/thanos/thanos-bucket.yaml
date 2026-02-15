@@ -18,7 +18,7 @@ spec:
               set -e
 
               echo "Configuring MinIO alias..."
-              mc alias set minio http://minio.object-storage.svc.cluster.local:9000 admin admin1010
+              mc alias set minio http://minio.object-storage.svc.cluster.local:9000 "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY"
 
               echo "Creating bucket if it does not exist..."
               mc mb --ignore-existing minio/thanos
