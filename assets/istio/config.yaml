@@ -1,0 +1,13 @@
+# src/daalu/bootstrap/infrastructure/assets/istio/config.yaml
+
+
+# GitHub token with repo read access
+github_token: None
+
+argocd_repo_owner: kiwueke1
+argocd_repo_name: argocd-infrastructure-app
+
+argocd_apps:
+  istio-base: apps/istio/base.yaml
+  istiod: apps/istio/istiod.yaml
+  istio-ingressgateway: apps/istio/ingress.yaml

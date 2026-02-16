@@ -1,0 +1,199 @@
+endpoints:
+  identity:
+    host_fqdn_override:
+      public:
+        host: keystone.daalu.io
+    port:
+      api:
+        public: 443
+        internal: 5000
+        admin: 5000
+    scheme:
+      public: https
+      internal: http
+      admin: http
+    service:
+      type:
+        public: LoadBalancer
+        internal: ClusterIP
+        admin: ClusterIP
+
+
+images:
+  tags:
+    keystone_api: 10.10.0.5:5000/keystone:2024.2-oidc #custom image wit oids support
+  pull_policy: IfNotPresent
+
+pod:
+  security_context:
+    keystone:
+      pod:
+        runAsUser: 42424
+        fsGroup: 33          # <-- THIS is the missing piece
+        fsGroupChangePolicy: "OnRootMismatch"
+      container:
+        keystone_api:
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+
+  replicas:
+    api: 3
+  mounts:
+    keystone_api:
+      keystone_api:
+        volumeMounts:
+          - name: ca-certificates
+            mountPath: /etc/ssl/certs/ca-certificates.crt
+            readOnly: true
+        volumes:
+          - name: ca-certificates
+            hostPath:
+              path: /etc/ssl/certs/ca-certificates.crt
+
+conf:
+  keystone:
+    DEFAULT:
+      admin_token: null
+      log_config_append: null
+
+    auth:
+      methods: password,token,openid,application_credential
+
+    cors:
+      allowed_origins: "*"
+
+    database:
+      connection_recycle_time: 600
+      max_overflow: 50
+      max_pool_size: 5
+      pool_timeout: 30
+
+    openid:
+      remote_id_attribute: HTTP_OIDC_ISS
+
+    federation:
+      trusted_dashboard:
+        type: multistring
+        values:
+          - "https://horizon.daalu.io/auth/websso/"
+
+    oslo_messaging_notifications:
+      driver: noop
+    domain:
+      keystone.0.conf: |
+        [identity]
+        driver = sql
+
+        [assignment]
+        driver = sql
+
+        [token]
+        provider = fernet
+
+  wsgi_keystone: |
+    LoadModule headers_module /usr/lib/apache2/modules/mod_headers.so
+    Listen 0.0.0.0:5000
+    TransferLog /dev/stdout
+    ErrorLog /dev/stderr
+
+    <VirtualHost *:5000>
+      WSGIDaemonProcess keystone-public processes=4 threads=1 user=keystone group=keystone display-name=%{GROUP}
+      WSGIProcessGroup keystone-public
+      WSGIScriptAlias / /var/www/cgi-bin/keystone/keystone-wsgi-public
+      WSGIApplicationGroup %{GLOBAL}
+      WSGIPassAuthorization On
+      LimitRequestFieldSize 16384
+
+      OIDCClaimPrefix "OIDC-"
+      OIDCProviderMetadataURL https://auth.daalu.io/realms/daalu/.well-known/openid-configuration
+      OIDCClientID keystone
+      OIDCSSLValidateServer On
+      OIDCCryptoPassphrase CHANGE_ME_KEYSTONE_CLIENT_SECRET
+      OIDCRedirectURI https://keystone.daalu.io/v3/auth/OS-FEDERATION/identity_providers/redirect
+      OIDCRedirectURLsAllowed \
+        https://keystone.daalu.io/v3/auth/OS-FEDERATION/identity_providers/daalu/protocols/openid/websso \
+        https://horizon.daalu.io/auth/logout/
+
+      OIDCSessionType client-cookie
+      OIDCXForwardedHeaders X-Forwarded-Host X-Forwarded-Proto
+
+      <Location /v3/auth/OS-FEDERATION/identity_providers/redirect>
+        AuthType openid-connect
+        Require valid-user
+      </Location>
+
+      <Location /v3/auth/OS-FEDERATION/websso/openid>
+        Require valid-user
+        AuthType openid-connect
+      </Location>
+
+      <Location /v3/OS-FEDERATION/identity_providers/daalu/protocols/openid/auth>
+        Require valid-user
+        AuthType oauth20
+      </Location>
+
+      <Location /v3/auth/OS-FEDERATION/identity_providers/daalu/protocols/openid/websso>
+        Require valid-user
+        AuthType openid-connect
+        OIDCDiscoverURL https://auth.daalu.io/realms/daalu
+      </Location>
+    </VirtualHost>
+
+  ks_domains:
+    daalu:
+      name: daalu
+      description: Daalu
+      enabled: true
+
+      identity_providers:
+        daalu:
+          name: daalu
+          protocol: openid
+          remote_ids:
+            - https://auth.daalu.io/realms/daalu
+
+manifests:
+  job_credential_cleanup: false
+  ingress_api: false
+  service_ingress_api: false
+
+pod:
+  replicas:
+    api: 1
+
+  tolerations:
+    keystone_api:
+      enabled: true
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+
+nodeSelector:
+  openstack-control-plane: enabled
+
+bootstrap:
+  enabled: true
+  ks_user: keystone
+  ks_project: service
+  ks_role: admin
+  ks_user_secret_name: keystone-keystone-admin
+  script: |
+    # admin needs the admin role for the default domain
+    openstack role add \
+          --user="${OS_USERNAME}" \
+          --domain="${OS_DEFAULT_DOMAIN}" \
+          "admin"
+
+  admin:
+    username: admin
+    password: ADMIN_PASS_CHANGE_ME
+    project_name: admin
+    user_domain_name: Default
+    project_domain_name: Default
+
+secrets:
+  identity:
+    admin: keystone-keystone-admin
+    keystone: keystone-keystone-admin
+    test: keystone-keystone-test

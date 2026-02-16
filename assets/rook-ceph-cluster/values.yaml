@@ -1,0 +1,34 @@
+cephClusterSpec:
+  external:
+    enable: true
+  monitoring:
+    metricsDisabled: true
+
+cephBlockPools: []
+cephFileSystems: []
+
+cephObjectStores:
+  - name: ceph
+    spec:
+      preservePoolsOnDelete: true
+      metadataPool:
+        failureDomain: host
+        replicated:
+          size: 1
+      dataPool:
+        failureDomain: host
+        replicated:
+          size: 1
+      gateway:
+        port: 80
+        instances: 3
+        placement:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+                - matchExpressions:
+                    - key: openstack-control-plane
+                      operator: In
+                      values: ["enabled"]
+    storageClass:
+      enabled: false

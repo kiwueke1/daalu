@@ -1,0 +1,27 @@
+apiVersion: metal3.io/v1alpha1
+kind: BareMetalHost
+metadata:
+  name: cp02
+  namespace: baremetal-operator-system
+spec:
+  online: true
+  bootMACAddress: "ac:1f:6b:01:b5:eb"
+  bmc:
+    address: "redfish://192.168.0.69/redfish/v1/Systems/1"
+    credentialsName: bmh-cred-cp02
+    disableCertificateVerification: true
+  #bootMode: legacy
+  #inspectionMode: disabled
+  #automatedCleaningMode: disabled
+  rootDeviceHints:
+    deviceName: /dev/sda
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: bmh-cred-cp02
+  namespace: baremetal-operator-system
+type: Opaque
+stringData:
+  username: ADMIN
+  password: ADMIN

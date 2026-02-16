@@ -1,0 +1,57 @@
+# GENERATED FILE - DO NOT EDIT!
+#
+# To update this file, run:
+#   bazel run //:gazelle_python_manifest.update
+
+---
+manifest:
+  modules_mapping:
+    annotated_types: annotated_types
+    bcrypt: bcrypt
+    certifi: certifi
+    cffi: cffi
+    charset_normalizer: charset_normalizer
+    click: click
+    colorama: colorama
+    copier: copier
+    cryptography: cryptography
+    dunamai: dunamai
+    funcy: funcy
+    google.protobuf: protobuf
+    idna: idna
+    iniconfig: iniconfig
+    invoke: invoke
+    jinja2: jinja2
+    jinja2_ansible_filters: jinja2_ansible_filters
+    markdown_it: markdown_it_py
+    markupsafe: markupsafe
+    mdurl: mdurl
+    nacl: pynacl
+    nexusrpc: nexus_rpc
+    packaging: packaging
+    paramiko: paramiko
+    pathspec: pathspec
+    platformdirs: platformdirs
+    pluggy: pluggy
+    plumbum: plumbum
+    prompt_toolkit: prompt_toolkit
+    py: pytest
+    pycparser: pycparser
+    pydantic: pydantic
+    pydantic_core: pydantic_core
+    pygments: pygments
+    pymysql: pymysql
+    pytest: pytest
+    questionary: questionary
+    requests: requests
+    rich: rich
+    shellingham: shellingham
+    temporalio: temporalio
+    typer: typer
+    typing_extensions: typing_extensions
+    typing_inspection: typing_inspection
+    urllib3: urllib3
+    wcwidth: wcwidth
+    yaml: pyyaml
+  pip_repository:
+    name: pip

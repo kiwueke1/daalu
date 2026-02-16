@@ -1,0 +1,18 @@
+annotations:
+  artifacthub.io/changes: |2
+        - kind: fixed
+          description: "Fix YAML parse error caused by whitespace control in selectorLabels broken in #914"
+  license: Apache-2.0
+apiVersion: v2
+appVersion: 2.1.2
+description: A library chart for common templates and helper functions
+home: https://www.cloudpirates.io
+maintainers:
+- email: hello@cloudpirates.io
+  name: CloudPirates GmbH & Co. KG
+  url: https://www.cloudpirates.io
+name: common
+sources:
+- https://github.com/CloudPirates-io/helm-charts/tree/main/charts/common
+type: library
+version: 2.1.2

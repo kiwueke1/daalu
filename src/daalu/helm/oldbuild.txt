@@ -1,0 +1,25 @@
+# Load the modern Python rule implementations
+load("@rules_python//python:defs.bzl", "py_library")
+
+py_library(
+    name = "helm",
+    srcs = [
+        "interface.py",
+        "cli_runner.py",
+        "errors.py",
+    ],
+    deps = [
+        "//src/daalu/config:config",
+        "@pip//pydantic",   # use @pip (main repo), not @pip_runtime
+        "@pip//pyyaml",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+load("@rules_python//python:defs.bzl", "py_test")
+
+py_test(
+    name = "helm_tests",
+    srcs = ["test_cli_runner.py"],
+    deps = [":helm", "@pip//pytest"],
+)

@@ -1,0 +1,17 @@
+image:
+  repository: prom/pushgateway
+  tag: v1.8.0
+
+nodeSelector:
+  openstack-control-plane: enabled
+
+tolerations:
+  - key: node-role.kubernetes.io/control-plane
+    operator: Exists
+    effect: NoSchedule
+
+serviceMonitor:
+  enabled: true
+  namespace: monitoring
+  additionalLabels:
+    release: kube-prometheus-stack

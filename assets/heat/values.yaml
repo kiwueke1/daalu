@@ -1,0 +1,55 @@
+images:
+  tags:
+    bootstrap: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    db_init: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    db_drop: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    heat_db_sync: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    rabbit_init: docker.io/rabbitmq:3.13-management
+    ks_user: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    ks_service: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    ks_endpoints: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    heat_api: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    heat_cfn: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    heat_cloudwatch: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    heat_engine: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    heat_engine_cleaner: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    heat_purge_deleted: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+pod:
+  replicas:
+    api: 3
+    cfn: 3
+    cloudwatch: 3
+    engine: 3
+conf:
+  heat:
+    DEFAULT:
+      default_deployment_signal_transport: HEAT_SIGNAL
+      default_software_config_transport: POLL_SERVER_HEAT
+      log_config_append: null
+      num_engine_workers: 8
+      rpc_response_timeout: 600
+      server_keystone_endpoint_type: public
+    clients_keystone:
+      endpoint_type: publicURL
+    database:
+      connection_recycle_time: 600
+      max_overflow: 50
+      max_pool_size: 5
+      pool_timeout: 30
+    ec2authtoken:
+      auth_uri: http://keystone-api.openstack.svc.cluster.local:5000
+    heat_api:
+      workers: 8
+    heat_api_cfn:
+      workers: 8
+    heat_api_cloudwatch:
+      workers: 8
+    oslo_messaging_notifications:
+      driver: noop
+  rabbitmq:
+    policies: []
+manifests:
+  ingress_api: false
+  ingress_cfn: false
+  service_ingress_api: false
+  service_ingress_cfn: false

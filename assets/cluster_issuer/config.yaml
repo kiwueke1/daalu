@@ -1,0 +1,53 @@
+# src/daalu/bootstrap/infrastructure/assets/cluster_issuer/config.yaml
+
+name: letsencrypt-prod
+issuer_type: acme          # self-signed | ca | acme | venafi
+namespace: cert-manager
+
+# --------------------------------------------------
+# Self-signed / CA options
+# --------------------------------------------------
+
+self_signed_secret_name: cert-manager-selfsigned-ca
+
+# Used only if issuer_type == "ca"
+ca:
+  secret_name: cert-manager-issuer-ca
+  certificate: |
+    -----BEGIN CERTIFICATE-----
+    # optional
+    -----END CERTIFICATE-----
+  private_key: |
+    -----BEGIN RSA PRIVATE KEY-----
+    # optional
+    -----END RSA PRIVATE KEY-----
+
+# --------------------------------------------------
+# ACME options
+# --------------------------------------------------
+
+acme:
+  email: kaiwueke@gmail.com
+  server: https://acme-v02.api.letsencrypt.org/directory
+  private_key_secret_name: cert-manager-issuer-account-key
+
+  solvers:
+    - type: dns01
+      config:
+        cloudflare:
+          apiTokenSecretRef:
+            name: cloudflare-api-token-secret
+            key: api-token
+
+# --------------------------------------------------
+# Venafi options (only if issuer_type == venafi)
+# --------------------------------------------------
+
+venafi:
+  secret_name: cert-manager-venafi-credentials
+  spec:
+    zone: example
+    tpp:
+      url: https://venafi.example.com
+      credentialsRef:
+        name: cert-manager-venafi-credentials

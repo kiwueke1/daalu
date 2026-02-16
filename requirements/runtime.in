@@ -1,0 +1,8 @@
+paramiko
+typer>=0.12.6
+click>=8.1.7
+jinja2
+PyYAML
+temporalio>=1.6.0
+pymysql
+requests

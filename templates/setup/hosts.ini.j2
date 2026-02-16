@@ -1,0 +1,10 @@
+[servers]
+{% for entry in hosts_entries %}
+{{ entry.hostname }} ansible_host={{ entry.ip }} {{ network_configs[loop.index0] }}
+{% endfor %}
+
+[servers:vars]
+ansible_user=builder
+ansible_password=admin10
+ansible_become_password=admin10
+ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'

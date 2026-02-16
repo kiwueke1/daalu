@@ -1,0 +1,323 @@
+# ================================
+# Cluster definition
+# ================================
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: Cluster
+metadata:
+  name: {{ cluster_name }}
+  namespace: {{ namespace }}
+spec:
+  clusterNetwork:
+    pods:
+      cidrBlocks:
+        - {{ pod_cidr }}
+  controlPlaneRef:
+    apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+    kind: KubeadmControlPlane
+    name: {{ cluster_name }}-control-plane
+  infrastructureRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+    kind: ProxmoxCluster
+    name: {{ cluster_name }}
+---
+# ================================
+# ProxmoxCluster
+# ================================
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+kind: ProxmoxCluster
+metadata:
+  name: {{ cluster_name }}
+  namespace: {{ namespace }}
+spec:
+  credentialsRef:
+    name: {{ proxmox_secret_name }}
+    namespace: {{ namespace }}
+  allowedNodes:
+  {% for node in allowed_nodes %}
+  - {{ node }}
+  {% endfor %}
+  controlPlaneEndpoint:
+    host: {{ control_plane_vip }}
+    port: 6443
+  dnsServers:
+  {% for dns in dns_servers %}
+  - {{ dns }}
+  {% endfor %}
+  ipv4Config:
+    addresses:
+    - {{ ip_range }}
+    gateway: {{ gateway }}
+    prefix: {{ prefix }}
+---
+# ================================
+# KubeadmControlPlane
+# ================================
+apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+kind: KubeadmControlPlane
+metadata:
+  name: {{ cluster_name }}-control-plane
+  namespace: {{ namespace }}
+spec:
+  kubeadmConfigSpec:
+    clusterConfiguration:
+      apiServer:
+        certSANs:
+        {% for san in cert_sans %}
+          - "{{ san }}"
+        {% endfor %}
+      controlPlaneEndpoint: "{{ control_plane_vip }}:6443"
+      networking:
+        podSubnet: "{{ pod_subnet }}"
+    files:
+    - content: |
+        apiVersion: v1
+        kind: Pod
+        metadata:
+          name: kube-vip
+          namespace: kube-system
+        spec:
+          containers:
+            - args:
+                - manager
+              env:
+                - name: cp_enable
+                  value: "true"
+                - name: vip_interface
+                  value: "{{ vip_interface }}"
+                - name: address
+                  value: "{{ control_plane_vip }}"
+                - name: port
+                  value: "6443"
+                - name: vip_arp
+                  value: "true"
+                - name: vip_leaderelection
+                  value: "true"
+                - name: vip_leaseduration
+                  value: "15"
+                - name: vip_renewdeadline
+                  value: "10"
+                - name: vip_retryperiod
+                  value: "2"
+              image: {{ kube_vip_image }}
+              imagePullPolicy: IfNotPresent
+              name: kube-vip
+              resources: {}
+              securityContext:
+                capabilities:
+                  add:
+                    - NET_ADMIN
+                    - NET_RAW
+              volumeMounts:
+                - mountPath: /etc/kubernetes/admin.conf
+                  name: kubeconfig
+          hostAliases:
+            - ip: 127.0.0.1
+              hostnames:
+                - localhost
+                - kubernetes
+          hostNetwork: true
+          volumes:
+          - hostPath:
+              path: /etc/kubernetes/admin.conf
+              type: FileOrCreate
+            name: kubeconfig
+      owner: root:root
+      path: /etc/kubernetes/manifests/kube-vip.yaml
+    - content: |
+        #!/bin/bash
+        set -e
+        KUBEADM_MINOR="$(kubeadm version -o short | cut -d '.' -f 2)"
+        if [[ "$KUBEADM_MINOR" -lt "29" ]]; then
+          exit 0
+        fi
+        IS_KUBEADM_INIT="false"
+        if [[ -f /run/kubeadm/kubeadm.yaml ]]; then
+          IS_KUBEADM_INIT="true"
+        fi
+        if [[ -f /etc/kubeadm.sh ]] && grep -q -e "kubeadm init" /etc/kubeadm.sh; then
+          IS_KUBEADM_INIT="true"
+        fi
+        if [[ "$IS_KUBEADM_INIT" == "true" ]]; then
+          sed -i 's#path: /etc/kubernetes/admin.conf#path: /etc/kubernetes/super-admin.conf#' \
+            /etc/kubernetes/manifests/kube-vip.yaml
+        fi
+      owner: root:root
+      path: /etc/kube-vip-prepare.sh
+      permissions: "0700"
+    initConfiguration:
+      nodeRegistration:
+        kubeletExtraArgs:
+          provider-id: proxmox://{{ '{{ ds.meta_data.instance_id }}' }}
+    joinConfiguration:
+      nodeRegistration:
+        kubeletExtraArgs:
+          provider-id: proxmox://{{ '{{ ds.meta_data.instance_id }}' }}
+    preKubeadmCommands:
+    - /etc/kube-vip-prepare.sh
+    - usermod -aG sudo builder || true
+    - echo 'builder ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/90-builder-nopasswd
+    - chmod 0440 /etc/sudoers.d/90-builder-nopasswd
+    - bash -lc "echo 'builder:{{ builder_password }}' | chpasswd"
+    users:
+    - name: builder
+      sudo: ALL=(ALL) NOPASSWD:ALL
+      sshAuthorizedKeys:
+      - {{ ssh_public_key }}
+  machineTemplate:
+    infrastructureRef:
+      apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+      kind: ProxmoxMachineTemplate
+      name: {{ cluster_name }}-control-plane
+  replicas: {{ control_plane_replicas }}
+  version: {{ kubernetes_version }}
+---
+# ================================
+# ProxmoxMachineTemplate (Control Plane)
+# ================================
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+kind: ProxmoxMachineTemplate
+metadata:
+  name: {{ cluster_name }}-control-plane
+  namespace: {{ namespace }}
+spec:
+  template:
+    spec:
+      disks:
+        bootVolume:
+          disk: scsi0
+          sizeGb: {{ control_plane_disk_gb }}
+      memoryMiB: {{ control_plane_memory_mib }}
+      numCores: {{ control_plane_cores }}
+      numSockets: {{ control_plane_sockets }}
+      format: qcow2
+      full: true
+      network:
+        default:
+          bridge: {{ network_bridge }}
+          model: virtio
+      sourceNode: {{ source_node }}
+      templateID: {{ template_id }}
+---
+# ================================
+# MachineDeployment (Workers)
+# ================================
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: MachineDeployment
+metadata:
+  name: {{ cluster_name }}-workers
+  namespace: {{ namespace }}
+spec:
+  clusterName: {{ cluster_name }}
+  replicas: {{ worker_replicas }}
+  selector:
+    matchLabels:
+      cluster.x-k8s.io/cluster-name: {{ cluster_name }}
+      node-role.kubernetes.io/node: ""
+  template:
+    metadata:
+      labels:
+        cluster.x-k8s.io/cluster-name: {{ cluster_name }}
+        node-role.kubernetes.io/node: ""
+    spec:
+      bootstrap:
+        configRef:
+          apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+          kind: KubeadmConfigTemplate
+          name: {{ cluster_name }}-worker
+      clusterName: {{ cluster_name }}
+      infrastructureRef:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+        kind: ProxmoxMachineTemplate
+        name: {{ cluster_name }}-worker
+      version: {{ kubernetes_version }}
+---
+# ================================
+# ProxmoxMachineTemplate (Workers)
+# ================================
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+kind: ProxmoxMachineTemplate
+metadata:
+  name: {{ cluster_name }}-worker
+  namespace: {{ namespace }}
+spec:
+  template:
+    spec:
+      disks:
+        bootVolume:
+          disk: scsi0
+          sizeGb: {{ worker_disk_gb }}
+      memoryMiB: {{ worker_memory_mib }}
+      numCores: {{ worker_cores }}
+      numSockets: {{ worker_sockets }}
+      format: qcow2
+      full: true
+      network:
+        default:
+          bridge: {{ network_bridge }}
+          model: virtio
+      sourceNode: {{ source_node }}
+      templateID: {{ template_id }}
+---
+# ================================
+# KubeadmConfigTemplate (Workers)
+# ================================
+apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+kind: KubeadmConfigTemplate
+metadata:
+  name: {{ cluster_name }}-worker
+  namespace: {{ namespace }}
+spec:
+  template:
+    spec:
+      joinConfiguration:
+        nodeRegistration:
+          kubeletExtraArgs:
+            provider-id: proxmox://{{ '{{ ds.meta_data.instance_id }}' }}
+      preKubeadmCommands:
+      - usermod -aG sudo builder || true
+      - echo 'builder ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/90-builder-nopasswd
+      - chmod 0440 /etc/sudoers.d/90-builder-nopasswd
+      - bash -lc "echo 'builder:{{ builder_password }}' | chpasswd"
+      users:
+      - name: builder
+        sudo: ALL=(ALL) NOPASSWD:ALL
+        sshAuthorizedKeys:
+        - {{ ssh_public_key }}
+# ================================
+# MachineDeployment (HPC)
+# ================================
+{% if gpu_node_pools %}
+# --- GPU Node Pools ---
+{% for gpu in gpu_node_pools %}
+---
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: MachineDeployment
+metadata:
+  name: {{ cluster_name }}-{{ gpu.name }}
+  namespace: {{ namespace }}
+spec:
+  clusterName: {{ cluster_name }}
+  replicas: 1
+  selector:
+    matchLabels:
+      node-pool: {{ gpu.node_pool }}
+  template:
+    metadata:
+      labels:
+        node-pool: {{ gpu.node_pool }}
+        {% for k, v in gpu.labels.items() %}
+        {{ k }}: "{{ v }}"
+        {% endfor %}
+    spec:
+      clusterName: {{ cluster_name }}
+      bootstrap:
+        configRef:
+          apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+          kind: KubeadmConfigTemplate
+          name: {{ cluster_name }}-{{ gpu.name }}-bootstrap
+      infrastructureRef:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+        kind: MachineTemplate
+        name: {{ cluster_name }}-{{ gpu.name }}-infra
+{% endfor %}
+{% endif %}

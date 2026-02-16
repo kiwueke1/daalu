@@ -1,0 +1,56 @@
+# src/daalu/bootstrap/csi/manager.py
+from __future__ import annotations
+
+from daalu.bootstrap.csi.rbd import CephRbdCsiDriver
+# from daalu.bootstrap.csi.local import LocalPathCsiDriver
+
+from daalu.bootstrap.ceph.models import CephHost
+from daalu.utils.ssh import open_ssh
+
+
+class CSIManager:
+    def __init__(
+        self,
+        *,
+        bus,
+        helm,
+        ceph_hosts: list[CephHost],
+        connect_timeout: float = 20.0,
+    ):
+        self.bus = bus
+        self.helm = helm
+        self.ceph_hosts = ceph_hosts
+        self.connect_timeout = connect_timeout
+
+        if not ceph_hosts:
+            raise RuntimeError("CSI requires at least one Ceph host")
+
+        # For now, assume first host is MON-capable (same as CephManager)
+        self.primary_host = ceph_hosts[0]
+
+    def deploy(self, cfg) -> None:
+        print(f"csi primary host is {self.primary_host}")
+        ssh = open_ssh(
+            self.primary_host,
+            #connect_timeout=self.connect_timeout,
+        )
+
+        try:
+            if cfg.driver == "rbd":
+                CephRbdCsiDriver(
+                    bus=self.bus,
+                    helm=self.helm,
+                    ssh=ssh,
+                    host=self.primary_host,
+                    env="workload",
+                    context=cfg.kubeconfig_path,
+                ).deploy(cfg)
+
+            # elif cfg.driver == "local-path":
+            #     LocalPathCsiDriver(...)
+
+            else:
+                raise RuntimeError(f"Unsupported CSI driver: {cfg.driver}")
+
+        finally:
+            ssh.close()

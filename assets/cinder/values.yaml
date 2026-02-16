@@ -1,0 +1,49 @@
+storage: ceph
+images:
+  tags:
+    cinder_api: docker.io/openstackhelm/cinder:2024.1-ubuntu_jammy
+    cinder_scheduler: docker.io/openstackhelm/cinder:2024.1-ubuntu_jammy
+    cinder_volume: docker.io/openstackhelm/cinder:2024.1-ubuntu_jammy
+    cinder_volume_usage_audit: docker.io/openstackhelm/cinder:2024.1-ubuntu_jammy
+    cinder_backup: docker.io/openstackhelm/cinder:2024.1-ubuntu_jammy
+    cinder_db_sync: docker.io/openstackhelm/cinder:2024.1-ubuntu_jammy
+    cinder_storage_init: docker.io/openstackhelm/ceph-config-helper:ubuntu_jammy_18.2.2-1-20240312
+    cinder_backup_storage_init: docker.io/openstackhelm/ceph-config-helper:ubuntu_jammy_18.2.2-1-20240312
+    db_init: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    db_drop: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    ks_user: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    ks_service: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    ks_endpoints: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    bootstrap: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    rabbit_init: docker.io/rabbitmq:3.13-management
+pod:
+  replicas:
+    api: 1
+    scheduler: 1
+conf:
+  cinder:
+    DEFAULT:
+      allowed_direct_url_schemes: cinder
+      backup_driver: cinder.backup.drivers.ceph.CephBackupDriver
+      log_config_append: null
+      volume_usage_audit_period: hour
+      volume_name_template: volume-%s
+      image_conversion_disable: true
+      osapi_volume_workers: 8
+    barbican:
+      barbican_endpoint_type: internal
+    cors:
+      allowed_origins: "*"
+    database:
+      connection_recycle_time: 600
+      max_overflow: 50
+      max_pool_size: 5
+      pool_timeout: 30
+    oslo_messaging_notifications:
+      driver: noop
+  rabbitmq:
+    policies: []
+manifests:
+  ingress_api: false
+  job_clean: false
+  service_ingress_api: false

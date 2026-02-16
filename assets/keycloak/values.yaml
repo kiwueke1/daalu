@@ -1,0 +1,84 @@
+enableDefaultInitContainers: false
+
+containerSecurityContext:
+  readOnlyRootFilesystem: false
+  runAsUser: 1000
+
+extraEnvVars:
+  - name: KC_FEATURES
+    value: "token-exchange,admin-fine-grained-authz"
+  - name: KC_PROXY
+    value: "edge"
+  - name: KC_PROXY_HEADERS
+    value: "xforwarded"
+  - name: KC_HTTP_ENABLED
+    value: "true"
+  - name: KC_HOSTNAME
+    value: "auth.daalu.io"
+  - name: KC_HOSTNAME_STRICT
+    value: "false"
+  - name: KC_HOSTNAME_STRICT_HTTPS
+    value: "false"
+  - name: KC_DB
+    value: "mysql"
+  - name: KC_DB_URL
+    value: "jdbc:mysql://percona-xtradb-haproxy.openstack:3306/keycloak"
+  - name: KC_DB_USERNAME
+    value: "keycloak"
+  - name: KC_DB_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: keycloak-externaldb
+        key: db-password
+
+
+
+#externalDatabase:
+#  host: percona-xtradb.openstack
+#  port: 3306
+#  database: keycloak
+#  user: keycloak
+#  password: ""  # Set at deploy time
+
+keycloak:
+  adminUser: admin
+  adminPassword: ""
+  existingSecret: "keycloak-admin-credentials"
+  secretKeys:
+    adminPasswordKey: "admin-password"
+
+image:
+  registry: docker.io
+  repository: keycloak/keycloak
+  tag: "26.5.1"
+
+postgresql:
+  enabled: false
+
+production: true
+proxy: edge
+proxyHeaders: xforwarded
+
+startupProbe:
+  enabled: true
+  initialDelaySeconds: 5
+  failureThreshold: 120
+
+replica:
+  nodeSelector:
+    openstack-control-plane: enabled
+
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+
+  podAntiAffinityPreset: hard
+
+
+metrics:
+  enabled: true
+
+global:
+  security:
+    allowInsecureImages: true

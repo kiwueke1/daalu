@@ -1,0 +1,141 @@
+images:
+  tags:
+    nova_api: docker.io/openstackhelm/nova:2024.1-ubuntu_jammy
+    nova_cell_setup: docker.io/openstackhelm/nova:2024.1-ubuntu_jammy
+    nova_cell_setup_init: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    nova_compute: docker.io/openstackhelm/nova:2024.1-ubuntu_jammy
+    nova_compute_ironic: docker.io/openstackhelm/nova:2024.1-ubuntu_jammy
+    nova_compute_ssh: docker.io/openstackhelm/nova:2024.1-ubuntu_jammy
+    nova_conductor: docker.io/openstackhelm/nova:2024.1-ubuntu_jammy
+    nova_consoleauth: docker.io/openstackhelm/nova:2024.1-ubuntu_jammy
+    nova_db_sync: docker.io/openstackhelm/nova:2024.1-ubuntu_jammy
+    nova_novncproxy: docker.io/openstackhelm/nova:2024.1-ubuntu_jammy
+    nova_novncproxy_assets: docker.io/openstackhelm/nova:2024.1-ubuntu_jammy
+    nova_placement: docker.io/openstackhelm/nova:2024.1-ubuntu_jammy
+    nova_scheduler: docker.io/openstackhelm/nova:2024.1-ubuntu_jammy
+    nova_spiceproxy: docker.io/openstackhelm/nova:2024.1-ubuntu_jammy
+    nova_spiceproxy_assets: docker.io/openstackhelm/nova:2024.1-ubuntu_jammy
+    nova_service_cleaner: docker.io/openstackhelm/ceph-config-helper:latest-ubuntu_jammy
+    db_init: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    db_drop: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    ks_user: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    ks_service: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    ks_endpoints: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    bootstrap: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    rabbit_init: docker.io/rabbitmq:3.13-management
+
+labels:
+  agent:
+    compute_ironic:
+      node_selector_key: openstack-control-plane
+      node_selector_value: enabled
+
+pod:
+  use_fqdn:
+    compute: false
+  useHostNetwork:
+    novncproxy: false
+  replicas:
+    api_metadata: 3
+    osapi: 3
+    conductor: 3
+    scheduler: 3
+    novncproxy: 3
+    spiceproxy: 3
+
+network:
+  ssh:
+    enabled: true
+
+bootstrap:
+  structured:
+    flavors:
+      enabled: false
+
+conf:
+  ceph:
+    enabled: true
+  nova:
+    DEFAULT:
+      log_config_append: null
+      allow_resize_to_same_host: true
+      cpu_allocation_ratio: 4.5
+      ram_allocation_ratio: 0.9
+      disk_allocation_ratio: 3.0
+      resume_guests_state_on_host_boot: true
+      osapi_compute_workers: 8
+      metadata_workers: 8
+    api:
+      list_records_by_skipping_down_cells: false
+    barbican:
+      barbican_endpoint_type: internal
+    cache:
+      backend: oslo_cache.memcache_pool
+    cinder:
+      catalog_info: "volumev3::internalURL"
+      os_region_name: RegionOne
+    conductor:
+      workers: 8
+    compute:
+      consecutive_build_service_disable_threshold: 0
+    cors:
+      allowed_origin: "*"
+      allow_headers: "X-Auth-Token,X-OpenStack-Nova-API-Version"
+    database:
+      connection_recycle_time: 600
+      max_overflow: 50
+      max_pool_size: 5
+      pool_timeout: 30
+    filter_scheduler:
+      available_filters:
+        type: multistring
+        values:
+          - nova.scheduler.filters.all_filters
+      enabled_filters: >-
+        ComputeFilter,
+        AggregateTypeAffinityFilter,
+        ComputeCapabilitiesFilter,
+        PciPassthroughFilter,
+        ImagePropertiesFilter,
+        ServerGroupAntiAffinityFilter,
+        ServerGroupAffinityFilter
+      image_properties_default_architecture: x86_64
+      max_instances_per_host: 200
+    glance:
+      enable_rbd_download: true
+    libvirt:
+      live_migration_scheme: tls
+      swtpm_enabled: false
+    oslo_messaging_notifications:
+      driver: noop
+    os_vif_ovs:
+      ovsdb_connection: "unix:/run/openvswitch/db.sock"
+    privsep_osbrick:
+      helper_command: "sudo nova-rootwrap /etc/nova/rootwrap.conf privsep-helper --config-file /etc/nova/nova.conf"
+    scheduler:
+      max_attempts: 3
+      workers: 8
+      discover_hosts_in_cells_interval: 30
+    vnc:
+      auth_schemes: "none"
+      novncproxy_base_url: https://console.daalu.io/vnc_auto.html
+    workarounds:
+      skip_cpu_compare_on_dest: true
+  nova_api_uwsgi:
+    uwsgi:
+      chunked-input-limit: "4096000"
+      http-auto-chunked: true
+      http-raw-body: true
+      need-app: true
+      socket-timeout: 10
+  nova_metadata_uwsgi:
+    uwsgi:
+      chunked-input-limit: "4096000"
+      http-auto-chunked: true
+      http-raw-body: true
+      need-app: true
+      socket-timeout: 10
+  rabbitmq:
+    policies: []
+
+

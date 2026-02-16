@@ -1,0 +1,60 @@
+# assets/vector/values.yaml
+
+role: Agent
+
+image:
+  repository: timberio/vector
+  tag: 0.34.1-alpine
+
+service:
+  enabled: false
+
+customConfig:
+  data_dir: /vector-data-dir
+
+  sources:
+    journald:
+      type: journald
+
+    kubernetes_logs:
+      type: kubernetes_logs
+
+  sinks:
+    loki_kubernetes_logs:
+      type: loki
+      endpoint: http://loki-gateway
+      inputs:
+        - kubernetes_logs
+      encoding:
+        codec: text
+      out_of_order_action: accept
+      labels:
+        source_type: source_type
+        node: kubernetes.pod_node_name
+        pod_namespace: kubernetes.pod_namespace
+        pod_name: kubernetes.pod_name
+        container_name: container_name
+
+    loki_journald:
+      type: loki
+      endpoint: http://loki-gateway
+      inputs:
+        - journald
+      encoding:
+        codec: text
+      out_of_order_action: accept
+      labels:
+        source_type: source_type
+        node: host
+        unit: _SYSTEMD_UNIT
+
+extraVolumes:
+  - name: etc-machineid
+    hostPath:
+      path: /etc/machine-id
+      type: File
+
+extraVolumeMounts:
+  - name: etc-machineid
+    mountPath: /etc/machine-id
+    readOnly: true

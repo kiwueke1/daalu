@@ -1,0 +1,30 @@
+image:
+  registry: docker.io
+  repository: minio/minio
+  tag: "RELEASE.2025-09-07T16-13-09Z-cpuv1"
+  pullPolicy: IfNotPresent
+
+command:
+  - minio
+
+args:
+  - server
+  - /bitnami/minio/data
+
+mode: standalone
+
+auth:
+  rootUser: admin
+  rootPassword: ""  # Set at deploy time
+
+persistence:
+  enabled: true
+  mountPath: /bitnami/minio/data
+  size: 20Gi
+
+console:
+  enabled: false
+
+global:
+  security:
+    allowInsecureImages: true

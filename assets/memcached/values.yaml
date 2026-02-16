@@ -1,0 +1,43 @@
+endpoints:
+  memcached:
+    host_fqdn_override:
+      default: ""
+    port:
+      memcache:
+        default: 11211
+
+images:
+  tags:
+    memcached: docker.io/library/memcached:1.5.5
+    exporter: quay.io/prometheus/memcached-exporter:v0.14.0
+
+monitoring:
+  prometheus:
+    enabled: true
+
+pod:
+  replicas:
+    server: 1
+
+  tolerations:
+    memcached:
+      enabled: true
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+
+network:
+  memcache:
+    node_port:
+      enabled: false
+
+resources:
+  server:
+    limits:
+      memory: 1Gi
+    requests:
+      memory: 1Gi
+
+nodeSelector:
+  openstack-control-plane: enabled

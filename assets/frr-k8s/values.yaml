@@ -1,0 +1,6 @@
+frrk8s:
+  nodeSelector:
+    openvswitch: enabled
+  webhook:
+    nodeSelector:
+      node-role.kubernetes.io/control-plane: ""

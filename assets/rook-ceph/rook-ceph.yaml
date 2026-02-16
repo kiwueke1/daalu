@@ -1,0 +1,39 @@
+image:
+  repository: docker.io/rook/ceph
+  tag: v1.14.5
+  pullPolicy: IfNotPresent
+
+operator:
+  nodeSelector:
+    openstack-control-plane: enabled
+
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+
+    - key: node-role.kubernetes.io/master
+      operator: Exists
+      effect: NoSchedule
+
+    - key: node.kubernetes.io/not-ready
+      operator: Exists
+      effect: NoExecute
+      tolerationSeconds: 300
+
+    - key: node.kubernetes.io/unreachable
+      operator: Exists
+      effect: NoExecute
+      tolerationSeconds: 300
+
+  resources:
+    limits:
+      cpu: "1"
+      memory: 512Mi
+    requests:
+      cpu: 200m
+      memory: 128Mi
+
+csi:
+  enableRbdDriver: false
+  enableCephfsDriver: false

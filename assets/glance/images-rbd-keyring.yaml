@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Secret
+type: kubernetes.io/rbd
+metadata:
+  name: images-rbd-keyring
+  namespace: openstack
+stringData:
+  key: AQB+5odpWB6LDhAA5fm09a86Q7NThuydp7g2JA==

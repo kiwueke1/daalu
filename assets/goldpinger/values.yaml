@@ -1,0 +1,10 @@
+image:
+  repository: bloomberg/goldpinger
+  tag: latest
+
+goldpinger:
+  port: 30080
+
+extraEnv:
+  - name: USE_HOST_IP
+    value: "true"

@@ -1,0 +1,5 @@
+# assets/node-feature-discovery/values.yaml
+
+master:
+  nodeSelector:
+    openstack-control-plane: enabled

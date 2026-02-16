@@ -1,0 +1,163 @@
+environment: dev
+context: kubernetes-admin@kubernetes   # kubectl context or leave null and pass --context in CLI
+
+cluster_api:
+  cluster_name: auto-openstack-infra
+  namespace: baremetal-operator-system
+
+  # Kubernetes pod network (unchanged – internal to cluster)
+  pod_cidr: 10.201.0.0/16
+  pod_subnet: 10.201.0.0/16
+
+  # Control plane virtual IP on the 10.10.x network
+  control_plane_vip: 10.10.0.249
+
+  # Nodes allowed to host control-plane / workers
+  allowed_nodes: [pve-2, pve-3]
+
+  # DNS for nodes (can stay public or switch to local later)
+  dns_servers: [8.8.8.8, 8.8.4.4]
+
+  # Node IP allocation range on the 10.10.x network
+  ip_range: 10.10.0.170-10.10.0.185
+  gateway: 10.10.0.100
+  prefix: 16
+
+  # Interface used for VIP + kube-apiserver traffic
+  vip_interface: ens19
+
+  # SANs for kube-apiserver cert
+  cert_sans:
+    - "10.10.0.249"
+    - "kubernetes"
+    - "localhost"
+
+  network_bridge: vmbr0
+  source_node: pve-2
+  template_id: 10001
+  kubernetes_version: v1.35.0
+  KUBERNETES_VERSION: v1.35.0
+  kube_vip_image: ghcr.io/kube-vip/kube-vip:v0.7.1
+  control_plane_replicas: 1
+  control_plane_count: 1
+  worker_replicas: 1
+  worker_count: 1
+  control_plane_disk_gb: 300
+  worker_disk_gb: 300
+  control_plane_memory_mib: 62000
+  worker_memory_mib: 40000
+  control_plane_cores: 8
+  worker_cores: 4
+  control_plane_sockets: 2
+  worker_sockets: 2
+  pivot: false
+  builder_password: ""            # Set via secrets.yaml or DAALU_BUILDER_PASSWORD env var
+  image_password: ""              # Set via secrets.yaml or DAALU_IMAGE_PASSWORD env var
+  ssh_public_key: ""              # Your SSH public key (e.g. ssh-ed25519 AAAA... user@host)
+  ssh_public_key_path: ""         # Path to your SSH public key file
+  proxmox_secret_name: openstack-infra-proxmox-secret
+  proxmox_url: ""                 # e.g. https://<proxmox-host>:8006
+  proxmox_token: ""               # e.g. root@pam!<token-name>
+  proxmox_secret: ""              # Proxmox API token secret
+  provider: metal3
+  image_os: ubuntu
+  image_flavor: ubuntu
+  image_version: "24.04"
+  capm3_release: v1.13.99
+  capm3_release_branch: release-1.11
+  capm3_version: v1beta1
+  metal3_templates_path: assets/metal3/templates
+  metal3_namespace: baremetal-operator-system
+  image_username: builder
+  image_password_hash: ""         # Generate with: openssl passwd -6 '<your-password>'
+  service_cidr: 10.96.0.0/12
+  mgmt_host: ""                  # Management host IP
+  mgmt_user: ""                   # Management host SSH username
+  ironic_http_base: http://10.10.0.9
+  image_url: http://10.10.0.9/UBUNTU_24.04_NODE_IMAGE_K8S_v1.33.0-raw.img
+
+
+repos: []                    # local charts don't need repos
+
+releases:
+  - name: ingress
+    namespace: ingress-nginx
+    chart: "${WORKSPACE_ROOT}/helm-charts/ingress-nginx"
+    values:
+      files: ["${WORKSPACE_ROOT}/helm-values/ingress-nginx.yaml"]
+    create_namespace: true
+    atomic: true
+    wait: true
+    timeout_seconds: 900
+    dependencies: []
+
+  - name: keystone
+    namespace: openstack
+    chart: "${WORKSPACE_ROOT}/helm-charts/keystone"
+    values:
+      files: ["${WORKSPACE_ROOT}/helm-values/keystone.yaml"]
+    dependencies: ["ingress"]
+
+keycloak:
+  monitoring:
+    base_url: "https://auth.example.com"
+    admin_realm: "master"
+    admin_client_id: "admin-cli"
+    username: "admin"
+    password: ""                  # Keycloak admin password — set in secrets.yaml
+    verify_tls: true
+
+    realm: "daalu"
+    display_name: "Daalu"
+
+    grafana_root_url: "https://grafana.example.com"
+    grafana_redirect_uris:
+      - "https://grafana.example.com/login/generic_oauth"
+      - "https://grafana.example.com/*"
+
+  openstack:
+    base_url: "https://auth.example.com"
+    admin_realm: "master"
+    admin_client_id: "admin-cli"
+    username: "admin"
+    password: ""                  # Keycloak admin password — set in secrets.yaml
+    verify_tls: true
+
+    realm: "daalu"
+    display_name: "Daalu"
+    github_token: ""              # Set in secrets.yaml
+    oidc_issuer_url: "https://auth.example.com/realms/daalu"
+    oauth2_proxy_ssl_insecure_skip_verify: false
+    domains:
+      - name: daalu
+        label: Daalu
+        keycloak_realm: daalu
+        totp_default_action: true
+        client:
+          id: keystone
+          roles: []
+          oauth2_proxy: false
+          redirect_uris:
+            - "https://identity.example.com/v3/auth/OS-FEDERATION/identity_providers/redirect"
+
+
+    grafana_root_url: "https://grafana.example.com"
+    grafana_redirect_uris:
+      - "https://grafana.example.com/login/generic_oauth"
+      - "https://grafana.example.com/*"
+
+ceph:
+  # Pool replication settings — set to 1 for dev (single OSD), 3 for production
+  pool_replication_size: 1
+  pool_min_size: 1
+
+openstack:
+  network_backend: ovn
+  ovn_bgp_agent_enabled: false
+
+monitoring:
+  thanos:
+    bucket: thanos
+    endpoint: thanos-minio.monitoring.svc.cluster.local:9000
+    access_key: ""                # Set in secrets.yaml (thanos_s3_access_key)
+    secret_key: ""                # Set in secrets.yaml (thanos_s3_secret_key)

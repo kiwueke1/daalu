@@ -1,0 +1,19 @@
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: keystone-vs
+  namespace: istio-ingress
+spec:
+  gateways:
+    - istio-ingress/gateway
+  hosts:
+    - identity.daalu.io
+  http:
+    - match:
+        - uri:
+            prefix: /
+      route:
+        - destination:
+            host: keystone-api.openstack.svc.cluster.local
+            port:
+              number: 5000

@@ -1,0 +1,95 @@
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: keepalived-etc
+  namespace: {{ namespace }}
+type: Opaque
+stringData:
+  keepalived.conf: |
+{{ keepalived_conf | indent(4) }}
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: keepalived
+  namespace: {{ namespace }}
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["list", "get"]
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: keepalived
+  namespace: {{ namespace }}
+automountServiceAccountToken: true
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: keepalived
+  namespace: {{ namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: keepalived
+subjects:
+  - kind: ServiceAccount
+    name: keepalived
+    namespace: {{ namespace }}
+
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: keepalived
+  namespace: {{ namespace }}
+spec:
+  selector:
+    matchLabels:
+      application: keepalived
+  template:
+    metadata:
+      labels:
+        application: keepalived
+    spec:
+      hostNetwork: true
+      automountServiceAccountToken: true
+      serviceAccountName: keepalived
+      nodeSelector:
+        openstack-control-plane: enabled
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+
+
+      containers:
+        - name: keepalived
+          image: {{ keepalived_image }}
+          command:
+            - keepalived
+            - -f
+            - /etc/keepalived/keepalived.conf
+            - --dont-fork
+            - --log-console
+            - --log-detail
+            - --dump-conf
+          securityContext:
+            allowPrivilegeEscalation: true
+            capabilities:
+              add: [NET_ADMIN, NET_BROADCAST, NET_RAW]
+          volumeMounts:
+            - name: keepalived-etc
+              mountPath: /etc/keepalived
+              readOnly: true
+
+      volumes:
+        - name: keepalived-etc
+          secret:
+            secretName: keepalived-etc

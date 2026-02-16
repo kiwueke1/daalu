@@ -1,0 +1,33 @@
+{{- if .Values.cache.configFile }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "keycloak.fullname" . }}-cache
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "keycloak.labels" . | nindent 4 }}
+  {{- with (include "keycloak.annotations" .) }}
+  annotations:
+    {{- . | nindent 4 }}
+  {{- end }}
+data:
+  cache-ispn.xml: |
+    {{- .Values.cache.configFile | nindent 4 }}
+{{- end }}
+{{- if .Values.realm.configFile }}
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: {{ include "keycloak.fullname" . }}-realm
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "keycloak.labels" . | nindent 4 }}
+  {{- with (include "keycloak.annotations" .) }}
+  annotations:
+    {{- . | nindent 4 }}
+  {{- end }}
+data:
+  realm.json: |
+    {{ .Values.realm.configFile | nindent 4 }}
+{{- end }}

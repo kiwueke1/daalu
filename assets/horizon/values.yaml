@@ -1,0 +1,43 @@
+images:
+  tags:
+    bootstrap: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    db_init: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    db_drop: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    horizon_db_sync: docker.io/openstackhelm/horizon:2024.1-ubuntu_jammy
+    horizon: docker.io/openstackhelm/horizon:2024.1-ubuntu_jammy
+    ks_user: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    ks_service: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    ks_endpoints: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+pod:
+  security_context:
+    horizon:
+      pod:
+        fsGroup: 42424
+    db_sync:
+      pod:
+        fsGroup: 42424
+    tests:
+      pod:
+        fsGroup: 42424
+  replicas:
+    server: 3
+conf:
+  horizon:
+    local_settings:
+      config:
+        disallow_iframe_embed: "True"
+        secure_proxy_ssl_header: "True"
+        horizon_images_upload_mode: direct
+        openstack_enable_password_retrieve: "True"
+    extra_panels:
+      - designatedashboard
+      - heat_dashboard
+      - ironic_ui
+      - magnum_ui
+      - manila_ui
+      - monitoring
+      - neutron_vpnaas_dashboard
+      - octavia_dashboard
+manifests:
+  ingress_api: false
+  service_ingress_api: false

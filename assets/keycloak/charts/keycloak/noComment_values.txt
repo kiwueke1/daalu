@@ -1,0 +1,233 @@
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+commonLabels: {}
+commonAnnotations: {}
+
+image:
+  registry: docker.io
+  repository: keycloak/keycloak
+  tag: "26.5.1@sha256:b80a48090594367bd8cf6fe2019466ac4ea49de4d0830fb2a43256eda37b18f5"
+  imagePullPolicy: Always
+  command: "/opt/keycloak/bin/kc.sh"
+
+replicaCount: 1
+
+podAnnotations: {}
+podLabels: {}
+
+extraVolumes: []
+extraVolumeMounts: []
+preserveThemes: false
+preserveProviders: false
+
+extraInitContainers: []
+
+podSecurityContext:
+  fsGroup: 1001
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  runAsUser: 1001
+  runAsGroup: 1001
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop:
+      - ALL
+
+keycloak:
+  adminUser: admin
+  adminPassword: ""
+  existingSecret: ""
+  secretKeys:
+    adminPasswordKey: "admin-password"
+  hostname: ""
+  hostnameAdmin: ""
+  hostnameStrict: false
+  hostnameBackchannel: ""
+  httpEnabled: true
+  httpsEnabled: true
+  httpPort: 8080
+  httpsPort: 8443
+  proxyHeaders: ""
+  proxyProtocolEnabled: false
+  proxyTrustedAddresses: ""
+  production: false
+  httpRelativePath: /
+  extraArgs: []
+
+tls:
+  enabled: false
+  existingSecret: ""
+  certificateFile: "/opt/keycloak/certs/tls.crt"
+  certificateKeyFile: "/opt/keycloak/certs/tls.key"
+  certManager:
+    enabled: false
+    issuerRef:
+      name: ""
+      kind: ClusterIssuer
+      group: cert-manager.io
+    duration: ""
+    renewBefore: ""
+    commonName: ""
+    dnsNames: []
+    ipAddresses: []
+    secretName: ""
+    usages:
+      - digital signature
+      - key encipherment
+    annotations: {}
+  truststoreEnabled: false
+  truststoreExistingSecret: ""
+  truststoreExistingSecretKey: "truststore.jks"
+  truststorePassword: ""
+  truststoreFile: "/opt/keycloak/truststore/truststore.jks"
+
+database:
+  type: postgres
+  host: ""
+  port: ""
+  schema: ""
+  urlProperties: ""
+  name: keycloak
+  username: keycloak
+  password: ""
+  existingSecret: ""
+  secretKeys:
+    passwordKey: "db-password"
+    usernameKey: "db-username"
+  jdbcParams: ""
+
+cache:
+  stack: local
+  configFile: ""
+
+realm:
+  import: false
+  configFile: ""
+
+features:
+  enabled: []
+  disabled: []
+
+service:
+  type: ClusterIP
+  httpPort: 8080
+  httpsPort: 8443
+  httpTargetPort: 8080
+  httpsTargetPort: 8443
+  annotations: {}
+  trafficDistribution: ""
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: keycloak.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources: {}
+
+persistence:
+  enabled: false
+  storageClass: ""
+  annotations: {}
+  size: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  existingClaim: ""
+
+metrics:
+  enabled: false
+  service:
+    type: ClusterIP
+    port: 9000
+    targetPort: http-metrics
+    annotations: {}
+    labels: {}
+  serviceMonitor:
+    enabled: false
+    namespace: ""
+    interval: 30s
+    scrapeTimeout: ""
+    additionalLabels: {}
+    annotations: {}
+    relabelings: []
+    metricRelabelings: []
+    honorLabels: false
+    jobLabel: ""
+
+livenessProbe:
+  enabled: true
+  initialDelaySeconds: 60
+  periodSeconds: 30
+  timeoutSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
+
+readinessProbe:
+  enabled: true
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
+
+startupProbe:
+  enabled: true
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 60
+  successThreshold: 1
+
+nodeSelector: {}
+
+priorityClassName: ""
+
+tolerations: []
+
+topologySpreadConstraints: []
+
+affinity: {}
+
+serviceAccount:
+  create: false
+  annotations: {}
+  name: ""
+  automountServiceAccountToken: false
+
+extraEnvVars: []
+
+extraEnvVarsSecret: ""
+
+extraObjects: []
+
+initContainers:
+  waitForPostgres:
+    image: "postgres:17.26@sha256:e6a4209d1a4893f2df3bdcde58f8926c3c929c4d51df90990ed1b36d83c1382a"
+  waitForMariadb:
+    image: "mariadb:12.0.2@sha256:03a03a6817bb9eaa21e5aed1b734d432ec3f80021f5a2de1795475f158217545"
+
+c
+  enabled: true
+  auth:
+    database: "keycloak"
+    username: ""
+    password: ""
+
+mariadb:
+  enabled: false
+  auth:
+    database: "keycloak"
+    username: ""
+    password: ""
+    rootPassword: ""

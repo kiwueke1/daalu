@@ -1,0 +1,241 @@
+## @section Global parameters
+global:
+  ## @param global.imageRegistry Global Docker Image registry
+  imageRegistry: ""
+  ## @param global.imagePullSecrets Global Docker registry secret names as an array
+  imagePullSecrets: []
+
+## @section Common parameters
+## @param nameOverride String to partially override mariadb.fullname
+nameOverride: ""
+## @param fullnameOverride String to fully override mariadb.fullname
+fullnameOverride: ""
+## @param commonLabels Labels to add to all deployed objects
+commonLabels: {}
+## @param commonAnnotations Annotations to add to all deployed objects
+commonAnnotations: {}
+
+## @section MariaDB image parameters
+image:
+  ## @param image.registry MariaDB image registry
+  registry: docker.io
+  ## @param image.repository MariaDB image repository
+  repository: mariadb
+  ## @param image.tag MariaDB image tag (immutable tags are recommended)
+  tag: "12.0.2@sha256:5b6a1eac15b85b981a61afb89aea2a22bf76b5f58809d05f0bcc13ab6ec44cb8"
+  ## @param image.pullPolicy MariaDB image pull policy
+  imagePullPolicy: Always
+
+## @section MariaDB Authentication parameters
+auth:
+  ## @param auth.enabled MariaDB authentication enabled or disabled
+  enabled: true
+  ## @param auth.rootPassword MariaDB root password
+  rootPassword: ""
+  ## @param auth.database MariaDB custom database
+  database: ""
+  ## @param auth.username MariaDB custom user name
+  username: ""
+  ## @param auth.password MariaDB custom user password
+  password: ""
+  ## @param auth.existingSecret Name of existing secret to use for MariaDB credentials
+  existingSecret: ""
+  ## @param auth.allowEmptyRootPassword Allow the root user of MariaDB to have no password set
+  allowEmptyRootPassword: ""
+  ## @param auth.secretKeys.rootPasswordKey Name of key in existing secret to use for root password
+  ## @param auth.secretKeys.userPasswordKey Name of key in existing secret to use for user password
+  secretKeys:
+    rootPasswordKey: mariadb-root-password
+    userPasswordKey: mariadb-password
+
+## @section MariaDB configuration parameters
+config:
+  ## @param config.customConfiguration Custom configuration for MariaDB
+  customConfiguration: ""
+  ## @param config.existingConfigMap Name of existing ConfigMap with MariaDB configuration
+  existingConfigMap: ""
+
+## @section MariaDB service parameters
+service:
+  ## @param service.type MariaDB service type
+  type: ClusterIP
+  ## @param service.port MariaDB service port
+  port: 3306
+  ## @param service.nodePort Node port for MariaDB service
+  nodePort: ""
+  ## @param service.clusterIP Static cluster IP or "None" for headless service
+  clusterIP: ""
+  ## @param service.annotations Additional custom annotations for MariaDB service
+  annotations: {}
+
+## @section Persistence parameters
+persistence:
+  ## @param persistence.enabled Enable MariaDB data persistence using PVC
+  enabled: true
+  ## @param persistence.storageClass PVC Storage Class for MariaDB data volume
+  storageClass: ""
+  ## @param persistence.accessModes PVC Access modes
+  accessModes:
+    - ReadWriteOnce
+  ## @param persistence.size PVC Storage Request for MariaDB data volume
+  size: 8Gi
+  ## @param persistence.annotations Additional custom annotations for the PVC
+  annotations: {}
+  ## @param persistence.selector Additional labels for the PVC
+  selector: {}
+
+## @section MariaDB Pod Security Context
+podSecurityContext:
+  ## @param podSecurityContext.fsGroup Set MariaDB pod's Security Context fsGroup
+  fsGroup: 999
+
+## @section MariaDB Container Security Context
+containerSecurityContext:
+  ## @param containerSecurityContext.runAsUser Set MariaDB container's Security Context runAsUser
+  runAsUser: 999
+  ## @param containerSecurityContext.runAsNonRoot Set MariaDB container's Security Context runAsNonRoot
+  runAsNonRoot: true
+  ## @param containerSecurityContext.allowPrivilegeEscalation Set MariaDB container's privilege escalation
+  allowPrivilegeEscalation: false
+  ## @param containerSecurityContext.readOnlyRootFilesystem Set MariaDB container's Security Context readOnlyRootFilesystem
+  readOnlyRootFilesystem: false
+
+## @section Resources parameters
+resources:
+  {}
+  ## @param resources.limits The resources limits for the MariaDB containers
+  ## limits:
+  ##   memory: 300Mi
+  ## @param resources.requests The requested resources for the MariaDB containers
+  ## requests:
+  ##   memory: 300Mi
+  ##   cpu: 100m
+
+## @section Extra Configs
+## @param env A list of additional environment Variables
+env: []
+## - name: ENV_VARIABLE
+##   value: "value"
+## @param extraSecrets A list of additional existing secrets that will be mounted into the container
+extraSecrets: []
+##  - name: secret
+##    defaultMode: 0440
+##    mountPath: /mnt/secret
+## @param extraConfigs A list of additional existing configMaps that will be mounted into the container
+extraConfigs: []
+##  - name: config
+##    defaultMode: 0440
+##    mountPath: /mnt/config
+## @param extraVolumes A list of additional existing volumes that will be mounted into the container
+extraVolumes: []
+##  - name: volume
+##    mountPath: /mnt/tmp
+##    pvcName: pvc-001
+
+## @section Initialization scripts
+## @param initdbScriptsConfigMap Name of a ConfigMap with initialization scripts
+## The ConfigMap should contain one or more keys ending in .sql, .sql.gz or .sh
+## Example:
+##   apiVersion: v1
+##   kind: ConfigMap
+##   metadata:
+##     name: mariadb-initdb
+##   data:
+##     01-init.sql: |
+##       CREATE DATABASE mydb;
+##       CREATE USER 'myuser'@'%' IDENTIFIED BY 'mypassword';
+##       GRANT ALL PRIVILEGES ON mydb.* TO 'myuser'@'%';
+initdbScriptsConfigMap: ""
+
+## @section MariaDB container's liveness probe parameters
+livenessProbe:
+  ## @param livenessProbe.enabled Enable livenessProbe on MariaDB containers
+  enabled: true
+  ## @param livenessProbe.initialDelaySeconds Initial delay seconds for livenessProbe
+  initialDelaySeconds: 30
+  ## @param livenessProbe.periodSeconds Period seconds for livenessProbe
+  periodSeconds: 10
+  ## @param livenessProbe.timeoutSeconds Timeout seconds for livenessProbe
+  timeoutSeconds: 1
+  ## @param livenessProbe.failureThreshold Failure threshold for livenessProbe
+  failureThreshold: 3
+  ## @param livenessProbe.successThreshold Success threshold for livenessProbe
+  successThreshold: 1
+
+## @section MariaDB container's readiness probe parameters
+readinessProbe:
+  ## @param readinessProbe.enabled Enable readinessProbe on MariaDB containers
+  enabled: true
+  ## @param readinessProbe.initialDelaySeconds Initial delay seconds for readinessProbe
+  initialDelaySeconds: 5
+  ## @param readinessProbe.periodSeconds Period seconds for readinessProbe
+  periodSeconds: 10
+  ## @param readinessProbe.timeoutSeconds Timeout seconds for readinessProbe
+  timeoutSeconds: 1
+  ## @param readinessProbe.failureThreshold Failure threshold for readinessProbe
+  failureThreshold: 3
+  ## @param readinessProbe.successThreshold Success threshold for readinessProbe
+  successThreshold: 1
+
+## @section MariaDB container's startup probe parameters
+startupProbe:
+  ## @param startupProbe.enabled Enable startupProbe on MariaDB containers
+  enabled: false
+  ## @param startupProbe.initialDelaySeconds Initial delay seconds for startupProbe
+  initialDelaySeconds: 30
+  ## @param startupProbe.periodSeconds Period seconds for startupProbe
+  periodSeconds: 10
+  ## @param startupProbe.timeoutSeconds Timeout seconds for startupProbe
+  timeoutSeconds: 1
+  ## @param startupProbe.failureThreshold Failure threshold for startupProbe
+  failureThreshold: 15
+  ## @param startupProbe.successThreshold Success threshold for startupProbe
+  successThreshold: 1
+
+## @section Pod Disruption Budget configuration
+podDisruptionBudget:
+  ## @param podDisruptionBudget.enabled Enable a Pod Disruption Budget creation
+  enabled: false
+  ## @param podDisruptionBudget.minAvailable Min number of pods that must still be available after the eviction
+  minAvailable: 1
+  ## @param podDisruptionBudget.maxUnavailable Max number of pods that can be unavailable after the eviction
+  maxUnavailable: ""
+
+## @section Ingress parameters
+ingress:
+  ## @param ingress.enabled Enable ingress record generation for MariaDB
+  enabled: false
+  ## @param ingress.className IngressClass that will be be used to implement the Ingress (Kubernetes 1.18+)
+  className: ""
+  ## @param ingress.annotations Additional annotations for the Ingress resource
+  annotations:
+    kubernetes.io/hostname: mariadb.local
+  ## @param ingress.hosts An array with hosts and paths
+  hosts:
+    - host: mariadb.local
+      paths:
+        - path: /
+          pathType: Prefix
+  ## @param ingress.tls TLS configuration for the Ingress
+  tls: []
+
+## @section Network Policy configuration
+networkPolicy:
+  ## @param networkPolicy.enabled Specifies whether a NetworkPolicy should be created
+  enabled: false
+  ## @param networkPolicy.allowExternal Don't require client label for connections
+  allowExternal: true
+  ## @param networkPolicy.ingressNSMatchLabels Labels to match to allow traffic from other namespaces
+  ingressNSMatchLabels: {}
+  ## @param networkPolicy.ingressNSPodMatchLabels Pod labels to match to allow traffic from other namespaces
+  ingressNSPodMatchLabels: {}
+
+## @section Pod configuration
+podAnnotations: {}
+podLabels: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+## @param extraObjects Array of extra objects to deploy with the release
+extraObjects: []

@@ -1,0 +1,41 @@
+# src/daalu/assets/keepalived/values.yaml
+
+keepalived_enabled: true
+
+# REQUIRED
+keepalived_password: "CHANGE_ME"
+keepalived_vip: "10.10.0.250/24"
+keepalived_interface: "eno2"
+
+# Optional
+keepalived_vrid: 51
+
+# Images (explicit, no magic)
+dep_check_image: "ghcr.io/vexxhost/dep-check:latest"
+keepalived_image: "ghcr.io/vexxhost/keepalived:latest"
+
+# Used to build DEPENDENCY_POD_JSON
+network_backend: "ovn"
+
+keepalived_pod_dependency:
+  openvswitch:
+    - requireSameNode: true
+      labels:
+        application: neutron
+        component: neutron-ovs-agent
+  ovn:
+    - requireSameNode: true
+      labels:
+        application: ovn
+        component: ovn-controller
+
+# How long we wait for each node's interface to have IPv4
+wait_for_interface_ipv4:
+  enabled: true
+  node_selector: "openstack-control-plane=enabled"
+  retries: 120
+  delay: 5
+
+# Image used by kubectl debug to run `chroot /host ip ...`
+# Needs `iproute2` inside. Ubuntu works well.
+debug_image: "ubuntu:24.04"

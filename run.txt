@@ -1,0 +1,89 @@
+Workspace root: /home/kez/Documents/python_projects/daalu_full_python/daalu_github/daalu/daalu_io/daalu/daalu
+
+[clusterapi] Bootstrapping Cluster API components...
+/usr/bin/wget
+/usr/bin/qemu-img
+/usr/bin/sha256sum
+cluster.cluster.x-k8s.io/auto-openstack-infra unchanged
+metal3cluster.infrastructure.cluster.x-k8s.io/auto-openstack-infra unchanged
+ippool.ipam.metal3.io/provisioning-pool unchanged
+ippool.ipam.metal3.io/externalv4-pool unchanged
+kubeadmcontrolplane.controlplane.cluster.x-k8s.io/auto-openstack-infra unchanged
+metal3machinetemplate.infrastructure.cluster.x-k8s.io/auto-openstack-infra-controlplane unchanged
+metal3datatemplate.infrastructure.cluster.x-k8s.io/auto-openstack-infra-controlplane-template configured
+machinedeployment.cluster.x-k8s.io/auto-openstack-infra unchanged
+metal3machinetemplate.infrastructure.cluster.x-k8s.io/auto-openstack-infra-workers unchanged
+metal3datatemplate.infrastructure.cluster.x-k8s.io/auto-openstack-infra-workers-template configured
+kubeadmconfigtemplate.bootstrap.cluster.x-k8s.io/auto-openstack-infra-workers unchangedf04_NODE_IMAGE_K8S_v1.35.0-raw.img
+[image] ✓ raw image ensured on mgmt host: UBUNTU_24.04_NODE_IMAGE_K8S_v1.35.0-raw.img
+[image] Ensuring sha256 checksum exists on mgmt host
+[image] ✓ sha256 checksum ensured on mgmt host
+context is {'IP_STACK': 'v4', 'POD_CIDR': '10.201.0.0/16', 'SERVICE_CIDR': '10.96.0.0/12', 'BARE_METAL_PROVISIONER_CIDR': '24', 'PROVISIONING_POOL_RANGE_START': '172.22.0.100', 'PROVISIONING_POOL_RANGE_END': '172.22.0.200', 'BARE_METAL_V4_POOL_RANGE_START': '192.168.111.20', 'BARE_METAL_V4_POOL_RANGE_END': '192.168.111.40', 'BARE_METAL_V6_POOL_RANGE_START': '', 'BARE_METAL_V6_POOL_RANGE_END': '', 'CLUSTER_APIENDPOINT_PORT': 6443, 'MAX_SURGE_VALUE': 1, 'NODE_DRAIN_TIMEOUT': '0', 'CAPM3_DIAGNOSTICS_ADDRESS': '', 'CAPM3_INSECURE_DIAGNOSTICS': 'false', 'IPAM_DIAGNOSTICS_ADDRESS': '', 'IPAM_INSECURE_DIAGNOSTICS': 'false', 'EXTERNAL_VLAN_ID': '', 'IRONIC_ENDPOINT_BRIDGE': 'provisioning', 'VM_EXTRADISKS': 'false', 'EXTERNAL_SUBNET_V4_HOST': '192.168.111.1', 'EXTERNAL_SUBNET_V4_PREFIX': '24', 'EXTERNAL_SUBNET_V6_HOST': '', 'EXTERNAL_SUBNET_V6_PREFIX': '', 'NAMESPACE': 'metal3', 'CLUSTER_NAME': 'auto-openstack-infra', 'KUBERNETES_VERSION': 'v1.35.0', 'CONTROL_PLANE_MACHINE_COUNT': 3, 'WORKER_MACHINE_COUNT': 3, 'CAPM3RELEASE': 'v1.13.99', 'CAPM3RELEASEBRANCH': 'release-1.11', 'CAPM3_VERSION': 'v1beta1', 'IMAGE_OS': 'ubuntu', 'CLUSTER_APIENDPOINT_HOST': '192.168.111.249', 'IMAGE_USERNAME': 'kez', 'SSH_PUB_KEY_CONTENT': 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFN65XT1iOqLGjTGwOHqKf4VtgOebCJzpbD80hGFvdts kez@ironcloud', 'IMAGE_PASSWORD_HASH': '$6$XXyZJ8BwjBrvzVOo$O7OoAQDRngVwNbeG7CjwUe.zUxktYPcLZ.JWUerfkc58jty6c86U9s2WqTuAMOSECK/ZOKnq8rzwMXlspKkrw.', 'IMAGE_PASSWORD': 'admin10', 'bmh_nic_names': ['enp1s0', 'enp2s0'], 'REGISTRY': '192.168.111.1:5000', 'REGISTRY_PORT': '5000', 'REGISTRY_IMAGE_VERSION': '2.7.1', 'IMAGE_URL': 'http://172.22.0.1/images/UBUNTU_24.04_NODE_IMAGE_K8S_v1.35.0-raw.img', 'IMAGE_CHECKSUM': '3f574e954edb288a536eafa037d5d7313cb7dd542f8e5993a02d7ce202512457', 'IMAGE_CHECKSUM_TYPE': 'sha256', 'IMAGE_FORMAT': 'raw', 'EXTERNALV4_POOL_RANGE_START': '192.168.111.20', 'EXTERNALV4_POOL_RANGE_END': '192.168.111.40', 'EXTERNALV6_POOL_RANGE_START': '', 'EXTERNALV6_POOL_RANGE_END': ''}
+[metal3] Applying control plane manifest: /home/kez/Documents/python_projects/daalu_full_python/daalu_github/daalu/daalu_io/daalu/daalu/artifacts/metal3/generated/v1beta1_controlplane_ubuntu.yaml
+[metal3] Applying worker manifest: /home/kez/Documents/python_projects/daalu_full_python/daalu_github/daalu/daalu_io/daalu/daalu/artifacts/metal3/generated/v1beta1_workers_ubuntu.yaml
+[wait_for_cni_ready] Attempt 1/60: 6/6 Cilium pods Running
+NAME           READY   STATUS    RESTARTS   AGE   IP               NODE                               NOMINATED NODE   READINESS GATES
+cilium-4ffdr   1/1     Running   0          10h   192.168.111.25   auto-openstack-infra-gnqvk         <none>           <none>
+cilium-4lswp   1/1     Running   0          10h   192.168.111.24   auto-openstack-infra-j9srx         <none>           <none>
+cilium-gckbv   1/1     Running   0          10h   192.168.111.22   auto-openstack-infra-s626n-n764q   <none>           <none>
+cilium-q6c64   1/1     Running   0          10h   192.168.111.20   auto-openstack-infra-2r5vs         <none>           <none>
+cilium-wzsdp   1/1     Running   0          10h   192.168.111.23   auto-openstack-infra-s626n-6clxc   <none>           <none>
+cilium-zbsvm   1/1     Running   0          10h   192.168.111.21   auto-openstack-infra-s626n-njs96   <none>           <none>
+
+[wait_for_cni_ready] SUCCESS: All Cilium pods are Running
+[wait_for_nodes_ready] Attempt 1/150: 6/6 nodes Ready
+NAME                               STATUS   ROLES           AGE   VERSION   INTERNAL-IP      EXTERNAL-IP   OS-IMAGE             KERNEL-VERSION     CONTAINER-RUNTIME
+auto-openstack-infra-2r5vs         Ready    control-plane   12h   v1.35.0   192.168.111.20   <none>        Ubuntu 24.04.3 LTS   6.8.0-90-generic   cri-o://1.34.3
+auto-openstack-infra-gnqvk         Ready    control-plane   11h   v1.35.0   192.168.111.25   <none>        Ubuntu 24.04.3 LTS   6.8.0-90-generic   cri-o://1.34.3
+auto-openstack-infra-j9srx         Ready    control-plane   12h   v1.35.0   192.168.111.24   <none>        Ubuntu 24.04.3 LTS   6.8.0-90-generic   cri-o://1.34.3
+auto-openstack-infra-s626n-6clxc   Ready    <none>          12h   v1.35.0   192.168.111.23   <none>        Ubuntu 24.04.3 LTS   6.8.0-90-generic   cri-o://1.34.3
+auto-openstack-infra-s626n-n764q   Ready    <none>          12h   v1.35.0   192.168.111.22   <none>        Ubuntu 24.04.3 LTS   6.8.0-90-generic   cri-o://1.34.3
+auto-openstack-infra-s626n-njs96   Ready    <none>          12h   v1.35.0   192.168.111.21   <none>        Ubuntu 24.04.3 LTS   6.8.0-90-generic   cri-o://1.34.3
+
+[wait_for_nodes_ready] SUCCESS: All 6 nodes are Ready
+NAME                               STATUS   ROLES           AGE   VERSION   INTERNAL-IP      EXTERNAL-IP   OS-IMAGE             KERNEL-VERSION     CONTAINER-RUNTIME
+auto-openstack-infra-2r5vs         Ready    control-plane   12h   v1.35.0   192.168.111.20   <none>        Ubuntu 24.04.3 LTS   6.8.0-90-generic   cri-o://1.34.3
+auto-openstack-infra-gnqvk         Ready    control-plane   11h   v1.35.0   192.168.111.25   <none>        Ubuntu 24.04.3 LTS   6.8.0-90-generic   cri-o://1.34.3
+auto-openstack-infra-j9srx         Ready    control-plane   12h   v1.35.0   192.168.111.24   <none>        Ubuntu 24.04.3 LTS   6.8.0-90-generic   cri-o://1.34.3
+auto-openstack-infra-s626n-6clxc   Ready    <none>          12h   v1.35.0   192.168.111.23   <none>        Ubuntu 24.04.3 LTS   6.8.0-90-generic   cri-o://1.34.3
+auto-openstack-infra-s626n-n764q   Ready    <none>          12h   v1.35.0   192.168.111.22   <none>        Ubuntu 24.04.3 LTS   6.8.0-90-generic   cri-o://1.34.3
+auto-openstack-infra-s626n-njs96   Ready    <none>          12h   v1.35.0   192.168.111.21   <none>        Ubuntu 24.04.3 LTS   6.8.0-90-generic   cri-o://1.34.3
+
+Updating hosts and inventory...
+
+[nodes] Bootstrapping node OS roles via SSH...
+[nodes] Host auto-openstack-infra-2r5vs.net.daalu.io @ 192.168.111.20
+        netplan: yes
+[nodes] Host auto-openstack-infra-gnqvk.net.daalu.io @ 192.168.111.25
+        netplan: yes
+[nodes] Host auto-openstack-infra-j9srx.net.daalu.io @ 192.168.111.24
+        netplan: yes
+[nodes] Host auto-openstack-infra-s626n-6clxc.net.daalu.io @ 192.168.111.23
+        netplan: yes
+[nodes] Host auto-openstack-infra-s626n-n764q.net.daalu.io @ 192.168.111.22
+        netplan: yes
+[nodes] Host auto-openstack-infra-s626n-njs96.net.daalu.io @ 192.168.111.21
+        netplan: yes
+[nodes] Host auto-openstack-infra-2r5vs.net.daalu.io @ 192.168.111.20
+        netplan: yes
+[nodes] Host auto-openstack-infra-gnqvk.net.daalu.io @ 192.168.111.25
+        netplan: yes
+[nodes] Host auto-openstack-infra-j9srx.net.daalu.io @ 192.168.111.24
+        netplan: yes
+[nodes] Host auto-openstack-infra-s626n-6clxc.net.daalu.io @ 192.168.111.23
+        netplan: yes
+[nodes] Host auto-openstack-infra-s626n-n764q.net.daalu.io @ 192.168.111.22
+        netplan: yes
+[nodes] Host auto-openstack-infra-s626n-njs96.net.daalu.io @ 192.168.111.21
+        netplan: yes
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  hosts in bootstrap method is [Host(hostname='auto-openstack-infra-2r5vs.net.daalu.io', address='192.168.111.20', username='kez', port=22, password=None, pkey_path=PosixPath('/home/kez/.ssh/openstack-key'), become_password=None, authorized_key_path=PosixPath('/home/kez/.ssh/openstack-key.pub'), netplan_content='network:\n  version: 2\n  renderer: networkd\n  ethernets:\n    enp7s0:\n      dhcp4: false\n      addresses:\n        - 10.44.0.11/24\n'), Host(hostname='auto-openstack-infra-gnqvk.net.daalu.io', address='192.168.111.25', username='kez', port=22, password=None, pkey_path=PosixPath('/home/kez/.ssh/openstack-key'), become_password=None, authorized_key_path=PosixPath('/home/kez/.ssh/openstack-key.pub'), netplan_content='network:\n  version: 2\n  renderer: networkd\n  ethernets:\n    enp7s0:\n      dhcp4: false\n      addresses:\n        - 10.44.0.12/24\n'), Host(hostname='auto-openstack-infra-j9srx.net.daalu.io', address='192.168.111.24', username='kez', port=22, password=None, pkey_path=PosixPath('/home/kez/.ssh/openstack-key'), become_password=None, authorized_key_path=PosixPath('/home/kez/.ssh/openstack-key.pub'), netplan_content='network:\n  version: 2\n  renderer: networkd\n  ethernets:\n    enp7s0:\n      dhcp4: false\n      addresses:\n        - 10.44.0.13/24\n'), Host(hostname='auto-openstack-infra-s626n-6clxc.net.daalu.io', address='192.168.111.23', username='kez', port=22, password=None, pkey_path=PosixPath('/home/kez/.ssh/openstack-key'), become_password=None, authorized_key_path=PosixPath('/home/kez/.ssh/openstack-key.pub'), netplan_content='network:\n  version: 2\n  renderer: networkd\n  ethernets:\n    enp7s0:\n      dhcp4: false\n      addresses:\n        - 10.44.0.14/24\n'), Host(hostname='auto-openstack-infra-s626n-n764q.net.daalu.io', address='192.168.111.22', username='kez', port=22, password=None, pkey_path=PosixPath('/home/kez/.ssh/openstack-key'), become_password=None, authorized_key_path=PosixPath('/home/kez/.ssh/openstack-key.pub'), netplan_content='network:\n  version: 2\n  renderer: networkd\n  ethernets:\n    enp7s0:\n      dhcp4: false\n      addresses:\n        - 10.44.0.15/24\n'), Host(hostname='auto-openstack-infra-s626n-njs96.net.daalu.io', address='192.168.111.21', username='kez', port=22, password=None, pkey_path=PosixPath('/home/kez/.ssh/openstack-key'), become_password=None, authorized_key_path=PosixPath('/home/kez/.ssh/openstack-key.pub'), netplan_content='network:\n  version: 2\n  renderer: networkd\n  ethernets:\n    enp7s0:\n      dhcp4: false\n      addresses:\n        - 10.44.0.16/24\n'), Host(hostname='auto-openstack-infra-2r5vs.net.daalu.io', address='192.168.111.20', username='kez', port=22, password=None, pkey_path=PosixPath('/home/kez/.ssh/openstack-key'), become_password=None, authorized_key_path=PosixPath('/home/kez/.ssh/openstack-key.pub'), netplan_content='network:\n  version: 2\n  renderer: networkd\n  ethernets:\n    enp7s0:\n      dhcp4: false\n      addresses:\n        - 10.44.0.11/24\n'), Host(hostname='auto-openstack-infra-gnqvk.net.daalu.io', address='192.168.111.25', username='kez', port=22, password=None, pkey_path=PosixPath('/home/kez/.ssh/openstack-key'), become_password=None, authorized_key_path=PosixPath('/home/kez/.ssh/openstack-key.pub'), netplan_content='network:\n  version: 2\n  renderer: networkd\n  ethernets:\n    enp7s0:\n      dhcp4: false\n      addresses:\n        - 10.44.0.12/24\n'), Host(hostname='auto-openstack-infra-j9srx.net.daalu.io', address='192.168.111.24', username='kez', port=22, password=None, pkey_path=PosixPath('/home/kez/.ssh/openstack-key'), become_password=None, authorized_key_path=PosixPath('/home/kez/.ssh/openstack-key.pub'), netplan_content='network:\n  version: 2\n  renderer: networkd\n  ethernets:\n    enp7s0:\n      dhcp4: false\n      addresses:\n        - 10.44.0.13/24\n'), Host(hostname='auto-openstack-infra-s626n-6clxc.net.daalu.io', address='192.168.111.23', username='kez', port=22, password=None, pkey_path=PosixPath('/home/kez/.ssh/openstack-key'), become_password=None, authorized_key_path=PosixPath('/home/kez/.ssh/openstack-key.pub'), netplan_content='network:\n  version: 2\n  renderer: networkd\n  ethernets:\n    enp7s0:\n      dhcp4: false\n      addresses:\n        - 10.44.0.14/24\n'), Host(hostname='auto-openstack-infra-s626n-n764q.net.daalu.io', address='192.168.111.22', username='kez', port=22, password=None, pkey_path=PosixPath('/home/kez/.ssh/openstack-key'), become_password=None, authorized_key_path=PosixPath('/home/kez/.ssh/openstack-key.pub'), netplan_content='network:\n  version: 2\n  renderer: networkd\n  ethernets:\n    enp7s0:\n      dhcp4: false\n      addresses:\n        - 10.44.0.15/24\n'), Host(hostname='auto-openstack-infra-s626n-njs96.net.daalu.io', address='192.168.111.21', username='kez', port=22, password=None, pkey_path=PosixPath('/home/kez/.ssh/openstack-key'), become_password=None, authorized_key_path=PosixPath('/home/kez/.ssh/openstack-key.pub'), netplan_content='network:\n  version: 2\n  renderer: networkd\n  ethernets:\n    enp7s0:\n      dhcp4: false\n      addresses:\n        - 10.44.0.16/24\n')]
+[nodes] Node OS bootstrap completed.
+
+[ceph] Deploying Ceph...
+[2026-01-05T07:56:03Z] CephStarted run=af0bec9b-eeec-4a6c-95b8-10ecb9635b6a env=workload ctx=default data={stage=init, message=Starting Ceph deployment on auto-openstack-infra-2r5vs}}
+[2026-01-05T07:56:03Z] CephProgress run=af0bec9b-eeec-4a6c-95b8-10ecb9635b6a env=workload ctx=default data={stage=container_engine_check, message=Checking container engine...}}
+[2026-01-05T07:56:03Z] CephProgress run=af0bec9b-eeec-4a6c-95b8-10ecb9635b6a env=workload ctx=default data={stage=container_engine_check, message=Found container engine: /usr/bin/docker}}
+[2026-01-05T07:56:03Z] CephProgress run=af0bec9b-eeec-4a6c-95b8-10ecb9635b6a env=workload ctx=default data={stage=cephadm_check, message=Checking cephadm presence...}}
+[2026-01-05T07:56:03Z] CephProgress run=af0bec9b-eeec-4a6c-95b8-10ecb9635b6a env=workload ctx=default data={stage=cephadm_check, message=cephadm already installed}}
+[2026-01-05T07:56:03Z] CephProgress run=af0bec9b-eeec-4a6c-95b8-10ecb9635b6a env=workload ctx=default data={stage=image_pull, message=Pulling Ceph image quay.io/ceph/ceph:v17.2.6}}
+[2026-01-05T07:56:19Z] [cephadm] Detected existing Ceph cluster on auto-openstack-infra-2r5vs (192.168.111.20); skipping bootstrap.
