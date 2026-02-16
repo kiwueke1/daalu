@@ -1,5 +1,6 @@
 _percona_xtradb_cluster_spec:
   crVersion: "1.14.0"
+  allowUnsafeConfigurations: true
 
   # Secret created by PerconaXtraDBClusterComponent (or pre-existing)
   secretsName: percona-xtradb
@@ -52,7 +53,7 @@ _percona_xtradb_cluster_spec:
 
   haproxy:
     enabled: true
-    size: 3
+    size: 2
 
     # REQUIRED when haproxy.enabled=true
     image: docker.io/percona/percona-xtradb-cluster-operator:1.14.0-haproxy

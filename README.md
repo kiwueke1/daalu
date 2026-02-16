@@ -210,7 +210,7 @@ monitoring:
 **Step 3: Run daalu**
 
 ```bash
-python -m daalu.cli.app deploy cluster-defs/cluster.yaml \
+python -m daalu.cli.app cluster-defs/cluster.yaml \
   --managed-user builder \
   --managed-user-password "MySecurePass123" \
   --ssh-key ~/.ssh/daalu-key
