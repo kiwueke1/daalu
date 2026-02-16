@@ -91,46 +91,7 @@ class SshBootstrapper(NodeBootstrapper):
             pass
         finally:
             h.client.close()
-            
-    def _connect_1(self, host):
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
-        pkey = None
-        if host.pkey_path:
-            key_path = str(host.pkey_path)
-            try:
-                # Try ED25519 first (most modern)
-                pkey = paramiko.Ed25519Key.from_private_key_file(key_path)
-            except paramiko.ssh_exception.SSHException:
-                try:
-                    # Then try RSA
-                    pkey = paramiko.RSAKey.from_private_key_file(key_path)
-                except paramiko.ssh_exception.SSHException:
-                    try:
-                        # Fallback to ECDSA
-                        pkey = paramiko.ECDSAKey.from_private_key_file(key_path)
-                    except Exception as e:
-                        raise RuntimeError(f"Unsupported private key format for {key_path}: {e}")
-
-        client.connect(
-            hostname=host.address,
-            port=host.port,
-            username=host.username,
-            pkey=pkey,
-            password=None,          # IMPORTANT
-            look_for_keys=False,
-            allow_agent=False,
-            timeout=30,
-        )
-
-
-
-    def _close_1(self, h: _SSHHandles):
-        try:
-            h.sftp.close()
-        finally:
-            h.close()
 
     def _run(self, h: _SSHHandles, cmd: str, sudo: bool = False, stdin_data: Optional[str] = None) -> Tuple[int, str, str]:
         """

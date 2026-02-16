@@ -110,15 +110,6 @@ class KeycloakAdmin:
     # ----------------------------
     # Realm operations
     # ----------------------------
-    def realm_exists_1(self, realm: str) -> bool:
-        r = _http_request(
-            "GET",
-            self._admin_url(f"/admin/realms/{realm}"),
-            headers=self._headers(),
-            verify_tls=self.auth.verify_tls,
-        )
-        return r.status == 200
-
     def realm_exists(self, realm: str) -> bool:
         url = self._admin_url(f"/admin/realms/{realm}")
         headers = self._headers()

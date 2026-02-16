@@ -439,53 +439,6 @@ echo "DONE — admin password reset in DB"
         )
         log.debug("✅ Admin credentials cleared from DB — will be re-created on pod restart")
 
-    def pre_install_1(self, kubectl) -> None:
-        """
-        Prepare database and user (exact Ansible parity).
-        """
-        log.debug("Running keycloak pre-install steps...")
-        mysql_host = self._get_pxc_service_ip(kubectl)
-        self._wait_for_mysql(mysql_host)
-
-        conn = pymysql.connect(
-            host=mysql_host,
-            user="root",
-            password=self._get_mysql_root_password_env(),
-            autocommit=True,
-        )
-
-        with conn.cursor() as cur:
-            cur.execute(f"CREATE DATABASE IF NOT EXISTS {self.db_name}")
-            cur.execute(
-                f"CREATE USER IF NOT EXISTS '{self.db_user}'@'%' IDENTIFIED BY '{self.db_password}'"
-            )
-            cur.execute(
-                f"GRANT ALL PRIVILEGES ON {self.db_name}.* TO '{self.db_user}'@'%'"
-            )
-            cur.execute("SET GLOBAL pxc_strict_mode='PERMISSIVE'")
-
-        conn.close()
-
-        # Secret for external DB (matches Helm values)
-        kubectl.apply_objects(
-            [
-                {
-                    "apiVersion": "v1",
-                    "kind": "Secret",
-                    "metadata": {
-                        "name": "keycloak-externaldb",
-                        "namespace": self.namespace,
-                    },
-                    "type": "Opaque",
-                    "stringData": {
-                        "db-password": self.db_password,
-                        "db-username": self.db_user,
-                    },
-                }
-            ]
-        )
-
-
     # ------------------------------------------------------------------
     def helm_values(self) -> Dict:
         return self.values

@@ -105,20 +105,6 @@ def build_hosts_entries(
     log.debug(f"hosts entries is {out}")
     return out
 
-def build_hosts_entries_1(
-    mgmt_context: Optional[str],
-    workload_kubeconfig: str,
-) -> List[Tuple[str, str]]:
-    """Return [(ip, hostname), ...] for each workload node, resolving IP via CAPI Machine on mgmt."""
-    names = get_node_names(workload_kubeconfig)
-    out: List[Tuple[str, str]] = []
-    for n in names:
-        ip = get_machine_internal_ip(mgmt_context, n)
-        if ip:
-            out.append((ip, n))
-    log.debug(f"hosts entries is {out}")
-    return out
-
 def update_hosts_file(
     entries: List[Tuple[str, str]],
     hosts_file: Path,
@@ -143,26 +129,6 @@ def update_hosts_file(
 
     subprocess.run(["sudo", "cp", tmp_path, str(hosts_file)], check=True)
     subprocess.run(["sudo", "chmod", "644", str(hosts_file)], check=True)
-
-
-def update_hosts_file_1(
-    entries: List[Tuple[str, str]],
-    hosts_file: Path,
-    domain_suffix: str,
-    cleanup_regex: Optional[str] = None,
-) -> None:
-    text = hosts_file.read_text() if hosts_file.exists() else ""
-    if cleanup_regex:
-        text = "\n".join([ln for ln in text.splitlines() if not re.search(cleanup_regex, ln)])
-
-    for ip, host in entries:
-        fqdn = f"{host}.{domain_suffix}"
-        line = f"{ip} {host} {fqdn}"
-        # remove any existing line for this host
-        text = "\n".join([ln for ln in text.splitlines() if not re.search(rf"\b{re.escape(host)}(\s|$)", ln)])
-        text += ("\n" if text and not text.endswith("\n") else "") + line
-
-    hosts_file.write_text(text + ("\n" if not text.endswith("\n") else ""))
 
 
 def render_inventory_templates(

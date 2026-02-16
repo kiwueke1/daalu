@@ -42,21 +42,6 @@ from daalu.bootstrap.infrastructure.components.keepalived import (
 
 
 
-def infra_asset_path_1(
-    workspace_root: Path,
-    component: str,
-    filename: str = "config.yaml",
-) -> Path:
-    return (
-        workspace_root
-        / "src/daalu/bootstrap"
-        / "infrastructure"
-        / "assets"
-        / component
-        / filename
-    )
-
-
 def build_infrastructure_components(
     *,
     selection: InfraSelection,

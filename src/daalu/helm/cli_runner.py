@@ -221,66 +221,6 @@ class HelmCliRunner(IHelm):
         self._run(argv, capture=False, stream=debug, sudo=True)
 
 
-    def install_or_upgrade_1(
-        self,
-        *,
-        name: str,
-        chart: str,
-        namespace: str,
-        values: dict,
-        kubeconfig: str | None = None,
-        create_namespace: bool = True,
-        atomic: bool = True,
-        wait: bool = True,
-        timeout_seconds: int = 600,
-        debug: bool = False,
-    ) -> None:
-        """
-        Imperative Helm API for platform components (CSI, CNI, etc).
-
-        This is a thin adapter over upgrade_install(ReleaseSpec).
-        """
-
-        # Write inline values to a temp file
-        with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as tf:
-            yaml.safe_dump(values, tf)
-            values_file = tf.name
-
-        try:
-            rel = ReleaseSpec(
-                name=name,
-                chart=chart,
-                namespace=namespace,
-                version=None,
-                values={
-                    "files": [values_file],
-                    "inline": None,
-                },
-                create_namespace=create_namespace,
-                atomic=atomic,
-                wait=wait,
-                timeout_seconds=timeout_seconds,
-                install_crds=False,
-                dependencies=[],
-                hooks=[],
-            )
-
-            # If CSI passed a kubeconfig, override context temporarily
-            original_ctx = self.kube_context
-            if kubeconfig:
-                self.kube_context = None
-                self.env = {
-                    **self.env,
-                    "KUBECONFIG": kubeconfig,
-                }
-
-            self.upgrade_install(rel, debug=debug)
-
-        finally:
-            Path(values_file).unlink(missing_ok=True)
-            self.kube_context = original_ctx
-
-
     def install_or_upgrade(
         self,
         *,

@@ -112,51 +112,6 @@ class SecretsManager:
         return v
 
 
-
-    def _discover_service_passwords_1(self) -> None:
-        self.service_db_passwords.clear()
-        self.service_rabbit_passwords.clear()
-
-        for k, v in self._raw.items():
-            sv = _as_str(v)
-            if not sv:
-                continue
-
-            #  NORMALIZE  keys
-            normalized = k
-            if normalized.startswith("openstack_helm_endpoints_"):
-                normalized = normalized[len("openstack_helm_endpoints_"):]
-
-            # --- DB passwords ---
-            for pat in self.DB_KEY_PATTERNS:
-                m = re.match(pat, normalized)
-                if m:
-                    svc = m.group("svc")
-
-                    log.debug("\n[DB PASSWORD MATCH]")
-                    log.debug(f"  Pattern : {pat}")
-                    log.debug(f"  Raw key : {normalized}")
-                    log.debug(f"  Service : {svc}")
-                    log.debug(f"  Value   : ***")
-
-                    self.service_db_passwords[svc] = sv
-
-
-            # --- RabbitMQ passwords ---
-            for pat in self.RABBIT_KEY_PATTERNS:
-                m = re.match(pat, normalized)
-                if m:
-                    svc = m.group("svc")
-
-                    log.debug("\n[RABBITMQ PASSWORD MATCH]")
-                    log.debug(f"  Pattern : {pat}")
-                    log.debug(f"  Raw key : {normalized}")
-                    log.debug(f"  Service : {svc}")
-                    log.debug(f"  Value   : ***")
-
-                    self.service_rabbit_passwords[svc] = sv
-
-
     def _discover_service_passwords(self) -> None:
         self.service_db_passwords.clear()
         self.service_rabbit_passwords.clear()

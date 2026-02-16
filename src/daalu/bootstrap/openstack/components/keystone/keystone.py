@@ -705,29 +705,6 @@ class KeystoneComponent(InfraComponent):
     # ----------------------------
     # Helper methods
     # ----------------------------
-    def _iter_domains_1(self):
-        """
-        Normalizes Keycloak config so Keystone logic can always iterate.
-        Supports:
-        - single-realm mode (no domains)
-        - multi-domain mode
-        """
-        kc = self.keycloak_config  # Keystone-level config
-
-        if getattr(kc, "domains", None):
-            return kc.domains
-
-        # Fallback: synthesize a single domain from top-level realm
-        return [
-            KeycloakDomainSpec(
-                name=kc.realm.realm,
-                label=kc.realm.display_name,
-                keycloak_realm=kc.realm.realm,
-                totp_default_action=True,
-                client=kc.clients[0] if kc.clients else None,
-            )
-        ]
-
     def _iter_domains(self):
         return self.keycloak_config.normalized_domains()
 

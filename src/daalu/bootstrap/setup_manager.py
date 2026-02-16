@@ -175,46 +175,6 @@ class SetupManager:
 
         helm.upgrade_install(rel)
 
-    def install_cilium_1(self, opts: SetupOptions, control_plane_ip: str) -> None:
-        os.environ["KUBECONFIG"] = str(opts.workload_kubeconfig)
-
-        helm = HelmCliRunner(kube_context=None)
-
-        helm.add_repo(CILIUM_REPO)
-        helm.update_repos()
-
-        values = {
-            "ipam": {"mode": "kubernetes"},
-            "kubeProxyReplacement": True,
-            "k8sServiceHost": control_plane_ip,
-            "k8sServicePort": 6443,
-            "hostServices": {"enabled": True},
-            "externalIPs": {"enabled": True},
-            "nodePort": {"enabled": True},
-            "hostPort": {"enabled": True},
-            "image": {"pullPolicy": "IfNotPresent"},
-            "operator": {"replicas": 1},
-            "prometheus": {"enabled": True},
-            "hubble": {
-                "enabled": True,
-                "relay": {"enabled": True},
-                "ui": {"enabled": True},
-            },
-        }
-
-        rel = ReleaseSpec(
-            name="cilium",
-            namespace="kube-system",
-            chart="cilium/cilium",
-            values=ValuesRef(inline=values),
-            create_namespace=True,
-            atomic=True,
-            wait=True,
-            timeout_seconds=900,
-        )
-
-        helm.upgrade_install(rel)
-
     def wait_for_cilium(self, opts: SetupOptions, retries: int = 30, delay: int = 10) -> None:
         import json
 
@@ -395,34 +355,3 @@ class SetupManager:
             raise
 
 
-    def run_1(self, opts: SetupOptions) -> None:
-        bus = EventBus([])
-        run_ctx = new_ctx(env="setup", context=self.mgmt_context or "default")
-
-        bus.emit(SetupStarted(cluster_name=opts.cluster_name, **run_ctx))
-
-        try:
-            self.generate_kubeconfig(opts)
-            bus.emit(KubeconfigGenerated(cluster_name=opts.cluster_name, **run_ctx))
-
-            ip = self.get_control_plane_ip(opts)
-            bus.emit(ControlPlaneDiscovered(cluster_name=opts.cluster_name, ip=ip, **run_ctx))
-
-            self.install_cilium(opts, ip)
-            bus.emit(CiliumInstalled(cluster_name=opts.cluster_name, ip=ip, **run_ctx))
-
-            self.wait_for_cilium(opts)
-            bus.emit(CiliumReady(cluster_name=opts.cluster_name, **run_ctx))
-
-            nodes = self.update_hosts_and_inventory(opts)
-            bus.emit(HostsUpdated(cluster_name=opts.cluster_name, count=len(nodes), **run_ctx))
-
-            self.label_and_taint_nodes(opts, nodes)
-            bus.emit(NodesLabeled(cluster_name=opts.cluster_name, count=len(nodes), **run_ctx))
-
-            bus.emit(SetupSummary(cluster_name=opts.cluster_name, status="OK", **run_ctx))
-
-        except Exception as e:
-            bus.emit(SetupFailed(cluster_name=opts.cluster_name, error=str(e), **run_ctx))
-            bus.emit(SetupSummary(cluster_name=opts.cluster_name, status="FAILED", error=str(e), **run_ctx))
-            raise

@@ -67,13 +67,6 @@ def _load_yaml(path: Path) -> dict:
     return yaml.safe_load(expanded) or {}
 
 
-def load_config_1(path: str | Path) -> ClusterConfig:
-    raw = Path(path).read_text()
-    expanded = os.path.expandvars(raw)
-    data = yaml.safe_load(expanded)
-    return ClusterConfig.model_validate(data)
-
-
 def load_config(path: str | Path) -> DaaluConfig:
     """
     Load and validate a Daalu YAML config.
