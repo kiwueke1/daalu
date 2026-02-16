@@ -204,8 +204,8 @@ metadata:
   namespace: baremetal-operator-system
 type: Opaque
 stringData:
-  username: ADMIN
-  password: ADMIN
+  username: "<BMC_USERNAME>"
+  password: "<BMC_PASSWORD>"
 ```
 
 Apply:
@@ -226,9 +226,9 @@ metadata:
   namespace: baremetal-operator-system
 spec:
   online: true
-  bootMACAddress: "ac:1f:6b:01:b7:21"
+  bootMACAddress: "xx:xx:xx:xx:xx:xx"
   bmc:
-    address: "redfish://192.168.0.70/redfish/v1/Systems/1"
+    address: "redfish://<BMC_IP_OR_HOST>/redfish/v1/Systems/1"
     credentialsName: bmh-cred-cp01
     disableCertificateVerification: true
   bootMode: UEFI
