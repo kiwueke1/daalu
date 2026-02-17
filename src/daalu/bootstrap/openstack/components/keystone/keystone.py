@@ -24,7 +24,7 @@ from daalu.bootstrap.shared.keycloak.iam import (
     KeycloakIAMManager,
     KeycloakIAMConfig,
 )
-#from daalu.bootstrap.shared.secrets.manager import SecretsManager
+from daalu.bootstrap.openstack.secrets_manager import SecretsManager
 from daalu.bootstrap.openstack.endpoints import (
     OpenStackHelmEndpoints,
 )
@@ -111,6 +111,21 @@ class KeystoneComponent(InfraComponent):
             raise RuntimeError("OpenStack endpoints not computed yet")
 
         base["endpoints"] = self._computed_endpoints
+
+        # Inject OIDC secrets into the Apache wsgi_keystone config
+        if hasattr(self, "_oidc_crypto_passphrase") and hasattr(self, "_oidc_client_secret"):
+            wsgi = base.get("conf", {}).get("wsgi_keystone", "")
+            if wsgi:
+                wsgi = wsgi.replace(
+                    "CHANGE_ME_OIDC_CRYPTO_PASSPHRASE",
+                    self._oidc_crypto_passphrase,
+                )
+                wsgi = wsgi.replace(
+                    "CHANGE_ME_OIDC_CLIENT_SECRET",
+                    self._oidc_client_secret,
+                )
+                base["conf"]["wsgi_keystone"] = wsgi
+
         return base
 
     # -------------------------------------------------
@@ -569,6 +584,17 @@ class KeystoneComponent(InfraComponent):
         log.debug("[keystone] OpenStack endpoints ready ✓")
 
         # -------------------------------------------------
+        # 2) Read OIDC secrets for Apache mod_auth_openidc
+        # -------------------------------------------------
+        secrets = SecretsManager.from_yaml(
+            path=self.secrets_path,
+            namespace=self.namespace,
+        )
+        self._oidc_crypto_passphrase = secrets.require("keystone_oidc_crypto_passphrase")
+        self._oidc_client_secret = secrets.require("keystone_keycloak_client_secret")
+        log.debug("[keystone] OIDC secrets loaded ✓")
+
+        # -------------------------------------------------
         # DEBUG 1: Dump computed OpenStack endpoints
         # -------------------------------------------------
         log.debug("[keystone][DEBUG] Computed OpenStack Helm endpoints:")
@@ -682,6 +708,11 @@ class KeystoneComponent(InfraComponent):
         log.info("[keystone] Waiting for keystone-api to be ready...")
         self._wait_for_keystone_ready(kubectl)
         log.info("[keystone] keystone-api is ready")
+
+        log.info("[keystone] Ensuring Keycloak client for Keystone...")
+        self._ensure_iam()
+        self._create_keycloak_client()
+        log.info("[keystone] Keycloak client configured")
 
         log.info("[keystone] Creating Keystone domains...")
         self._create_keystone_domains()

@@ -34,6 +34,7 @@ from daalu.bootstrap.openstack.components.ovn.ovn import OvnComponent
 from daalu.bootstrap.openstack.components.libvirt.libvirt import LibvirtComponent
 from daalu.bootstrap.openstack.components.coredns.coredns import CoreDNSComponent
 from daalu.bootstrap.openstack.components.heat.heat import HeatComponent
+from daalu.bootstrap.openstack.components.ceilometer.ceilometer import CeilometerComponent
 from daalu.bootstrap.openstack.components.neutron.neutron import NeutronComponent
 from daalu.bootstrap.openstack.components.nova.nova import NovaComponent
 from daalu.bootstrap.openstack.components.octavia.octavia import OctaviaComponent
@@ -85,12 +86,21 @@ def build_openstack_components(
             ),
             clients=[
                 KeycloakClientSpec(
+                    id="keystone",
+                    redirect_uris=[
+                        uri
+                        for d in kc.domains
+                        if d.client
+                        for uri in d.client.redirect_uris
+                    ] if kc.domains else [],
+                ),
+                KeycloakClientSpec(
                     id="grafana",
                     roles=["admin", "editor", "viewer"],
                     oauth2_proxy=True,
                     redirect_uris=kc.grafana_redirect_uris,
                     port=3000,
-                )
+                ),
             ],
             domains=[
                 KeycloakDomainSpec(
@@ -452,6 +462,26 @@ def build_openstack_components(
                 assets_dir=infra_asset_path(workspace_root, "heat"),
                 values_path=infra_asset_path(
                     workspace_root, "heat", "values.yaml"
+                ),
+                secrets_path=workspace_root / "cloud-config" / "secrets.yaml",
+                keystone_public_host=str(cfg.keycloak.openstack.base_url)
+                    .replace("https://", "")
+                    .replace("http://", "")
+                    .rstrip("/"),
+            )
+        )
+
+    # ----------------------------
+    # Ceilometer (OpenStack Telemetry)
+    # ----------------------------
+    if selection.components is None or "ceilometer" in selection.components:
+        components.append(
+            CeilometerComponent(
+                kubeconfig=kubeconfig_path,
+                namespace="openstack",
+                assets_dir=infra_asset_path(workspace_root, "ceilometer"),
+                values_path=infra_asset_path(
+                    workspace_root, "ceilometer", "values.yaml"
                 ),
                 secrets_path=workspace_root / "cloud-config" / "secrets.yaml",
                 keystone_public_host=str(cfg.keycloak.openstack.base_url)

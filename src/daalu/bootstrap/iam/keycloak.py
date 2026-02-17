@@ -105,18 +105,7 @@ class KeycloakIAMManager:
             return None
         return items[0]["id"]
 
-    def ensure_client(self, client: KeycloakClientSpec) -> str:
-        """
-        Ensure a client exists; returns the Keycloak client UUID.
-        """
-        realm = self.config.realm.realm
-        client_uuid = self._find_client_uuid(realm=realm, client_id=client.id)
-        if client_uuid:
-            # Optional: could PATCH updates here later
-            return client_uuid
-
-        url = f"{self._base_admin_url()}/{realm}/clients"
-
+    def _build_client_payload(self, client: KeycloakClientSpec) -> dict:
         payload = {
             "clientId": client.id,
             "enabled": True,
@@ -126,11 +115,24 @@ class KeycloakIAMManager:
             "standardFlowEnabled": True,
             "directAccessGrantsEnabled": True,
         }
-
         if client.root_url:
             payload["rootUrl"] = client.root_url
         if client.base_url:
             payload["baseUrl"] = client.base_url
+        return payload
+
+    def ensure_client(self, client: KeycloakClientSpec) -> str:
+        """
+        Ensure a client exists and is up-to-date; returns the Keycloak client UUID.
+        """
+        realm = self.config.realm.realm
+        client_uuid = self._find_client_uuid(realm=realm, client_id=client.id)
+        if client_uuid:
+            self._update_client(realm=realm, client_uuid=client_uuid, client=client)
+            return client_uuid
+
+        url = f"{self._base_admin_url()}/{realm}/clients"
+        payload = self._build_client_payload(client)
 
         r = requests.post(url, json=payload, headers=self._headers(), verify=self.config.admin.verify_tls, timeout=30)
         if r.status_code not in (201, 204):
@@ -141,6 +143,15 @@ class KeycloakIAMManager:
         if not client_uuid:
             raise KeycloakIAMError(f"Created client {client.id} but failed to find it afterwards")
         return client_uuid
+
+    def _update_client(self, *, realm: str, client_uuid: str, client: KeycloakClientSpec) -> None:
+        """Update an existing Keycloak client (redirect_uris, etc.)."""
+        url = f"{self._base_admin_url()}/{realm}/clients/{client_uuid}"
+        payload = self._build_client_payload(client)
+
+        r = requests.put(url, json=payload, headers=self._headers(), verify=self.config.admin.verify_tls, timeout=30)
+        if r.status_code not in (200, 204):
+            raise KeycloakIAMError(f"Failed to update client {client.id}: {r.status_code} {r.text}")
 
     def ensure_client_roles(self, *, client_uuid: str, roles: list[str]) -> None:
         if not roles:

@@ -70,3 +70,5 @@ _percona_xtradb_cluster_spec:
     configuration: |
       global
         maxconn 8192
+        external-check
+        insecure-fork-wanted

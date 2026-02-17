@@ -108,7 +108,8 @@ conf:
       OIDCProviderMetadataURL https://auth.daalu.io/realms/daalu/.well-known/openid-configuration
       OIDCClientID keystone
       OIDCSSLValidateServer On
-      OIDCCryptoPassphrase CHANGE_ME_KEYSTONE_CLIENT_SECRET
+      OIDCCryptoPassphrase CHANGE_ME_OIDC_CRYPTO_PASSPHRASE
+      OIDCClientSecret CHANGE_ME_OIDC_CLIENT_SECRET
       OIDCRedirectURI https://keystone.daalu.io/v3/auth/OS-FEDERATION/identity_providers/redirect
       OIDCRedirectURLsAllowed \
         https://keystone.daalu.io/v3/auth/OS-FEDERATION/identity_providers/daalu/protocols/openid/websso \

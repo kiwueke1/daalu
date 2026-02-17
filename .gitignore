@@ -22,6 +22,7 @@ daalu_venv/
 
 # Generated artifacts (contain interpolated secrets)
 artifacts/
+assets/
 
 
 # ==========================================
@@ -63,3 +64,8 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+
+# Third-party / vendored
+github.com/aspect-build/
+helm-charts/
+helm-values/

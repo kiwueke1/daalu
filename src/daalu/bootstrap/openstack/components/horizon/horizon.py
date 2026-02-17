@@ -133,7 +133,16 @@ class HorizonComponent(InfraComponent):
         # (mirrors _horizon_helm_values.conf.horizon.local_settings.config.raw)
         keystone_fqdn = self.keystone_public_host
         raw = base["conf"]["horizon"]["local_settings"]["config"].setdefault("raw", {})
+        raw["WEBSSO_ENABLED"] = True
         raw["WEBSSO_KEYSTONE_URL"] = f"https://{keystone_fqdn}/v3"
+        raw["WEBSSO_INITIAL_CHOICE"] = "credentials"
+        raw["WEBSSO_CHOICES"] = (
+            ("credentials", "Keystone Credentials"),
+            ("mapped", "Daalu SSO"),
+        )
+        raw["WEBSSO_IDP_MAPPING"] = {
+            "mapped": ("daalu", "openid"),
+        }
         raw["LOGOUT_URL"] = (
             f"https://{keystone_fqdn}/v3/auth/OS-FEDERATION/identity_providers/"
             f"redirect?logout=https://{self._horizon_api_host}/auth/logout/"
