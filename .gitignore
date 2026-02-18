@@ -22,7 +22,10 @@ daalu_venv/
 
 # Generated artifacts (contain interpolated secrets)
 artifacts/
-assets/
+
+# Helm charts vendored into assets — download separately (see README)
+# values.yaml files within each asset directory ARE tracked
+assets/*/charts
 
 
 # ==========================================

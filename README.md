@@ -135,6 +135,64 @@ pip install -r requirements.txt
 
 ---
 
+## Helm Charts
+
+Each service under `assets/` includes a `values.yaml` (tracked in git) and a `charts/` directory (git-ignored). You must download the Helm chart for each service yourself before running daalu.
+
+### Structure
+
+```
+assets/
+├── metallb/
+│   ├── values.yaml      # tracked — your configuration
+│   └── charts/          # git-ignored — download yourself
+│       └── metallb/
+├── ingress-nginx/
+│   ├── values.yaml
+│   └── charts/
+│       └── ingress-nginx/
+└── ...
+```
+
+### Downloading Charts
+
+Add the relevant Helm repo and pull the chart into the correct directory:
+
+```bash
+# General pattern
+helm repo add <repo-name> <repo-url>
+helm repo update
+helm pull <repo-name>/<chart> --untar --untardir assets/<service>/charts/
+```
+
+**Examples:**
+
+```bash
+# MetalLB
+helm repo add metallb https://metallb.github.io/metallb
+helm pull metallb/metallb --untar --untardir assets/metallb/charts/
+
+# Ingress NGINX
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm pull ingress-nginx/ingress-nginx --untar --untardir assets/ingress-nginx/charts/
+
+# Kube Prometheus Stack
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm pull prometheus-community/kube-prometheus-stack --untar --untardir assets/kube-prometheus-stack/charts/
+
+# Loki
+helm repo add grafana https://grafana.github.io/helm-charts
+helm pull grafana/loki --untar --untardir assets/loki/charts/
+
+# Keycloak
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm pull bitnami/keycloak --untar --untardir assets/keycloak/charts/
+```
+
+Repeat this for each service in `assets/` that you intend to deploy. The chart name and repo for each service match the directory name under `assets/`.
+
+---
+
 ## Secrets Management
 
 Daalu never stores credentials in version control. You provide them at runtime using one of two methods (or both together).
