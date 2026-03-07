@@ -1,0 +1,22 @@
+# Harbor Helm override values for the mgmt cluster
+#
+# Only put STATIC, non-secret config here.
+# These fields are all handled at deploy time by HarborDeployer._build_runtime_values()
+# and should NOT appear here:
+#   - expose / externalURL   (set to nodePort with fixed port)
+#   - harborAdminPassword    (injected from secrets.yaml)
+#   - persistence            (storage class + sizes injected from cluster config)
+#   - database.internal      (security context injected for local-path-provisioner)
+#
+# Chart: harbor/harbor  (https://helm.goharbor.io)
+# Download: helm pull harbor/harbor --untar --destination assets/harbor/charts/
+
+# Disable optional heavyweight components to save resources on the mgmt cluster
+trivy:
+  enabled: false
+
+notary:
+  enabled: false
+
+metrics:
+  enabled: false

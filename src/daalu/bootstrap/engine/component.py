@@ -51,6 +51,7 @@ class InfraComponent(ABC):
     # Optional hooks
     wait_for_pods: bool = True
     min_running_pods: int = 1
+    wait_timeout_seconds: int = 300   # total seconds before giving up on pod readiness
     enable_argocd: bool = False
 
     # -------------------------------------------------

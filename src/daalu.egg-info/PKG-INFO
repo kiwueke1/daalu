@@ -2,3 +2,5 @@ Metadata-Version: 2.4
 Name: daalu
 Version: 0
 Classifier: Private :: Do Not Upload
+License-File: LICENSE
+Dynamic: license-file

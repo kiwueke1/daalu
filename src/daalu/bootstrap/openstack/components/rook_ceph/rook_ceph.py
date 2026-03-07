@@ -43,6 +43,7 @@ class RookCephComponent(InfraComponent):
             uses_helm=True,
             wait_for_pods=True,
             min_running_pods=1,
+            wait_timeout_seconds=600,
             enable_argocd=enable_argocd,
         )
 

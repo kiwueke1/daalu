@@ -26,16 +26,16 @@ class FakeHelm:
         self.fail_times = fail_times
         self._attempts: Dict[str, int] = {}
 
-    def add_repo(self, repo):
+    def add_repo(self, repo, debug: bool = False):
         self.calls.append(Call("add_repo", (repo.name, str(repo.url))))
 
-    def update_repos(self):
+    def update_repos(self, debug: bool = False):
         self.calls.append(Call("update_repos", ()))
 
-    def lint(self, rel):
+    def lint(self, rel, debug: bool = False):
         self.calls.append(Call("lint", (rel.name,)))
 
-    def upgrade_install(self, rel):
+    def upgrade_install(self, rel, debug: bool = False):
         self.calls.append(Call("upgrade", (rel.name,)))
         if rel.name == self.fail_on_release:
             count = self._attempts.get(rel.name, 0) + 1
@@ -43,10 +43,10 @@ class FakeHelm:
             if count <= self.fail_times:
                 raise RuntimeError(f"boom {rel.name} attempt {count}")
 
-    def uninstall(self, name, ns):
+    def uninstall(self, name, ns, debug: bool = False):
         self.calls.append(Call("uninstall", (name, ns)))
 
-    def diff(self, rel):
+    def diff(self, rel, debug: bool = False):
         return ""
 
 
@@ -140,16 +140,16 @@ def test_waiter_success_and_timeout_events():
     )
     assert any(e.__class__.__name__ == "WaiterSucceeded" for e in cap.events)
 
-    # Second run: waiter times out on 't'
+    # Second run: waiter times out.
+    # The executor catches TimeoutError in its outer except-block, performs rollback,
+    # then returns a report — it does NOT re-raise.
     cap2 = Capture()
-    try:
-        deploy_all(
-            cfg=ClusterConfig(environment="dev", repos=[], releases=cfg.releases),
-            helm=helm,
-            observers=[cap2],
-            options=DeployOptions(use_waiter=True, retries=0, backoff_seconds=0.01),
-            waiter=waiter_timeout,
-        )
-        assert False, "Expected TimeoutError to bubble"
-    except TimeoutError:
-        assert any(e.__class__.__name__ == "WaiterTimedOut" for e in cap2.events)
+    report2 = deploy_all(
+        cfg=ClusterConfig(environment="dev", repos=[], releases=cfg.releases),
+        helm=helm,
+        observers=[cap2],
+        options=DeployOptions(use_waiter=True, retries=0, backoff_seconds=0.01),
+        waiter=waiter_timeout,
+    )
+    assert any(e.__class__.__name__ == "WaiterTimedOut" for e in cap2.events)
+    assert any(e.__class__.__name__ == "DeploySummary" for e in cap2.events)

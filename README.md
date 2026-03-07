@@ -12,8 +12,8 @@ To understand the motivation behind this project, see [The NoCloud (Not Only Clo
 
 ## What It Does
 
-- **Bare-metal provisioning** — Onboards bare metal servers into Kubernetes with Metal3 ClusterAPI provider; Proxmox/libvirt VMs for development.
-- **OpenStack deployment** — Deploys a full OpenStack control plane (Keystone, Nova, Neutron, Glance, Heat, Cinder, Manila, Octavia, Horizon, Barbican, and more) via Helm charts
+- **Bare-metal provisioning** — Onboards bare metal servers into Kubernetes with Metal3 ClusterAPI provider
+- **OpenStack deployment** — Deploys a full OpenStack control plane (Keystone, Nova, Neutron, Glance, Heat, Cinder, Horizon, and more) via Helm charts
 - **Ceph storage** — Bootstraps Ceph clusters and configures RBD CSI drivers
 - **Identity management** — Integrates Keycloak for SSO/OIDC across Grafana and OpenStack
 - **Monitoring** — Deploys Prometheus, Grafana, Loki, OpenSearch, and Thanos for metrics and log aggregation
@@ -25,20 +25,11 @@ To understand the motivation behind this project, see [The NoCloud (Not Only Clo
 ## Final End Product
 
 - **Kubernetes control plane** — A production Kubernetes cluster running directly on bare-metal servers using Cluster API and Metal3.
-
-- **OpenStack cloud layer** — A fully operational OpenStack control plane providing compute (Nova), networking (Neutron), image services (Glance), block and object storage (Cinder, Manila), and orchestration capabilities.
-
+- **OpenStack cloud layer** — A fully operational OpenStack control plane providing compute (Nova), networking (Neutron), image services (Glance), block and object storage (Cinder), and orchestration capabilities.
 - **Distributed storage backend** — A Ceph-backed storage system with RBD CSI integration for persistent volumes and cloud storage services.
-
 - **Integrated operations stack** — Centralized identity (OIDC/SSO), monitoring, logging, and GitOps-based lifecycle management.
 
-- **HPC and GPU compute capability** — Optional GPU-enabled nodes and distributed schedulers (Volcano, Ray, Slurm) for large-scale compute and AI workloads.
-
-- **End-to-end AI/ML workload support** — An environment capable of supporting the full lifecycle of machine learning systems: data ingestion, distributed training, experiment tracking, model serving, and production deployment.
-
-In practical terms, the system transforms physical servers into a self-hosted cloud and HPC platform capable of running both general infrastructure workloads and advanced AI/ML environments.
-
-
+---
 
 ## Project Structure
 
@@ -48,6 +39,7 @@ daalu/
 │   ├── cli/                    # Typer CLI entry points
 │   ├── config/                 # YAML config loading and Pydantic models
 │   ├── bootstrap/              # Core provisioning logic
+│   │   ├── mgmt/               # Management cluster bootstrap + teardown
 │   │   ├── metal3/             # Metal3 Cluster API provider
 │   │   ├── node/               # SSH-based node bootstrap
 │   │   ├── ceph/               # Ceph deployment
@@ -55,60 +47,34 @@ daalu/
 │   │   ├── openstack/          # OpenStack service components
 │   │   ├── infrastructure/     # Infra components (MetalLB, ArgoCD, etc.)
 │   │   ├── monitoring/         # Monitoring stack (Prometheus, Grafana, etc.)
-│   │   ├── iam/                # Identity & Access Management
+│   │   ├── registry/           # Harbor container registry
 │   │   └── shared/             # Shared utilities (Keycloak, etc.)
 │   ├── helm/                   # Helm chart runner
-│   ├── deploy/                 # Deployment step orchestration
 │   ├── observers/              # Event bus and lifecycle logging
-│   ├── temporal/               # Temporal workflow integration
 │   └── utils/                  # SSH runner, retry helpers
 ├── cluster-defs/               # Cluster definition YAML files
-│   ├── cluster.yaml            # Main cluster configuration
-│   ├── hpc/                    # HPC cluster definitions
-│   └── cluster-api/            # Cluster API manifest templates
+│   └── cluster.yaml            # Main cluster configuration
 ├── cloud-config/               # Cloud configuration
 │   ├── secrets.yaml            # Your secrets (git-ignored)
 │   └── secrets.yaml.example    # Template showing required keys
-├── .env.example                # Environment variable template
-├── helm-charts/                # Helm charts for all services
-├── helm-values/                # Helm value overrides
-├── assets/                     # Additional deployment assets
-├── templates/                  # Jinja2 templates for cluster-api setup
+├── assets/                     # Helm values and chart directories
 ├── artifacts/                  # Generated manifests (git-ignored)
 └── tests/                      # Test suites
 ```
 
-## Prerequisites
-
-Daalu assumes you already have a **management Kubernetes cluster** with the **Cluster API (CAPI) Metal3 provider installed**. This cluster is used to provision and manage workload clusters.
-
-### 1. Management Kubernetes Cluster (Required)
-
-You must have:
-
-- A Kubernetes cluster. For quick start, [kind (Kubernetes in Docker)](https://kind.sigs.k8s.io/) is an easy and lightweight option.
-- [Cluster API (CAPI)](https://cluster-api.sigs.k8s.io/)
-- [Metal3 Infrastructure Provider](https://metal3.io/)
-- [`clusterctl`](https://cluster-api.sigs.k8s.io/clusterctl/overview.html) initialized for Metal3
-
-👉 Follow the setup guide here:  
-[Metal3 + Cluster API Setup Guide](docs/metal3-cluster-api-setup.md)
-
-This document walks you through installing Cluster API, initializing the Metal3 provider, and preparing your management cluster for bare-metal provisioning.
-
 ---
 
-### 2. Required CLI Tools
+## Prerequisites
 
-The following tools must be installed locally:
+### Required CLI tools
+
+The following must be installed on the machine where you run `daalu`:
 
 - [Python 3.10+](https://www.python.org/downloads/)
 - [`kubectl`](https://kubernetes.io/docs/tasks/tools/)
 - [`clusterctl`](https://cluster-api.sigs.k8s.io/clusterctl/overview.html)
 - [`helm` 3.x](https://helm.sh/docs/intro/install/)
-- SSH client (usually preinstalled on Linux/macOS)
-
-Verify your cli tools:
+- SSH client (preinstalled on Linux/macOS)
 
 ```bash
 kubectl version --client
@@ -117,6 +83,14 @@ helm version
 python --version
 ```
 
+### Hardware requirements
+
+- **Management node** — A bare-metal machine or VM running Ubuntu 22.04/24.04. This hosts the management Kubernetes cluster, Metal3/Ironic, and Harbor registry.
+- **Workload nodes** — One or more bare-metal servers with IPMI/Redfish BMC access for PXE provisioning via Metal3.
+- **Storage node** *(optional)* — A dedicated server for Ceph OSDs.
+
+---
+
 ## Installation
 
 ```bash
@@ -124,39 +98,23 @@ python --version
 git clone https://github.com/kiwueke1/daalu.git
 cd daalu
 
-# Create a virtual environment
-python -m venv .daalu_venv
-source .daalu_venv/bin/activate
-
-# Install the package
+# Create a virtual environment and install
+python -m venv .venv
+source .venv/bin/activate
 pip install -e .
-pip install -r requirements.txt
+```
+
+After installation, the `daalu` command is available:
+
+```bash
+daalu --help
 ```
 
 ---
 
 ## Helm Charts
 
-Each service under `assets/` includes a `values.yaml` (tracked in git) and a `charts/` directory (git-ignored). You must download the Helm chart for each service yourself before running daalu.
-
-### Structure
-
-```
-assets/
-├── metallb/
-│   ├── values.yaml      # tracked — your configuration
-│   └── charts/          # git-ignored — download yourself
-│       └── metallb/
-├── ingress-nginx/
-│   ├── values.yaml
-│   └── charts/
-│       └── ingress-nginx/
-└── ...
-```
-
-### Downloading Charts
-
-Add the relevant Helm repo and pull the chart into the correct directory:
+Each service under `assets/` includes a `values.yaml` (tracked in git) and a `charts/` directory (git-ignored). Download the Helm chart for each service before deploying.
 
 ```bash
 # General pattern
@@ -168,410 +126,282 @@ helm pull <repo-name>/<chart> --untar --untardir assets/<service>/charts/
 **Examples:**
 
 ```bash
-# MetalLB
 helm repo add metallb https://metallb.github.io/metallb
 helm pull metallb/metallb --untar --untardir assets/metallb/charts/
 
-# Ingress NGINX
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
 helm pull ingress-nginx/ingress-nginx --untar --untardir assets/ingress-nginx/charts/
 
-# Kube Prometheus Stack
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm pull prometheus-community/kube-prometheus-stack --untar --untardir assets/kube-prometheus-stack/charts/
 
-# Loki
 helm repo add grafana https://grafana.github.io/helm-charts
 helm pull grafana/loki --untar --untardir assets/loki/charts/
 
-# Keycloak
 helm repo add bitnami https://charts.bitnami.com/bitnami
 helm pull bitnami/keycloak --untar --untardir assets/keycloak/charts/
 ```
-
-Repeat this for each service in `assets/` that you intend to deploy. The chart name and repo for each service match the directory name under `assets/`.
-
----
-
-## Secrets Management
-
-Daalu never stores credentials in version control. You provide them at runtime using one of two methods (or both together).
-
-### How It Works
-
-When you run `python -m daalu.cli.app deploy cluster-defs/cluster.yaml`, the config loader:
-
-1. Reads `cluster-defs/cluster.yaml`
-2. Expands any `${ENV_VAR}` placeholders via `os.path.expandvars()`
-3. Looks for a `secrets.yaml` file and deep-merges it into the config
-4. Validates the merged result against the Pydantic config model
-
-```
-cluster.yaml          secrets.yaml (git-ignored)
- (structure +          (credentials, mirrors
-  empty secrets)        the same YAML structure)
-       \                    /
-        \                  /
-     config loader deep-merges
-              |
-              v
-     DaaluConfig (runtime)
-```
-
-### Method 1 — secrets.yaml File (Recommended)
-
-Best for local development and single-operator setups.
-
-**Step 1: Generate your secrets file**
-
-```bash
-# Generate with random passwords for all services
-./scripts/generate-secrets.sh
-
-# Or copy the example and fill in manually
-cp cloud-config/secrets.yaml.example cloud-config/secrets.yaml
-```
-
-See [Generating Secrets](#generating-secrets) for full details on the generator script.
-
-**Step 2: Fill in your real values**
-
-Create `cloud-defs/cluster.yaml`. See `cloud-defs/cluster.yaml.example` for sample structure of the file, fill in your own values.
-
-```yaml
-# cloud-config/secrets.yaml
-cluster_api:
-  builder_password: "MySecurePass123"
-  image_password: "MySecurePass123"
-  image_password_hash: "$6$rounds=4096$salt$hash..."
-  ssh_public_key: "ssh-ed25519 AAAAC3Nz... user@host"
-  ssh_public_key_path: "/home/youruser/.ssh/daalu-key.pub"
-  proxmox_url: "https://192.168.1.100:8006"
-  proxmox_token: "root@pam!mytoken"
-  proxmox_secret: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-  mgmt_host: "192.168.1.50"
-  mgmt_user: "admin"
-
-keycloak:
-  monitoring:
-    password: "KeycloakAdminPass!"
-  openstack:
-    password: "KeycloakAdminPass!"
-    github_token: "ghp_xxxxxxxxxxxxxxxxxxxx"
-
-monitoring:
-  thanos:
-    access_key: "minio-admin"
-    secret_key: "minio-secret-key"
-```
-
-**Step 3: Run daalu**
-
-```bash
-python -m daalu.cli.app cluster-defs/cluster.yaml \
-  --managed-user builder \
-  --managed-user-password "MySecurePass123" \
-  --ssh-key ~/.ssh/daalu-key
-```
-
-The loader automatically finds `cloud-config/secrets.yaml` (relative to `WORKSPACE_ROOT`). No extra flags needed.
-
-**Custom secrets file location:**
-
-```bash
-export DAALU_SECRETS_FILE=/secure/path/my-secrets.yaml
-
-python -m daalu.cli.app deploy cluster-defs/cluster.yaml \
-  --managed-user builder \
-  --managed-user-password "MySecurePass123"
-```
-
-### Method 2 — Environment Variables
-
-Best for CI/CD pipelines, containers, and automated deployments.
-
-**Step 1: Create your .env file**
-
-```bash
-cp .env.example .env
-```
-
-**Step 2: Fill in your values**
-
-```bash
-# .env
-export DAALU_BUILDER_PASSWORD="MySecurePass123"
-export DAALU_IMAGE_PASSWORD="MySecurePass123"
-export DAALU_SSH_PUBLIC_KEY="ssh-ed25519 AAAAC3Nz... user@host"
-export DAALU_PROXMOX_URL="https://192.168.1.100:8006"
-export DAALU_PROXMOX_TOKEN="root@pam!mytoken"
-export DAALU_PROXMOX_SECRET="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-export DAALU_MGMT_HOST="192.168.1.50"
-export DAALU_MGMT_USER="admin"
-export DAALU_KEYCLOAK_ADMIN_PASSWORD="KeycloakAdminPass!"
-export DAALU_KEYCLOAK_DB_PASSWORD="KeycloakDBPass!"
-export DAALU_GITHUB_TOKEN="ghp_xxxxxxxxxxxxxxxxxxxx"
-export DAALU_THANOS_S3_ACCESS_KEY="minio-admin"
-export DAALU_THANOS_S3_SECRET_KEY="minio-secret-key"
-export DAALU_MYSQL_ROOT_PASSWORD="MySQLRootPass!"
-export DAALU_OPENSEARCH_ADMIN_PASSWORD="OpenSearchPass!"
-```
-
-**Step 3: Reference them in cluster.yaml (or secrets.yaml)**
-
-Use `${VAR_NAME}` — the loader expands these before parsing:
-
-```yaml
-# cluster-defs/cluster.yaml (or cloud-config/secrets.yaml)
-cluster_api:
-  builder_password: "${DAALU_BUILDER_PASSWORD}"
-  image_password: "${DAALU_IMAGE_PASSWORD}"
-  ssh_public_key: "${DAALU_SSH_PUBLIC_KEY}"
-  proxmox_url: "${DAALU_PROXMOX_URL}"
-  proxmox_token: "${DAALU_PROXMOX_TOKEN}"
-  proxmox_secret: "${DAALU_PROXMOX_SECRET}"
-  mgmt_host: "${DAALU_MGMT_HOST}"
-  mgmt_user: "${DAALU_MGMT_USER}"
-
-keycloak:
-  monitoring:
-    password: "${DAALU_KEYCLOAK_ADMIN_PASSWORD}"
-  openstack:
-    password: "${DAALU_KEYCLOAK_ADMIN_PASSWORD}"
-    github_token: "${DAALU_GITHUB_TOKEN}"
-
-monitoring:
-  thanos:
-    access_key: "${DAALU_THANOS_S3_ACCESS_KEY}"
-    secret_key: "${DAALU_THANOS_S3_SECRET_KEY}"
-```
-
-**Step 4: Source and run**
-
-```bash
-source .env
-
-python -m daalu.cli.app deploy cluster-defs/cluster.yaml \
-  --managed-user builder \
-  --managed-user-password "${DAALU_BUILDER_PASSWORD}" \
-  --ssh-key ~/.ssh/daalu-key
-```
-
-**In CI/CD (e.g. GitHub Actions):**
-
-```yaml
-- name: Deploy infrastructure
-  env:
-    DAALU_BUILDER_PASSWORD: ${{ secrets.DAALU_BUILDER_PASSWORD }}
-    DAALU_PROXMOX_SECRET: ${{ secrets.DAALU_PROXMOX_SECRET }}
-    # ... all other DAALU_* secrets
-  run: |
-    python -m daalu.cli.app deploy cluster-defs/cluster.yaml \
-      --managed-user builder \
-      --managed-user-password "${DAALU_BUILDER_PASSWORD}"
-```
-
-### Combining Both Methods
-
-You can use both together. For example, keep infrastructure config in `secrets.yaml` and use env vars for the CLI flags and component passwords:
-
-```bash
-# secrets.yaml handles cluster_api, keycloak, monitoring fields
-# env vars handle component-level passwords
-source .env
-
-python -m daalu.cli.app deploy cluster-defs/cluster.yaml \
-  --managed-user builder \
-  --managed-user-password "${DAALU_BUILDER_PASSWORD}" \
-  --ssh-key ~/.ssh/daalu-key
-```
-
-### Which Secrets Go Where
-
-| Secret | secrets.yaml field | Env var |
-|---|---|---|
-| Node builder password | `cluster_api.builder_password` | `DAALU_BUILDER_PASSWORD` |
-| Image password | `cluster_api.image_password` | `DAALU_IMAGE_PASSWORD` |
-| SSH public key | `cluster_api.ssh_public_key` | `DAALU_SSH_PUBLIC_KEY` |
-| Proxmox URL | `cluster_api.proxmox_url` | `DAALU_PROXMOX_URL` |
-| Proxmox API token | `cluster_api.proxmox_token` | `DAALU_PROXMOX_TOKEN` |
-| Proxmox API secret | `cluster_api.proxmox_secret` | `DAALU_PROXMOX_SECRET` |
-| Management host | `cluster_api.mgmt_host` | `DAALU_MGMT_HOST` |
-| Keycloak admin password | `keycloak.monitoring.password` | `DAALU_KEYCLOAK_ADMIN_PASSWORD` |
-| GitHub token | `keycloak.openstack.github_token` | `DAALU_GITHUB_TOKEN` |
-| Thanos S3 access key | `monitoring.thanos.access_key` | `DAALU_THANOS_S3_ACCESS_KEY` |
-| Thanos S3 secret key | `monitoring.thanos.secret_key` | `DAALU_THANOS_S3_SECRET_KEY` |
-| Keycloak DB password | *(component)* | `DAALU_KEYCLOAK_DB_PASSWORD` |
-| MySQL root password | *(component)* | `DAALU_MYSQL_ROOT_PASSWORD` |
-| OpenSearch admin password | *(component)* | `DAALU_OPENSEARCH_ADMIN_PASSWORD` |
-
-### Generating Secrets
-
-Daalu includes a script that generates a complete `secrets.yaml` with cryptographically random passwords for all services.
-
-**Step 1: Run the generator**
-
-```bash
-./scripts/generate-secrets.sh
-```
-
-This creates `cloud-config/secrets.yaml` with:
-- Random 32-character passwords for all OpenStack service accounts (MariaDB, RabbitMQ, Keystone, etc.)
-- Random encryption keys for Barbican, Heat, and memcached
-- Auto-generated RSA keypairs for Manila and Nova SSH keys
-- A random `image_password` and its corresponding SHA-512 hash
-- Placeholder values for fields that require your input
-
-The file is created with `chmod 600` permissions.
-
-**Step 2: Fill in the placeholders**
-
-The generator cannot create these values for you — fill them in after generation:
-
-```yaml
-# cloud-config/secrets.yaml (after generation)
-cluster_api:
-  ssh_public_key: "<PASTE-YOUR-SSH-PUBLIC-KEY-HERE>"     # Your SSH public key
-  proxmox_url: "https://<PROXMOX-HOST>:8006"             # Your Proxmox URL
-  proxmox_token: "root@pam!<TOKEN-NAME>"                 # Your Proxmox API token
-  proxmox_secret: "<PROXMOX-API-TOKEN-SECRET>"           # Your Proxmox API secret
-  mgmt_host: "<MANAGEMENT-HOST-IP>"                      # Management node IP
-  mgmt_user: "<MANAGEMENT-SSH-USER>"                     # Management node SSH user
-
-keycloak:
-  openstack:
-    github_token: "<GITHUB-PERSONAL-ACCESS-TOKEN>"       # GitHub PAT (for ArgoCD)
-
-openstack_secrets:
-  github_token: "<GITHUB-PERSONAL-ACCESS-TOKEN>"         # GitHub PAT
-```
-
-**Step 3: Generate your SSH key (if you don't have one)**
-
-```bash
-ssh-keygen -t ed25519 -f ~/.ssh/daalu-key -N ""
-cat ~/.ssh/daalu-key.pub   # Copy this into cluster_api.ssh_public_key
-```
-
-**Custom output path:**
-
-```bash
-./scripts/generate-secrets.sh --output /secure/path/my-secrets.yaml
-```
-
-If the output file already exists, the script will prompt before overwriting.
-
-**Re-generating:** You can re-run the script at any time to generate a fresh set of credentials. This is useful when rotating passwords or setting up a new environment.
 
 ---
 
 ## Configuration
 
-Edit `cluster-defs/cluster.yaml` to match your environment. All non-secret fields (networking, sizing, versions) go here directly. Secret fields are left empty and filled from `secrets.yaml` or env vars at runtime.
+### 1. Cluster definition
+
+Edit `cluster-defs/cluster.yaml` to match your environment. Non-secret fields (networking, versions, sizing) go here directly. Secret fields are left empty and populated from `secrets.yaml` at runtime.
+
+Key sections:
 
 ```yaml
-environment: dev
-context: kubernetes-admin@kubernetes
+mgmt_cluster:
+  host: "192.168.0.163"         # IP of the Ubuntu machine for the mgmt cluster
+  ssh_username: "kez"
+  provisioning_ip: "10.10.0.9"  # Static IP on the provisioning NIC
+  provisioning_interface: "ens19"
+  install_harbor: true
+
+registry:
+  harbor_hostname: "10.10.0.9"  # Provisioning IP — reachable by workload nodes
+  harbor_storage_size: "100Gi"
 
 cluster_api:
-  cluster_name: my-cluster
-  namespace: baremetal-operator-system
-  pod_cidr: 10.201.0.0/16
-  control_plane_vip: 10.10.0.249
-  # ... networking, sizing, etc.
+  cluster_name: auto-openstack-infra
+  control_plane_vip: "10.10.0.249"
+  # ...
 
-  # These are empty — populated at runtime from secrets.yaml
-  builder_password: ""
-  proxmox_url: ""
-  proxmox_token: ""
-  proxmox_secret: ""
+ceph:
+  additional_ceph_hosts:
+    - hostname: storage-01
+      osd_devices: [/dev/sdb, /dev/sdc, /dev/sdd, /dev/sde]
 ```
+
+### 2. Secrets file
+
+```bash
+cp cloud-config/secrets.yaml.example cloud-config/secrets.yaml
+# Edit secrets.yaml and fill in passwords, SSH keys, BMC credentials, etc.
+```
+
+The config loader automatically finds `cloud-config/secrets.yaml` and deep-merges it into the cluster definition at runtime. The file is git-ignored.
 
 ---
 
 ## Usage
 
-### Full Deployment
+### Full workflow
 
-Deploy all components (Cluster API, nodes, Ceph, CSI, infrastructure, monitoring, OpenStack):
+#### Step 1 — Bootstrap the management cluster
 
-```bash
-python -m daalu.cli.app deploy cluster-defs/cluster.yaml \
-  --managed-user builder \
-  --managed-user-password "your-password" \
-  --ssh-key ~/.ssh/daalu-key
-```
-
-### Selective Deployment
-
-Install only specific components:
+Installs Kubernetes on a fresh Ubuntu node, then deploys the full Metal3 stack (cert-manager → CAPI → IrSO → Ironic → BMO → CAPM3) and Harbor registry (formats dedicated disk, mirrors OpenStack images):
 
 ```bash
-
-# Only infrastructure components
-python -m daalu.cli.app deploy cluster-defs/cluster.yaml \
-  --install infrastructure \
-  --infra metallb,argocd \
-  --managed-user builder \
-  --managed-user-password "your-password" \
-  --ssh-key ~/.ssh/daalu-key
-
-# Only OpenStack
-python -m daalu.cli.app deploy cluster-defs/cluster.yaml \
-  --install openstack \
-  --managed-user builder \
-  --managed-user-password "your-password" \
-  --ssh-key ~/.ssh/daalu-key
+daalu mgmt cluster-defs/cluster.yaml
 ```
 
-### HPC Cluster Deployment
+Optional overrides:
 
 ```bash
-python -m daalu.cli.app hpc deploy cluster-defs/hpc/hpc-cluster.yaml
+daalu mgmt cluster-defs/cluster.yaml \
+  --ssh-host 192.168.0.163 \
+  --ssh-password admin123 \
+  --provisioning-interface ens19 \
+  --kubeconfig-out ~/.kube/daalu-mgmt-config
 ```
 
-### Dry Run
+When complete, you will see:
 
-Preview what would happen without making changes:
+```
+Management cluster is ready!
+
+  Kubeconfig  : /home/user/.kube/daalu-mgmt-config
+  Harbor UI   : https://10.10.0.9:30003
+  Harbor creds: admin / <registry.admin_password from secrets.yaml>
+```
+
+#### Step 2 — Deploy OpenStack on bare-metal workload cluster
+
+Provisions bare-metal nodes via Metal3/Ironic, bootstraps Kubernetes on them, deploys Ceph, CSI, infrastructure components, and the full OpenStack control plane:
 
 ```bash
-python -m daalu.cli.app deploy cluster-defs/cluster.yaml \
-  --dry-run \
+daalu deploy cluster-defs/cluster.yaml \
   --managed-user builder \
-  --managed-user-password "your-password"
+  --managed-user-password <password> \
+  --ssh-key ~/.ssh/openstack-key \
+  --local-registry \
+  --mgmt-kubeconfig ~/.kube/daalu-mgmt-config
 ```
 
-### Available Install Targets
+#### Step 3 — Tear everything down
 
-| Target           | Description                                      |
-|------------------|--------------------------------------------------|
-| `cluster-api`    | Provision Kubernetes cluster via Cluster API      |
-| `nodes`          | Bootstrap nodes (SSH, hostname, apparmor, etc.)   |
-| `ceph`           | Deploy Ceph storage cluster                       |
-| `csi`            | Install CSI drivers (RBD)                         |
-| `infrastructure` | MetalLB, Ingress, ArgoCD, Keycloak, etc.          |
-| `monitoring`     | Prometheus, Grafana, Loki, OpenSearch, Thanos      |
+```bash
+daalu clean cluster-defs/cluster.yaml \
+  --mgmt-kubeconfig ~/.kube/daalu-mgmt-config
+```
+
+---
+
+### Selective deployment
+
+Install only specific components using `--install`:
+
+```bash
+# Re-run only Ceph (e.g. to add OSDs)
+daalu deploy cluster-defs/cluster.yaml \
+  --install ceph \
+  --managed-user builder \
+  --managed-user-password <password> \
+  --ssh-key ~/.ssh/openstack-key \
+  --local-registry \
+  --mgmt-kubeconfig ~/.kube/daalu-mgmt-config
+
+# Re-run infrastructure + OpenStack only
+daalu deploy cluster-defs/cluster.yaml \
+  --install infrastructure,openstack \
+  --managed-user builder \
+  --managed-user-password <password> \
+  --ssh-key ~/.ssh/openstack-key \
+  --local-registry \
+  --mgmt-kubeconfig ~/.kube/daalu-mgmt-config
+```
+
+### Available install targets
+
+| Target           | Description                                       |
+|------------------|---------------------------------------------------|
+| `cluster-api`    | Provision Kubernetes workload cluster via Metal3  |
+| `nodes`          | Bootstrap nodes (SSH, hostname, apparmor, netplan)|
+| `ceph`           | Deploy Ceph storage cluster and add OSDs          |
+| `csi`            | Install RBD CSI drivers                           |
+| `infrastructure` | MetalLB, Ingress, CoreDNS patches, Keycloak, etc. |
+| `monitoring`     | Prometheus, Grafana, Loki, OpenSearch, Thanos     |
 | `openstack`      | Full OpenStack control plane                      |
 
-### CLI Reference
+---
+
+## CLI Reference
+
+### `daalu mgmt`
+
+Bootstrap a management Kubernetes cluster on a fresh Ubuntu node.
 
 ```
-python -m daalu.cli.app deploy --help
+daalu mgmt cluster-defs/cluster.yaml [OPTIONS]
 ```
 
-| Flag | Description |
+| Option | Description |
 |---|---|
-| `--install` | Comma-separated list of targets, or `all` |
-| `--infra` | Filter infrastructure/monitoring/openstack sub-components |
-| `--context` | Kubernetes context for the workload cluster |
-| `--mgmt-context` | Kubernetes context for the management cluster |
-| `--managed-user` | **(required)** SSH username to create on provisioned nodes |
-| `--managed-user-password` | **(required)** Password for the managed user |
+| `--ssh-host` | Override mgmt node IP |
+| `--ssh-username` | Override SSH username |
+| `--ssh-password` | SSH password |
 | `--ssh-key` | Path to SSH private key |
-| `--dry-run` | Preview changes without applying |
-| `--debug` | Enable verbose logging |
-| `--phase` | Run a specific deploy phase (`pre_install`, `helm`, `post_install`) |
-| `--temporal` | Run deployment as a Temporal workflow |
+| `--provisioning-interface` | NIC for bare-metal provisioning network |
+| `--kubeconfig-out` | Local path to save generated kubeconfig |
+| `--skip-harbor` | Skip Harbor deployment |
+
+### `daalu deploy`
+
+Deploy OpenStack and related components onto the workload cluster.
+
+```
+daalu deploy cluster-defs/cluster.yaml [OPTIONS]
+```
+
+| Option | Description |
+|---|---|
+| `--install` | Comma-separated targets, or `all` (default) |
+| `--infra` | Filter infrastructure sub-components |
+| `--managed-user` | **(required)** SSH username on provisioned nodes |
+| `--managed-user-password` | **(required)** Password for managed user |
+| `--ssh-key` | Path to SSH private key |
+| `--local-registry` | Pull images from local Harbor registry |
+| `--mgmt-kubeconfig` | Path to management cluster kubeconfig |
+| `--dry-run` | Preview without applying |
+| `--debug` | Verbose logging |
+| `--phase` | Run specific phase: `pre_install`, `helm`, `post_install` |
+
+### `daalu clean`
+
+Tear down everything: workload cluster, mgmt cluster k8s, Harbor disk, local state.
+
+```
+daalu clean cluster-defs/cluster.yaml [OPTIONS]
+```
+
+| Option | Description |
+|---|---|
+| `--mgmt-kubeconfig` | Path to mgmt kubeconfig (to delete workload cluster first) |
+| `--ssh-key` | SSH private key for mgmt node |
+| `--ssh-password` | SSH password for mgmt node |
+| `--skip-workload-cluster` | Skip CAPI cluster deletion (if already gone) |
+| `--no-wait` | Don't wait for bare-metal deprovisioning |
+| `--yes` / `-y` | Skip confirmation prompt |
+
+**What `daalu clean` does:**
+
+1. Deletes the workload CAPI cluster — triggers Metal3/Ironic to wipe and power off bare-metal nodes
+2. Waits up to 5 minutes for all BareMetalHosts to reach `available` state
+3. SSH to mgmt node: `kubeadm reset`, flush CNI/iptables, remove k8s data dirs
+4. Unmounts Harbor disk, removes fstab entry, runs `wipefs` to clear filesystem signatures
+5. Removes Metal3/Ironic state and Docker containers
+6. Removes local kubeconfigs and `known_hosts` entries
+
+```bash
+# Full teardown (recommended — waits for clean deprovisioning)
+daalu clean cluster-defs/cluster.yaml \
+  --mgmt-kubeconfig ~/.kube/daalu-mgmt-config \
+  --yes
+
+# Fast teardown — skip waiting
+daalu clean cluster-defs/cluster.yaml --no-wait --yes
+
+# Workload cluster already gone
+daalu clean cluster-defs/cluster.yaml --skip-workload-cluster --yes
+```
+
+### `daalu mirror-images`
+
+Mirror container images from public registries into Harbor.
+
+```
+daalu mirror-images --harbor-url 10.10.0.9:30003 [OPTIONS]
+```
+
+### `daalu configure-registry-trust`
+
+Configure workload cluster nodes to trust Harbor's self-signed certificate.
+
+```
+daalu configure-registry-trust <cluster-kubeconfig> [OPTIONS]
+```
+
+---
+
+## Secrets Management
+
+Daalu never stores credentials in version control. Provide them via `secrets.yaml` or environment variables.
+
+### secrets.yaml (recommended)
+
+```bash
+cp cloud-config/secrets.yaml.example cloud-config/secrets.yaml
+# Fill in passwords, SSH keys, BMC credentials
+```
+
+The loader finds `cloud-config/secrets.yaml` automatically and deep-merges it into the cluster definition. The file is git-ignored.
+
+### Environment variables
+
+Use `${VAR_NAME}` placeholders in `cluster.yaml` or `secrets.yaml` — the loader expands them before parsing:
+
+```yaml
+mgmt_cluster:
+  ssh_password: "${DAALU_MGMT_SSH_PASSWORD}"
+```
+
+```bash
+export DAALU_MGMT_SSH_PASSWORD="my-password"
+daalu mgmt cluster-defs/cluster.yaml
+```
 
 ---
 
@@ -579,12 +409,15 @@ python -m daalu.cli.app deploy --help
 
 Daalu follows a component-based architecture:
 
-1. **Config loader** (`src/daalu/config/loader.py`) — Reads cluster YAML + secrets.yaml, expands `${ENV_VAR}` placeholders, deep-merges, and validates against Pydantic models
-2. **CLI layer** (`src/daalu/cli/`) — Typer-based CLI that orchestrates the deployment pipeline
-3. **Bootstrap engine** (`src/daalu/bootstrap/engine/`) — Base `InfraComponent` class that each service extends with `pre_install()`, `helm_values()`, and `post_install()` hooks
-4. **Managers** — `CephManager`, `InfrastructureManager`, `MonitoringManager`, `OpenStackManager` coordinate groups of components
-5. **Helm runner** (`src/daalu/helm/`) — Wraps Helm CLI for install/upgrade operations over SSH
-6. **Event bus** (`src/daalu/observers/`) — Lifecycle events dispatched to console, logger, and JSON file observers
+1. **Config loader** (`src/daalu/config/loader.py`) — Reads cluster YAML + secrets.yaml, expands env vars, deep-merges, validates with Pydantic
+2. **CLI layer** (`src/daalu/cli/app.py`) — Typer CLI orchestrating the deployment pipeline
+3. **Mgmt bootstrap** (`src/daalu/bootstrap/mgmt/`) — Installs k8s + Metal3 stack on mgmt node; `MgmtClusterCleaner` for teardown
+4. **Bootstrap engine** (`src/daalu/bootstrap/engine/`) — Base `InfraComponent` class with `pre_install()`, `helm_values()`, `post_install()` hooks
+5. **Managers** — `CephManager`, `InfrastructureManager`, `MonitoringManager`, `OpenStackManager` coordinate component groups
+6. **Helm runner** (`src/daalu/helm/`) — Wraps Helm CLI for SSH-based install/upgrade
+7. **Event bus** (`src/daalu/observers/`) — Lifecycle events dispatched to console, log file, and JSON observers
+
+---
 
 ## The NoCloud (Not Only Cloud) Philosophy
 
@@ -592,7 +425,7 @@ Daalu is built on a simple belief:
 
 Modern cloud infrastructure should be a capability — not a dependency.
 
-The internet was designed as a decentralized, peer-to-peer network.  
+The internet was designed as a decentralized, peer-to-peer network.
 Yet today, a failure in a single hyperscaler region can take down large portions of the internet. That concentration of infrastructure contradicts the resilience principles the internet was built upon.
 
 The NoCloud (Not Only Cloud) philosophy is about restoring balance.
@@ -600,28 +433,21 @@ The NoCloud (Not Only Cloud) philosophy is about restoring balance.
 ### Core Principles
 
 - **Decentralization matters** — When a single cloud provider outage impacts half the internet, we have reintroduced central points of failure into a system designed to avoid them.
-
-- **Data sovereignty is strategic** — Organizations should maintain full control over where their data lives, how it is governed, and who has access to it. For some organizations, this is a hard requirement.
-
+- **Data sovereignty is strategic** — Organizations should maintain full control over where their data lives, how it is governed, and who has access to it.
 - **Avoid vendor lock-in** — Deep coupling to proprietary cloud services reduces portability, negotiation leverage, and long-term architectural flexibility.
-
-- **True resilience requires ownership** — Multi-cloud strategies that rely solely on two public clouds often duplicate complexity, cost, and dependency. They shift risk rather than eliminate it.
-
-- **The only dual-cloud strategy that truly diversifies risk** — is combining a public cloud with infrastructure you own and control. One rented platform. One sovereign platform and this two can work together in an active-active setup.
-
-- **Cloud capability, anywhere** — Production-grade cloud infrastructure should be deployable on bare metal, in colocation, in regional data centers, or alongside public cloud — without sacrificing automation or operational maturity.
+- **True resilience requires ownership** — The only dual-cloud strategy that truly diversifies risk is combining a public cloud with infrastructure you own and control.
+- **Cloud capability, anywhere** — Production-grade cloud infrastructure should be deployable on bare metal, in colocation, or alongside public cloud — without sacrificing automation or operational maturity.
 
 Daalu exists to make this practical.
 
-It enables organizations to build and operate modern, production-grade cloud infrastructure anywhere — without surrendering control of their data, architecture, or operational destiny.
-
+---
 
 ## Contributing
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/my-feature`)
 3. Make your changes
-4. Run tests: `python -m pytest tests/` (In progress...)
+4. Run tests: `python -m pytest tests/`
 5. Submit a pull request
 
 ## License

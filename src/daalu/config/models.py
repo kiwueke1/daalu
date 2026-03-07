@@ -10,6 +10,7 @@ from daalu.bootstrap.shared.keycloak.models import KeycloakIAMConfig
 from daalu.bootstrap.monitoring.models import KeycloakMonitoringConfig
 from daalu.config.monitoring import MonitoringConfig
 from daalu.bootstrap.openstack.models import KeycloakOpenstackConfig
+from daalu.bootstrap.mgmt.models import MgmtClusterConfig
 
 
 
@@ -152,6 +153,20 @@ class ClusterConfig(BaseModel):
         return {r.name: r for r in self.releases}
 
 
+class ExternalCephHostConfig(BaseModel):
+    """
+    A dedicated storage host not part of the Kubernetes cluster.
+    SSH credentials and an explicit OSD device list are required.
+    """
+    hostname: str
+    address: str
+    username: str = "ubuntu"
+    port: int = 22
+    password: Optional[str] = None
+    pkey_path: Optional[str] = None
+    osd_devices: List[str] = Field(default_factory=list)  # e.g. ["/dev/sdb", "/dev/sdc"]
+
+
 class CephConfig(BaseModel):
     """
     Ceph storage tunables.
@@ -159,6 +174,7 @@ class CephConfig(BaseModel):
     """
     pool_replication_size: int = 3
     pool_min_size: int = 2
+    additional_ceph_hosts: List[ExternalCephHostConfig] = Field(default_factory=list)
 
     model_config = {"extra": "forbid"}
 
@@ -186,6 +202,47 @@ class KeycloakConfig(BaseModel):
         "extra": "forbid"
     }
 
+class RegistryConfig(BaseModel):
+    """
+    Configuration for the Harbor container registry deployed on the mgmt cluster.
+    Images from assets/ values files are mirrored into Harbor once, then every
+    subsequent Helm install points at Harbor instead of the public internet.
+    """
+    mgmt_kubeconfig: Optional[str] = None          # path to mgmt cluster kubeconfig
+    harbor_hostname: str = "registry.daalu.io"     # Harbor public FQDN
+    harbor_namespace: str = "harbor"
+    harbor_storage_size: str = "100Gi"
+    project: str = "openstack"                     # Harbor project for mirrored images
+    admin_password: Optional[str] = None           # populated via secrets.yaml merge
+
+    # Istio ingress gateway used to expose Harbor (same cluster as Harbor)
+    istio_gateway_namespace: str = "istio-ingress"
+    istio_gateway_name: str = "gateway"
+
+    # Local disk storage for Harbor images.
+    # Set disk_device to a raw block device (e.g. "/dev/sda") and daalu will:
+    #   1. Format it as ext4 (skipped if already formatted)
+    #   2. Mount it at storage_mount_path
+    #   3. Deploy local-path-provisioner pointing at that path
+    #   4. Configure all Harbor PVCs to use the "local-path" StorageClass
+    disk_device: Optional[str] = None             # e.g. "/dev/sda"
+    storage_mount_path: str = "/mnt/harbor-storage"
+    storage_class: str = "local-path"             # StorageClass for Harbor PVCs
+
+    # Explicit IP for NodePort access — overrides auto-detected kubectl node IP.
+    # Set this to the provisioning-network IP (e.g. "10.10.0.9") so Harbor is
+    # reachable via the provisioning NIC instead of the mgmt NIC (ens18/192.168.0.x)
+    # which will be taken over by OVN/Neutron later.
+    harbor_node_ip: Optional[str] = None
+
+    # Docker Hub credentials for authenticated pulls (avoids 100-pull rate limit).
+    # Populated via secrets.yaml registry.docker_username / registry.docker_token.
+    docker_username: Optional[str] = None
+    docker_token: Optional[str] = None
+
+    model_config = {"extra": "forbid"}
+
+
 class DaaluConfig(BaseModel):
     environment: Literal["dev", "staging", "prod"] = "dev"
     context: Optional[str] = None
@@ -194,11 +251,18 @@ class DaaluConfig(BaseModel):
     repos: List[RepoSpec] = Field(default_factory=list)
     releases: List[ReleaseSpec] = Field(default_factory=list)
 
+    # Insecure (plain HTTP) container registries that K8s nodes must be able
+    # to pull from.  Each entry is "host:port", e.g. "10.10.0.5:5000".
+    # These are written into /etc/containerd/certs.d/ during node bootstrap.
+    insecure_registries: List[str] = Field(default_factory=list)
+
     keycloak: Optional[KeycloakConfig] = None
     ceph: Optional[CephConfig] = None
     monitoring: Optional[MonitoringConfig] = None
     openstack: Optional[OpenStackConfig] = None
     openstack_secrets: Optional[Dict[str, str]] = None
+    registry: Optional[RegistryConfig] = None
+    mgmt_cluster: Optional[MgmtClusterConfig] = None
 
     model_config = {
         "extra": "forbid"

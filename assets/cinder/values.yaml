@@ -21,6 +21,12 @@ pod:
     api: 1
     scheduler: 1
 conf:
+  ceph:
+    pools:
+      backup:
+        replication: 3
+      cinder.volumes:
+        replication: 3
   cinder:
     DEFAULT:
       allowed_direct_url_schemes: cinder

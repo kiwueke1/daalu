@@ -52,10 +52,9 @@ def build_metal3_jinja_context(
             "REGISTRY_PORT": str(opts.registry_port),
             "REGISTRY_IMAGE_VERSION": opts.registry_image_version,
             "IMAGE_URL": opts.image_url,
-            #"IMAGE_CHECKSUM": "5f602d7d766b499384592def4d72bdc14a4ad3daf11b70355de5e645c12a7165",
-            "IMAGE_CHECKSUM": "61895579cbb6dc579bd406ea5dc63d148d6714afd32976b9da3ea0daf5212d5a",
+            "IMAGE_CHECKSUM": "c848088bf104bbd29a15ef88d503e83c4c21bf50b1f2cd3a0d3e3553b2d0cff6",
             "IMAGE_CHECKSUM_TYPE": opts.image_checksum_type,
-            "IMAGE_FORMAT": "raw",
+            "IMAGE_FORMAT": "qcow2",
         }
     )
 

@@ -329,6 +329,309 @@ class SshBootstrapper(NodeBootstrapper):
             self._append_line(h, ln, "/etc/sysctl.conf", sudo=True)
         self._run(h, "sysctl -p /etc/sysctl.conf || true", sudo=True)
 
+    def role_containerd_registry(self, h: _SSHHandles, host: Host, opts: NodeBootstrapOptions):
+        """
+        Configure the container runtime to pull from local registries with
+        TLS skip-verify (Harbor's self-signed cert is not in the system trust store).
+
+        Writes two configs:
+          1. containerd certs.d (containerd >= 1.5):
+               /etc/containerd/certs.d/{registry}/hosts.toml  (skip_verify = true)
+             Also ensures config_path is set in containerd's config.toml.
+
+          2. CRI-O / Podman fallback:
+               /etc/containers/registries.conf.d/00-local.conf
+
+        Restarts both runtimes if present.
+        """
+        if not opts.insecure_registries:
+            return
+
+        # -- containerd: certs.d / hosts.toml ---------------------------------
+        for registry in opts.insecure_registries:
+            hosts_toml = (
+                f'server = "https://{registry}"\n\n'
+                f'[host."https://{registry}"]\n'
+                f'  capabilities = ["pull", "resolve"]\n'
+                f'  skip_verify = true\n'
+            )
+            certs_dir = f"/etc/containerd/certs.d/{registry}"
+            self._run(h, f"mkdir -p {certs_dir}", sudo=True)
+            self._put_content(
+                h, hosts_toml, f"{certs_dir}/hosts.toml", mode=0o644, sudo=True,
+            )
+
+        # Ensure containerd config.toml references certs.d
+        patch_cmd = (
+            "CONFIG=/etc/containerd/config.toml\n"
+            "[ -f \"$CONFIG\" ] || exit 0\n"
+            "if grep -q 'config_path' \"$CONFIG\"; then\n"
+            "  sed -i 's|config_path = .*|config_path = \"/etc/containerd/certs.d\"|' \"$CONFIG\"\n"
+            "else\n"
+            "  printf '\\n[plugins.\"io.containerd.grpc.v1.cri\".registry]\\n  config_path = \"/etc/containerd/certs.d\"\\n' >> \"$CONFIG\"\n"
+            "fi"
+        )
+        self._run(h, patch_cmd, sudo=True)
+
+        rc, _, _ = self._run(h, "systemctl is-active containerd", sudo=False)
+        if rc == 0:
+            self._run(h, "systemctl restart containerd", sudo=True)
+            log.debug("[%s] containerd restarted with updated registry config", host.hostname)
+
+        # -- CRI-O / Podman fallback ------------------------------------------
+        blocks = "\n".join(
+            f'[[registry]]\nlocation = "{r}"\ninsecure = true'
+            for r in opts.insecure_registries
+        )
+        self._run(h, "mkdir -p /etc/containers/registries.conf.d", sudo=True)
+        self._put_content(
+            h,
+            blocks + "\n",
+            "/etc/containers/registries.conf.d/00-local.conf",
+            mode=0o644,
+            sudo=True,
+        )
+
+        rc, _, _ = self._run(h, "systemctl is-active crio", sudo=False)
+        if rc == 0:
+            self._run(h, "systemctl restart crio", sudo=True)
+            log.debug("[%s] crio restarted with updated registry config", host.hostname)
+
+        log.debug(
+            "[%s] containerd/crio configured for insecure registries: %s",
+            host.hostname, opts.insecure_registries,
+        )
+
+    def role_migrate_provisioning_bridge(
+        self,
+        h: _SSHHandles,
+        host: Host,
+        opts: NodeBootstrapOptions,
+    ) -> None:
+        """
+        Replace the provisioning Linux bridge with an OVS internal port,
+        freeing eno1 to be the physical uplink for OVS br-ex.
+
+        BEFORE (Metal3 provisioning leaves nodes in this state):
+            eno1 ──master──► provisioning (Linux bridge, IP: 10.10.x.x/y)
+            OVS br-ex ──wants eno1──► ERROR: Device or resource busy
+
+        AFTER:
+            OVS br-ex:
+              ├── eno1          (physical uplink — now free)
+              └── provisioning  (OVS type=internal port, IP: 10.10.x.x/y)
+
+        WHY NO VLAN / SWITCH CHANGES ARE NEEDED
+        ----------------------------------------
+        The provisioning IP (e.g. 10.10.50.x) lives on the OVS internal port,
+        which is in the same OVS bridge as eno1.  Traffic to/from that IP
+        flows through OVS exactly as it did through the Linux bridge — same
+        wire, same MAC, no tags.  The switch and pfSense see no difference.
+
+        PERSISTENCE
+        -----------
+        • OVS stores bridge topology in its database (/etc/openvswitch/conf.db).
+          After restart, OVS recreates br-ex, eno1 port, and provisioning port
+          automatically — no netplan involvement needed for the bridge structure.
+        • The IP address on the provisioning port is kernel state, not stored by
+          OVS.  A systemd oneshot service (ovs-provisioning-ip.service) waits for
+          the OVS port to appear and then assigns the IP on every boot.
+        • The netplan file (52-ironicendpoint.yaml) is updated to remove the Linux
+          bridge definition so it is not recreated on reboot.
+
+        IDEMPOTENCY
+        -----------
+        If eno1 is already free from the Linux bridge this role is a no-op.
+
+        REQUIREMENT
+        -----------
+        OVS must already be deployed (the br-ex bridge must exist in the OVSDB)
+        before running this role.  Run it after the OpenvSwitch Helm chart is
+        deployed but before OVN/Neutron.
+        """
+        nic = opts.provisioning_bridge_nic
+        bridge = opts.provisioning_bridge_name
+        ovs_br = opts.provisioning_ovs_bridge
+
+        # ── idempotency: skip if eno1 is already free ────────────────────────
+        rc, out, _ = self._run(h, f"ip link show dev {nic}", sudo=False)
+        if f"master {bridge}" not in out:
+            log.info(
+                "[%s] %s is not mastered by %s — migration already done, skipping",
+                host.hostname, nic, bridge,
+            )
+            return
+
+        # ── save current provisioning IP before touching anything ────────────
+        rc, prov_ip_raw, _ = self._run(
+            h,
+            f"ip -o addr show dev {bridge} | awk '/inet /{{print $4; exit}}'",
+            sudo=False,
+        )
+        prov_ip = prov_ip_raw.strip()
+        if not prov_ip:
+            raise RuntimeError(
+                f"[{host.hostname}] Could not read IP from {bridge} — "
+                "is the provisioning bridge up?"
+            )
+
+        log.info(
+            "[%s] Migrating provisioning bridge (IP %s) to OVS internal port on %s...",
+            host.hostname, prov_ip, ovs_br,
+        )
+
+        # ── step 1: detach eno1 from the Linux bridge ─────────────────────────
+        self._run(h, f"ip link set {nic} nomaster", sudo=True)
+
+        # ── step 2: give eno1 to OVS br-ex ───────────────────────────────────
+        self._run(h, f"ovs-vsctl --may-exist add-port {ovs_br} {nic}", sudo=True)
+
+        # ── step 3: delete the Linux bridge (IP vanishes for ~1 s) ───────────
+        self._run(h, f"ip link del {bridge}", sudo=True)
+
+        # ── step 4: create OVS internal port with the same name ──────────────
+        self._run(
+            h,
+            f"ovs-vsctl --may-exist add-port {ovs_br} {bridge}"
+            f" -- set Interface {bridge} type=internal",
+            sudo=True,
+        )
+
+        # ── step 5: restore the IP ────────────────────────────────────────────
+        self._run(h, f"ip link set {bridge} up", sudo=True)
+        self._run(h, f"ip addr add {prov_ip} dev {bridge}", sudo=True)
+
+        log.info(
+            "[%s] Live migration done — provisioning IP %s restored on OVS port",
+            host.hostname, prov_ip,
+        )
+
+        # ── step 6: systemd service for IP persistence across reboots ─────────
+        self._install_ovs_provisioning_ip_service(h, host, bridge, prov_ip)
+
+        # ── step 7: remove Linux bridge from netplan ──────────────────────────
+        self._remove_provisioning_bridge_from_netplan(h, host, bridge)
+
+    def _install_ovs_provisioning_ip_service(
+        self,
+        h: _SSHHandles,
+        host: Host,
+        bridge: str,
+        prov_ip: str,
+    ) -> None:
+        """
+        Install a systemd oneshot service that waits for the OVS-managed
+        provisioning interface to appear (after the OVS DaemonSet pod starts)
+        and then assigns the saved IP address to it.
+
+        The service runs on every boot, ensuring the provisioning IP is always
+        present regardless of how long the OVS pod takes to initialise.
+        """
+        svc = "ovs-provisioning-ip"
+
+        script_content = textwrap.dedent(f"""\
+            #!/bin/bash
+            # Wait for OVS to create the provisioning internal port.
+            # The OVS DaemonSet pod may take up to 120 s to start after boot.
+            for i in $(seq 60); do
+                ip link show {bridge} >/dev/null 2>&1 && break
+                sleep 2
+            done
+
+            if ! ip link show {bridge} >/dev/null 2>&1; then
+                echo "ERROR: timed out waiting for OVS port '{bridge}'" >&2
+                exit 1
+            fi
+
+            ip link set {bridge} up
+            ip addr replace {prov_ip} dev {bridge}
+            echo "OK: {bridge} IP assigned ({prov_ip})"
+        """)
+
+        unit_content = textwrap.dedent(f"""\
+            [Unit]
+            Description=Assign IP to OVS {bridge} internal port
+            After=network.target
+            After=network-online.target
+            Wants=network-online.target
+
+            [Service]
+            Type=oneshot
+            RemainAfterExit=yes
+            ExecStart=/usr/local/bin/{svc}.sh
+
+            [Install]
+            WantedBy=multi-user.target
+        """)
+
+        self._put_content(
+            h, script_content, f"/usr/local/bin/{svc}.sh", mode=0o755, sudo=True,
+        )
+        self._put_content(
+            h, unit_content, f"/etc/systemd/system/{svc}.service", mode=0o644, sudo=True,
+        )
+
+        self._run(h, "systemctl daemon-reload", sudo=True)
+        self._run(h, f"systemctl enable {svc}.service", sudo=True)
+        # Start it now too — the interface already exists from our live migration
+        self._run(h, f"systemctl start {svc}.service || true", sudo=True)
+
+        log.info(
+            "[%s] systemd service %s.service installed and enabled", host.hostname, svc,
+        )
+
+    def _remove_provisioning_bridge_from_netplan(
+        self,
+        h: _SSHHandles,
+        host: Host,
+        bridge: str,
+    ) -> None:
+        """
+        Remove the provisioning Linux bridge stanza from whichever netplan
+        YAML file defines it, so it is not recreated on the next reboot.
+
+        Does NOT run ``netplan apply`` — the live network state is already
+        correct, and applying would attempt to delete the OVS-managed interface
+        which would fail.  The change takes effect on the next reboot.
+        """
+        script = (
+            "import yaml, glob, sys\n"
+            f"BRIDGE = '{bridge}'\n"
+            "updated = False\n"
+            "for path in sorted(glob.glob('/etc/netplan/*.yaml')):\n"
+            "    with open(path) as f:\n"
+            "        data = yaml.safe_load(f)\n"
+            "    if not data:\n"
+            "        continue\n"
+            "    net = data.get('network', {})\n"
+            "    bridges = net.get('bridges', {})\n"
+            "    if BRIDGE not in bridges:\n"
+            "        continue\n"
+            "    del bridges[BRIDGE]\n"
+            "    if not bridges:\n"
+            "        net.pop('bridges', None)\n"
+            "    with open(path, 'w') as f:\n"
+            "        yaml.dump(data, f, default_flow_style=False)\n"
+            "    print(f'Removed Linux bridge {BRIDGE!r} from {path}')\n"
+            "    updated = True\n"
+            "    break\n"
+            "if not updated:\n"
+            "    print(f'No netplan file found for bridge {BRIDGE!r}', file=sys.stderr)\n"
+        )
+
+        rc, out, err = self._run(h, f"python3 -c {self._q(script)}", sudo=True)
+        if rc != 0:
+            log.warning(
+                "[%s] Could not remove provisioning bridge from netplan: %s",
+                host.hostname, err or out,
+            )
+        else:
+            log.info("[%s] %s", host.hostname, out.strip())
+            log.info(
+                "[%s] Netplan updated — Linux bridge will not be recreated on reboot",
+                host.hostname,
+            )
+
     def role_istio_modules(self, h: _SSHHandles, host: Host, opts: NodeBootstrapOptions):
         """
         Write /etc/modules-load.d/99-istio-modules.conf and modprobe required modules.
@@ -396,6 +699,12 @@ class SshBootstrapper(NodeBootstrapper):
                 if plan.run_istio_modules:
                     log.info("[%s] Loading istio kernel modules...", host.hostname)
                     self.role_istio_modules(h, host, opts)
+                if plan.run_containerd_registry and opts.insecure_registries:
+                    log.info("[%s] Configuring containerd insecure registries...", host.hostname)
+                    self.role_containerd_registry(h, host, opts)
+                if plan.run_migrate_provisioning_bridge:
+                    log.info("[%s] Migrating provisioning bridge to OVS internal port...", host.hostname)
+                    self.role_migrate_provisioning_bridge(h, host, opts)
                 log.info("[%s] Bootstrap complete", host.hostname)
             finally:
                 self._close(h)

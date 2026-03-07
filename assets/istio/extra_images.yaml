@@ -1,0 +1,4 @@
+# Istio 1.21.2 images not captured by images.tags.* scanning.
+# Keep the tag in sync with the installed Istio version.
+- docker.io/istio/pilot:1.21.2
+- docker.io/istio/proxyv2:1.21.2

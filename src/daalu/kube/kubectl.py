@@ -76,7 +76,7 @@ class KubectlRunner:
         server_side: bool = False,
         force_conflicts: bool = False,
     ) -> None:
-        flags = []
+        flags = ["--validate=false"]
         if server_side:
             flags.append("--server-side")
         if force_conflicts:
@@ -122,15 +122,16 @@ class KubectlRunner:
         *,
         namespace: str,
         min_running: int,
-        retries: int = 20,
+        timeout_seconds: int = 300,
         delay: int = 10,
     ) -> None:
+        retries = max(1, timeout_seconds // delay)
         for attempt in range(retries):
             running = self.count_running_pods(namespace)
             if running >= min_running:
                 return
-            if attempt > 0 and attempt % 3 == 0:
-                # Every 30s, log a progress update with pod statuses
+            # Log on first miss and then every 30s (every 3rd attempt)
+            if attempt == 0 or attempt % 3 == 0:
                 summary = self._pod_status_summary(namespace)
                 log.info(
                     "[kubectl] Still waiting for pods in '%s' (%d/%d running) — %s",
@@ -141,8 +142,8 @@ class KubectlRunner:
         # On timeout, include detailed pod status in the error
         summary = self._pod_status_summary(namespace)
         raise KubectlError(
-            f"Timed out waiting for {min_running} pods in namespace '{namespace}'. "
-            f"Pod status: {summary}"
+            f"Timed out waiting for {min_running} pods in namespace '{namespace}' "
+            f"after {timeout_seconds}s. Pod status: {summary}"
         )
 
     def _pod_status_summary(self, namespace: str) -> str:
@@ -355,7 +356,7 @@ class KubectlRunner:
         which can break large CRDs (Prometheus Operator CRDs are common offenders).
         """
         extra = " --force-conflicts" if force_conflicts else ""
-        rc, out, err = self._run(f"apply --server-side{extra} -f {path}")
+        rc, out, err = self._run(f"apply --server-side --validate=false{extra} -f {path}")
         if rc != 0:
             raise KubectlError(f"kubectl server-side apply failed: {err or out}")
 

@@ -1,9 +1,11 @@
+LICENSE
 README.md
 pyproject.toml
 src/daalu/__init__.py
 src/daalu.egg-info/PKG-INFO
 src/daalu.egg-info/SOURCES.txt
 src/daalu.egg-info/dependency_links.txt
+src/daalu.egg-info/entry_points.txt
 src/daalu.egg-info/top_level.txt
 src/daalu/bootstrap/cluster_api_manager.py
 src/daalu/bootstrap/container_images.py
@@ -46,6 +48,7 @@ src/daalu/bootstrap/infrastructure/components/ingress_nginx.py
 src/daalu/bootstrap/infrastructure/components/jenkins.py
 src/daalu/bootstrap/infrastructure/components/keepalived.py
 src/daalu/bootstrap/infrastructure/components/keycloak.py
+src/daalu/bootstrap/infrastructure/components/kube_coredns.py
 src/daalu/bootstrap/infrastructure/components/kubernetes_node_labels.py
 src/daalu/bootstrap/infrastructure/components/metallb.py
 src/daalu/bootstrap/infrastructure/components/mysql.py
@@ -85,6 +88,11 @@ src/daalu/bootstrap/metal3/manager.py
 src/daalu/bootstrap/metal3/models.py
 src/daalu/bootstrap/metal3/template_defaults.py
 src/daalu/bootstrap/metal3/templates.py
+src/daalu/bootstrap/mgmt/__init__.py
+src/daalu/bootstrap/mgmt/k8s_installer.py
+src/daalu/bootstrap/mgmt/manager.py
+src/daalu/bootstrap/mgmt/metal3_installer.py
+src/daalu/bootstrap/mgmt/models.py
 src/daalu/bootstrap/monitoring/__init__.py
 src/daalu/bootstrap/monitoring/manager.py
 src/daalu/bootstrap/monitoring/models.py
@@ -118,6 +126,8 @@ src/daalu/bootstrap/openstack/secret_registry.py
 src/daalu/bootstrap/openstack/secrets_manager.py
 src/daalu/bootstrap/openstack/components/memcached.py
 src/daalu/bootstrap/openstack/components/barbican/barbican.py
+src/daalu/bootstrap/openstack/components/ceilometer/__init__.py
+src/daalu/bootstrap/openstack/components/ceilometer/ceilometer.py
 src/daalu/bootstrap/openstack/components/cinder/cinder.py
 src/daalu/bootstrap/openstack/components/coredns/__init__.py
 src/daalu/bootstrap/openstack/components/coredns/coredns.py
@@ -155,6 +165,11 @@ src/daalu/bootstrap/openstack/components/rook_ceph/ceph_provisioners.py
 src/daalu/bootstrap/openstack/components/rook_ceph/rook_ceph.py
 src/daalu/bootstrap/openstack/components/rook_ceph/rook_ceph_cluster.py
 src/daalu/bootstrap/openstack/components/staffeln/staffeln.py
+src/daalu/bootstrap/registry/__init__.py
+src/daalu/bootstrap/registry/harbor_deployer.py
+src/daalu/bootstrap/registry/image_extractor.py
+src/daalu/bootstrap/registry/image_mirror.py
+src/daalu/bootstrap/registry/manager.py
 src/daalu/bootstrap/shared/keycloak/__init__.py
 src/daalu/bootstrap/shared/keycloak/admin.py
 src/daalu/bootstrap/shared/keycloak/iam.py

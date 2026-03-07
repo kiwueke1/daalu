@@ -38,6 +38,7 @@ class CinderComponent(InfraComponent):
         release_name: str = "cinder",
         secrets_path: Path,
         keystone_public_host: str,
+        cinder_public_host: str,
         enable_argocd: bool = False,
     ):
         super().__init__(
@@ -55,12 +56,19 @@ class CinderComponent(InfraComponent):
             wait_for_pods=True,
             min_running_pods=1,
             enable_argocd=enable_argocd,
+            istio_enabled=True,
+            istio_host=cinder_public_host,
+            istio_service="cinder-api",
+            istio_service_namespace=namespace,
+            istio_service_port=8776,
+            istio_expected_status=200,
         )
 
         self.values_path = values_path
         self._assets_dir = assets_dir
         self.secrets_path = secrets_path
         self.keystone_public_host = keystone_public_host
+        self.cinder_public_host = cinder_public_host
         self.wait_for_pods = True
         self.min_running_pods = 1
 
@@ -85,6 +93,14 @@ class CinderComponent(InfraComponent):
             "user_domain_name": "service",
             "project_domain_name": "service",
         }
+        # Public endpoint override so ks_endpoints registers https://volume.daalu.io/
+        endpoints["volume"] = {
+            "host_fqdn_override": {"public": {"host": self.cinder_public_host}},
+            "scheme": {"default": "http", "service": "http", "public": "https"},
+            "port": {"api": {"default": 8776, "public": 443}},
+        }
+        endpoints["volumev3"] = endpoints["volume"]
+
         base["endpoints"] = endpoints
         return base
 

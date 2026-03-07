@@ -32,3 +32,10 @@ pod:
 
 conf:
   ovs_user_name: "root:root"
+  # Create br-ex on every node at OVS DaemonSet startup.
+  # eno1 is NOT added here because it is still enslaved to the Metal3
+  # provisioning Linux bridge at deploy time.  The provisioning bridge
+  # migration (OpenvSwitchComponent.post_install) detaches eno1 from the
+  # Linux bridge and adds it to br-ex once the DaemonSet is running.
+  auto_bridge_add:
+    br-ex: null

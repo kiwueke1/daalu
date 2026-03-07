@@ -1,0 +1,2 @@
+[console_scripts]
+daalu = daalu.cli.app:app

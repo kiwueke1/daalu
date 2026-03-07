@@ -42,8 +42,8 @@ class Metal3TemplateGenOptions:
     registry_image_version: str = "2.7.1"
 
     image_url: str = "http://10.10.0.9/UBUNTU_24.04_NODE_IMAGE_K8S_v1.33.0-raw.img"
-    image_checksum: str = "61895579cbb6dc579bd406ea5dc63d148d6714afd32976b9da3ea0daf5212d5a"          # optional, but template expects it
+    image_checksum: str = "c848088bf104bbd29a15ef88d503e83c4c21bf50b1f2cd3a0d3e3553b2d0cff6"
     image_checksum_type: str = "sha256"
-    image_format: str = "raw"
+    image_format: str = "qcow2"
 
     mgmt_ssh_key_path: Path = Path.home() / ".ssh" / "id_ed25519"

@@ -16,6 +16,9 @@ version = "0"
 dependencies = [
 ]
 
+[project.scripts]
+daalu = "daalu.cli.app:app"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 

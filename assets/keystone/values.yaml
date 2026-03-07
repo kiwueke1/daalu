@@ -21,7 +21,12 @@ endpoints:
 
 images:
   tags:
-    keystone_api: 10.10.0.5:5000/keystone:2024.2-oidc #custom image wit oids support
+    keystone_api: 10.10.0.9:30003/openstack/keystone:2024.2-oidc
+    keystone_credential_setup: 10.10.0.9:30003/openstack/keystone:2024.2-oidc
+    keystone_fernet_setup: 10.10.0.9:30003/openstack/keystone:2024.2-oidc
+    keystone_fernet_rotate: 10.10.0.9:30003/openstack/keystone:2024.2-oidc
+    keystone_db_sync: 10.10.0.9:30003/openstack/keystone:2024.2-oidc
+    bootstrap: 10.10.0.9:30003/openstack/keystone:2024.2-oidc
   pull_policy: IfNotPresent
 
 pod:
@@ -75,7 +80,7 @@ conf:
       trusted_dashboard:
         type: multistring
         values:
-          - "https://horizon.daalu.io/auth/websso/"
+          - "https://CHANGE_ME_HORIZON_FQDN/auth/websso/"
 
     oslo_messaging_notifications:
       driver: noop
@@ -107,13 +112,19 @@ conf:
       OIDCClaimPrefix "OIDC-"
       OIDCProviderMetadataURL https://auth.daalu.io/realms/daalu/.well-known/openid-configuration
       OIDCClientID keystone
-      OIDCSSLValidateServer On
+      OIDCSSLValidateServer Off
       OIDCCryptoPassphrase CHANGE_ME_OIDC_CRYPTO_PASSPHRASE
       OIDCClientSecret CHANGE_ME_OIDC_CLIENT_SECRET
-      OIDCRedirectURI https://keystone.daalu.io/v3/auth/OS-FEDERATION/identity_providers/redirect
+      OIDCRedirectURI https://identity.daalu.io/v3/auth/OS-FEDERATION/identity_providers/redirect
       OIDCRedirectURLsAllowed \
-        https://keystone.daalu.io/v3/auth/OS-FEDERATION/identity_providers/daalu/protocols/openid/websso \
-        https://horizon.daalu.io/auth/logout/
+        https://identity.daalu.io/v3/auth/OS-FEDERATION/identity_providers/daalu/protocols/openid/websso \
+        https://dashboard.daalu.io/auth/logout/
+
+      # Force pure authorization-code flow.  mod_auth_openidc 2.4.x can default
+      # to hybrid (code id_token) which Keycloak rejects when implicit flow is
+      # disabled on the client.  Without this directive the callback returns
+      # "Error in handling response type."
+      OIDCResponseType code
 
       OIDCSessionType client-cookie
       OIDCXForwardedHeaders X-Forwarded-Host X-Forwarded-Proto
@@ -136,7 +147,10 @@ conf:
       <Location /v3/auth/OS-FEDERATION/identity_providers/daalu/protocols/openid/websso>
         Require valid-user
         AuthType openid-connect
-        OIDCDiscoverURL https://auth.daalu.io/realms/daalu
+        # OIDCDiscoverURL must NOT be used here — it triggers dynamic multi-IdP
+        # discovery which is incompatible with a single fixed Keycloak IdP and
+        # causes mod_auth_openidc to negotiate hybrid/implicit response types.
+        # The global OIDCProviderMetadataURL already points at Keycloak.
       </Location>
     </VirtualHost>
 

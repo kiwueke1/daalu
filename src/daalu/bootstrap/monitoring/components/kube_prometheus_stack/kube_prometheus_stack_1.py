@@ -144,7 +144,7 @@ class KubePrometheusStackComponent(InfraComponent):
                             "stringData": {
                                 "client_id": grafana.id,
                                 "client_secret": secret,
-                                "issuer_url": f"{cfg.admin.base_url.rstrip('/')}/realms/{cfg.realm.realm}",
+                                "issuer_url": f"{str(cfg.admin.base_url).rstrip('/')}/realms/{cfg.realm.realm}",
                             },
                         }
                     ]

@@ -1,0 +1,6 @@
+# ArgoCD (argo-cd chart 9.2.4) images not captured by images.tags.* scanning.
+# Keep tags in sync with global.image.tag in values.yaml and chart defaults.
+# These are mirrored to Harbor by `daalu mirror-images`.
+- quay.io/argoproj/argocd:latest
+- redis:7.0.15-alpine
+- ghcr.io/dex-idp/dex:v2.38.0

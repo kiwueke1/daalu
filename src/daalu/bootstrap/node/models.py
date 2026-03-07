@@ -35,6 +35,11 @@ class NodeBootstrapPlan:
     run_ssh_and_hostname: bool = True
     run_inotify_limits: bool = True
     run_istio_modules: bool = True
+    run_containerd_registry: bool = True
+    # Move the provisioning Linux bridge uplink from the raw NIC to a VLAN
+    # subinterface, freeing the raw NIC for OVS br-ex.  Disabled by default;
+    # enable after Metal3 provisioning is complete and before OVS deployment.
+    run_migrate_provisioning_bridge: bool = False
 
 @dataclass
 class NodeBootstrapOptions:
@@ -55,3 +60,13 @@ class NodeBootstrapOptions:
     # user creation (ssh_and_hostname)
     managed_user: str = "builder"
     managed_user_password_plain: str = ""   # Required — will be hashed on remote using openssl -6
+    # insecure (HTTP) container registries to configure in containerd
+    # e.g. ["10.10.0.5:5000"] — nodes will be allowed to pull from these without TLS
+    insecure_registries: List[str] = field(default_factory=list)
+    # Provisioning bridge migration (run_migrate_provisioning_bridge)
+    # Replaces the Linux provisioning bridge with an OVS internal port on br-ex,
+    # freeing the raw NIC for use as the br-ex physical uplink.
+    # No VLAN tags, no switch changes, no pfSense changes required.
+    provisioning_bridge_nic: str = "eno1"       # NIC currently enslaved to the Linux bridge
+    provisioning_bridge_name: str = "provisioning"  # Linux bridge name (becomes OVS port name)
+    provisioning_ovs_bridge: str = "br-ex"      # OVS bridge to add eno1 and internal port to

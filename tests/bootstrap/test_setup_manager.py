@@ -1,4 +1,5 @@
 import json
+import shutil
 from pathlib import Path
 
 import builtins
@@ -10,39 +11,75 @@ from daalu.bootstrap.setup_manager import SetupManager, SetupOptions
 from daalu.bootstrap import hosts_inventory
 
 
+_FAKE_KUBECONFIG = (
+    "apiVersion: v1\n"
+    "clusters:\n"
+    "- cluster:\n"
+    "    server: https://10.0.0.100:6443\n"
+    "  name: test-cluster\n"
+    "contexts: []\n"
+    "current-context: test-cluster\n"
+    "kind: Config\n"
+    "users: []\n"
+)
+
+
 class SpyRun:
     def __init__(self):
         self.calls = []
 
-    def __call__(self, argv, capture_output=False, text=False, check=False):
+    def __call__(self, argv, capture_output=False, text=False, check=False, cwd=None, **kwargs):
+        if not isinstance(argv, list):
+            return types.SimpleNamespace(returncode=0, stdout="", stderr="")
         self.calls.append(argv)
-        # Simulate key commands
-        if argv[:3] == ["clusterctl", "get", "kubeconfig"]:
-            return types.SimpleNamespace(returncode=0, stdout="apiVersion: v1\nclusters: []\n", stderr="")
-        if argv[:5] == ["kubectl", "--kubeconfig", "/etc/kubernetes/admin.conf", "get", "nodes"]:
-            data = {"items":[{"status":{"addresses":[{"type":"InternalIP","address":"10.0.0.10"}]}}]}
+
+        # clusterctl get kubeconfig -> valid kubeconfig YAML with a server entry
+        if argv[0] == "clusterctl" and "get" in argv and "kubeconfig" in argv:
+            return types.SimpleNamespace(returncode=0, stdout=_FAKE_KUBECONFIG, stderr="")
+
+        # kubectl get nodes -> list of two nodes
+        if argv[0] == "kubectl" and "get" in argv and "nodes" in argv:
+            data = {"items": [{"metadata": {"name": "node-1"}}, {"metadata": {"name": "node-2"}}]}
             return types.SimpleNamespace(returncode=0, stdout=json.dumps(data), stderr="")
-        if argv[:5] == ["kubectl", "--kubeconfig", "/var/lib/tmp/kubeconfig", "get", "pods"]:
-            # simulate 5 ready cilium pods
-            pod = {"status":{"phase":"Running","containerStatuses":[{"ready":True}]}}
-            data = {"items":[pod,pod,pod,pod,pod]}
+
+        # kubectl get node <name> -> InternalIP
+        if argv[0] == "kubectl" and "get" in argv and "node" in argv:
+            data = {"status": {"addresses": [{"type": "InternalIP", "address": "10.0.0.11"}]}}
             return types.SimpleNamespace(returncode=0, stdout=json.dumps(data), stderr="")
-        if argv[:4] == ["kubectl", "--kubeconfig", "/var/lib/tmp/kubeconfig", "get"] and argv[-2:] == ["-o", "json"]:
-            # 'kubectl get nodes -o json'
-            data = {"items":[{"metadata":{"name":"node-1"}},{"metadata":{"name":"node-2"}}]}
+
+        # kubectl get pods -> 5 ready cilium pods (for wait_for_cilium)
+        if argv[0] == "kubectl" and "get" in argv and "pods" in argv:
+            pod = {"status": {"phase": "Running", "containerStatuses": [{"ready": True}]}}
+            data = {"items": [pod, pod, pod, pod, pod]}
             return types.SimpleNamespace(returncode=0, stdout=json.dumps(data), stderr="")
-        if argv[:3] == ["kubectl", "get", "machines"]:
-            # mgmt context machines/<name> -> InternalIP
-            name = argv[3]
-            data = {"status":{"addresses":[{"type":"InternalIP","address": f"10.10.0.{1 if name=='node-1' else 2}"}]}}
+
+        # kubectl get machines -> InternalIP
+        if argv[0] == "kubectl" and "get" in argv and "machines" in argv:
+            data = {"status": {"addresses": [{"type": "InternalIP", "address": "10.10.0.1"}]}}
             return types.SimpleNamespace(returncode=0, stdout=json.dumps(data), stderr="")
-        # default
+
+        # sudo cp <src> <dst> -> actually copy so file writes work in tests
+        if argv[:2] == ["sudo", "cp"] and len(argv) == 4:
+            shutil.copy(argv[2], argv[3])
+            return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        # sudo chmod -> no-op
+        if argv[:2] == ["sudo", "chmod"]:
+            return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        # default (label, taint, helm, etc.)
         return types.SimpleNamespace(returncode=0, stdout="", stderr="")
 
 def test_setup_manager_happy_path(monkeypatch, tmp_path: Path):
     # Monkeypatch subprocess.run
     spy = SpyRun()
     monkeypatch.setattr(subprocess, "run", spy)
+
+    # install_cilium is called by run() but the actual implementation
+    # (install_cilium_test) invokes Helm over subprocess; patch it to a no-op
+    # so this unit test focuses on orchestration, not Cilium deployment.
+    from daalu.bootstrap.setup_manager import SetupManager as _SM
+    monkeypatch.setattr(_SM, "install_cilium", lambda self, opts, host, port: None, raising=False)
 
     # Ensure paths exist
     etc = tmp_path / "etc"

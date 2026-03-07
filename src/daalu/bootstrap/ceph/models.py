@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Optional
 
 @dataclass
@@ -19,6 +19,8 @@ class CephHost:
     port: int = 22
     password: Optional[str] = None
     pkey_path: Optional[str] = None  # path to SSH private key file
+    osd_devices: List[str] = field(default_factory=list)  # explicit devices; empty = auto-detect
+    is_mon_host: bool = True  # False for dedicated storage hosts that should not run mon/mgr
 
 
 @dataclass
@@ -26,7 +28,7 @@ class CephConfig:
     """
     Ceph deployment parameters.
     """
-    version: str = "18.2.1"   # maps to quay.io/ceph/ceph:v<version> if image not given
+    version: str = "20.2.0"   # maps to quay.io/ceph/ceph:v<version> if image not given
     image: Optional[str] = None
     initial_dashboard_user: str = "admin"
     initial_dashboard_password: str = "admin"  # change in prod!

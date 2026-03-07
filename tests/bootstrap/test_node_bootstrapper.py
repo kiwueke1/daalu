@@ -4,8 +4,8 @@ import builtins
 
 import pytest
 
-from daalu.node_bootstrap.ssh_bootstrapper import SshBootstrapper
-from daalu.node_bootstrap.models import Host, NodeBootstrapPlan, NodeBootstrapOptions
+from daalu.bootstrap.node.ssh_bootstrapper import SshBootstrapper
+from daalu.bootstrap.node.models import Host, NodeBootstrapPlan, NodeBootstrapOptions
 
 # ----------------- Fakes for Paramiko -----------------
 
@@ -35,6 +35,11 @@ class _FakeFile:
         self._buf.append(data)
     def close(self):
         self.log.append(("sftp_write", self.path, "".join(self._buf)))
+    def __enter__(self):
+        return self
+    def __exit__(self, *a):
+        self.close()
+        return False
 
 class FakeSSHClient:
     def __init__(self, log, responses=None):
@@ -77,7 +82,7 @@ def test_full_bootstrap_happy_path(monkeypatch, tmp_path: Path):
 
     # Re-import after monkeypatch to bind fakes (important if module cached earlier)
     from importlib import reload
-    import daalu.node_bootstrap.ssh_bootstrapper as mod
+    import daalu.bootstrap.node.ssh_bootstrapper as mod
     reload(mod)
 
     # Prepare a host and options
@@ -103,12 +108,12 @@ def test_full_bootstrap_happy_path(monkeypatch, tmp_path: Path):
     mod.paramiko.SSHClient = make_client  # type: ignore[attr-defined]
     mod.paramiko.AutoAddPolicy = fake_paramiko.AutoAddPolicy  # type: ignore[attr-defined]
 
-    # Also stub subprocess clusterctl for kubeconfig fetch
-    import subprocess as real_sub
-    def fake_run(argv, capture_output=False, text=False, check=False):
+    # Stub ALL subprocess.run calls so nothing real executes.
+    # Clusterctl returns a stub kubeconfig; everything else succeeds silently.
+    def fake_run(argv, capture_output=False, text=False, check=False, **kw):
         if argv[:3] == ["clusterctl", "get", "kubeconfig"]:
             return types.SimpleNamespace(returncode=0, stdout="apiVersion: v1\nclusters: []\n", stderr="")
-        return real_sub.run(argv, capture_output=capture_output, text=text, check=check)
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
     monkeypatch.setattr(mod.subprocess, "run", fake_run)
 
     # Act
@@ -128,8 +133,8 @@ def test_full_bootstrap_happy_path(monkeypatch, tmp_path: Path):
     # netplan apply
     # (no renderer given; netplan role will no-op -> OK)
 
-    # sudoers file created
-    assert "/etc/sudoers.d/kez" in exec_cmds
+    # sudoers file created for managed_user (default: "builder")
+    assert "/etc/sudoers.d/builder" in exec_cmds
     # hostname set
     assert "hostnamectl set-hostname node-1" in exec_cmds
     # /etc/hosts appended with FQDN
@@ -142,7 +147,7 @@ def test_netplan_renderer(monkeypatch):
     fake_paramiko = FakeParamikoModule
     monkeypatch.setitem(__import__("sys").modules, "paramiko", fake_paramiko)
     from importlib import reload
-    import daalu.node_bootstrap.ssh_bootstrapper as mod
+    import daalu.bootstrap.node.ssh_bootstrapper as mod
     reload(mod)
 
     def make_client(*a, **k): return FakeSSHClient(ops_log)
@@ -167,7 +172,7 @@ def test_inotify_and_istio(monkeypatch):
     fake_paramiko = FakeParamikoModule
     monkeypatch.setitem(__import__("sys").modules, "paramiko", fake_paramiko)
     from importlib import reload
-    import daalu.node_bootstrap.ssh_bootstrapper as mod
+    import daalu.bootstrap.node.ssh_bootstrapper as mod
     reload(mod)
 
     def make_client(*a, **k): return FakeSSHClient(ops_log)
@@ -182,6 +187,8 @@ def test_inotify_and_istio(monkeypatch):
 
     # sysctl conf appended and sysctl -p executed
     assert any("sysctl -p /etc/sysctl.conf" in e[1] for e in ops_log if e[0] == "exec")
-    # modules-load file written & modprobe invoked
-    assert any(e[0] == "sftp_write" and "99-istio-modules.conf" in e[1] for e in ops_log)
+    # modules-load file uploaded via sftp to a temp path then moved by sudo exec
+    assert any(e[0] == "sftp_write" and "/tmp/.daalu_tmp_" in e[1] for e in ops_log)
+    # Final move command references the modules conf path
+    assert any("99-istio-modules.conf" in e[1] for e in ops_log if e[0] == "exec")
     assert any("modprobe br_netfilter" in e[1] for e in ops_log if e[0] == "exec")

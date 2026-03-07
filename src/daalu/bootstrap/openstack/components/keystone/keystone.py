@@ -21,7 +21,7 @@ from daalu.bootstrap.shared.keycloak.models import (
     KeycloakAdminAuth,
 )
 from daalu.bootstrap.shared.keycloak.iam import (
-    KeycloakIAMManager,
+    KeycloakIAMManager as SharedKeycloakIAMManager,
     KeycloakIAMConfig,
 )
 from daalu.bootstrap.openstack.secrets_manager import SecretsManager
@@ -112,19 +112,30 @@ class KeystoneComponent(InfraComponent):
 
         base["endpoints"] = self._computed_endpoints
 
-        # Inject OIDC secrets into the Apache wsgi_keystone config
+        # Derive horizon FQDN from keystone istio_host (e.g. identity.daalu.io → dashboard.daalu.io)
+        keystone_fqdn = self.istio_host
+        base_domain = ".".join(keystone_fqdn.split(".")[1:])
+        horizon_fqdn = f"dashboard.{base_domain}"
+
+        # Inject OIDC secrets and hostnames into the Apache wsgi_keystone config
         if hasattr(self, "_oidc_crypto_passphrase") and hasattr(self, "_oidc_client_secret"):
             wsgi = base.get("conf", {}).get("wsgi_keystone", "")
             if wsgi:
-                wsgi = wsgi.replace(
-                    "CHANGE_ME_OIDC_CRYPTO_PASSPHRASE",
-                    self._oidc_crypto_passphrase,
-                )
-                wsgi = wsgi.replace(
-                    "CHANGE_ME_OIDC_CLIENT_SECRET",
-                    self._oidc_client_secret,
-                )
+                wsgi = wsgi.replace("CHANGE_ME_OIDC_CRYPTO_PASSPHRASE", self._oidc_crypto_passphrase)
+                wsgi = wsgi.replace("CHANGE_ME_OIDC_CLIENT_SECRET", self._oidc_client_secret)
+                wsgi = wsgi.replace("CHANGE_ME_KEYSTONE_FQDN", keystone_fqdn)
+                wsgi = wsgi.replace("CHANGE_ME_HORIZON_FQDN", horizon_fqdn)
                 base["conf"]["wsgi_keystone"] = wsgi
+
+        # Inject trusted_dashboard with the correct Horizon public FQDN
+        try:
+            td = base["conf"]["keystone"]["federation"]["trusted_dashboard"]
+            td["values"] = [
+                v.replace("CHANGE_ME_HORIZON_FQDN", horizon_fqdn)
+                for v in td.get("values", [])
+            ]
+        except (KeyError, TypeError):
+            pass
 
         return base
 
@@ -160,8 +171,8 @@ class KeystoneComponent(InfraComponent):
                 f"Expected KeycloakIAMConfig, got {type(self.keycloak_cfg)}"
             )
 
-        self._iam = KeycloakIAMManager(self.keycloak_cfg)
-
+        self._iam = KeycloakIAMManager(config=self.keycloak_cfg)
+        self._iam.login()
 
 
     # -------------------------------------------------
@@ -354,9 +365,13 @@ class KeystoneComponent(InfraComponent):
 
         for domain in self._iter_domains():
             idp_name = domain.name
-            remote_id = f"{self.keycloak_config.admin.base_url}/realms/{domain.keycloak_realm}"
+            # Strip any trailing slash from base_url before building the remote_id
+            # so we never produce a double-slash like "auth.daalu.io//realms/daalu".
+            # Keycloak's JWT "iss" claim is always single-slash; a mismatch causes
+            # Keystone to reject federation with "Error in handling response type".
+            base = str(self.keycloak_config.admin.base_url).rstrip("/")
+            remote_id = f"{base}/realms/{domain.keycloak_realm}"
 
-            # Check if IDP already exists
             env_prefix = " ".join(
                 f"{k}={shlex.quote(v)}" for k, v in openrc.items()
             )
@@ -368,7 +383,19 @@ class KeystoneComponent(InfraComponent):
             rc, out, err = self.kubectl._run(check_cmd)
 
             if rc == 0:
-                log.debug(f"[keystone] IDP '{idp_name}' already exists")
+                # IDP exists — always sync the remote_id so it stays correct
+                # even if it was created with a wrong value (e.g. double slash).
+                log.debug(
+                    f"[keystone] IDP '{idp_name}' already exists — "
+                    f"syncing remote_id to '{remote_id}'"
+                )
+                update_cmd = (
+                    f"exec {pod} -n {self.namespace} -c keystone-api -- "
+                    f"env {env_prefix} "
+                    f"openstack identity provider set {idp_name} "
+                    f"--remote-id {shlex.quote(remote_id)}"
+                )
+                self.kubectl._run(update_cmd)
                 continue
 
             create_cmd = (
@@ -390,10 +417,313 @@ class KeystoneComponent(InfraComponent):
 
 
     # -------------------------------------------------
-    # 11) Create federation mappings
+    # 11) Create federated group and project
+    # -------------------------------------------------
+    def _create_federated_group_and_project(self):
+        """
+        Create the Keystone group and project that federated (SSO) users land in.
+
+        Keystone federation mappings assign users to *groups*, not directly to
+        roles.  A group must already exist with a role assignment on a project
+        before any federated user can receive an OpenStack token scoped to that
+        project.  Without this, Horizon can redirect back from Keycloak but
+        Keystone returns "Error in handling response type" or the user has no
+        accessible projects.
+
+        For each configured Keycloak domain we create:
+          • group  ``federated-users``  in the Keystone domain  (e.g. daalu)
+          • project ``daalu-default``   in the Keystone domain
+          • ``member`` role assignment: federated-users → daalu-default
+        """
+        log.debug("[keystone] Creating federated group/project resources...")
+        openrc = self._build_openrc_env()
+        pod = self._get_keystone_api_pod()
+        env_prefix = " ".join(
+            f"{k}={shlex.quote(v)}" for k, v in openrc.items()
+        )
+
+        def _exec(subcmd: str) -> tuple[int, str, str]:
+            return self.kubectl._run(
+                f"exec {pod} -n {self.namespace} -c keystone-api -- "
+                f"env {env_prefix} {subcmd}"
+            )
+
+        for domain in self._iter_domains():
+            domain_name = domain.name
+            group_name = "federated-users"
+            project_name = f"{domain_name}-default"
+
+            # --- group ---
+            rc, out, _ = _exec(
+                f"openstack group show {group_name} --domain {domain_name} -f json"
+            )
+            if rc != 0:
+                rc, out, err = _exec(
+                    f"openstack group create {group_name} --domain {domain_name} -f json"
+                )
+                if rc != 0:
+                    raise RuntimeError(
+                        f"Failed to create group '{group_name}' in domain "
+                        f"'{domain_name}': {err or out}"
+                    )
+                log.debug("[keystone] Group '%s' created in domain '%s'", group_name, domain_name)
+            else:
+                log.debug("[keystone] Group '%s' already exists", group_name)
+
+            # --- project ---
+            rc, out, _ = _exec(
+                f"openstack project show {project_name} --domain {domain_name} -f json"
+            )
+            if rc != 0:
+                rc, out, err = _exec(
+                    f"openstack project create {project_name} --domain {domain_name} -f json"
+                )
+                if rc != 0:
+                    raise RuntimeError(
+                        f"Failed to create project '{project_name}' in domain "
+                        f"'{domain_name}': {err or out}"
+                    )
+                log.debug("[keystone] Project '%s' created in domain '%s'", project_name, domain_name)
+            else:
+                log.debug("[keystone] Project '%s' already exists", project_name)
+
+            # --- role assignment (idempotent — openstack role add is a no-op if already assigned) ---
+            _exec(
+                f"openstack role add member "
+                f"--group {shlex.quote(group_name)} "
+                f"--group-domain {shlex.quote(domain_name)} "
+                f"--project {shlex.quote(project_name)} "
+                f"--project-domain {shlex.quote(domain_name)}"
+            )
+            log.debug(
+                "[keystone] 'member' role assigned to group '%s' on project '%s'",
+                group_name,
+                project_name,
+            )
+
+        log.debug("[keystone] Federated group/project resources ready")
+
+    # -------------------------------------------------
+    # 11b) Sync existing shadow users into the group
+    # -------------------------------------------------
+    def _sync_shadow_users_to_group(self):
+        """
+        Add every existing shadow user in the federated domain to the
+        ``federated-users`` Keystone group persistently (i.e. in the DB, not
+        just inside a token).
+
+        WHY THIS IS NEEDED
+        ------------------
+        The federation mapping places users into ``federated-users`` only for
+        the duration of the token.  Keystone's application-credential API
+        validates roles by querying the database for role assignments, so
+        token-only group membership is invisible to it.  Without a persistent
+        DB group membership, federated users see:
+
+            Invalid application credential: Could not find role assignment
+            with role: …, user or group: …, project …
+
+        This method is idempotent — adding a user who is already in the group
+        is a no-op (openstack CLI exits 0 silently).
+
+        WHEN TO CALL
+        ------------
+        • Called automatically at the end of ``post_install`` to handle any
+          users who logged in during or before the bootstrap run.
+        • Re-run manually via the CLI after new users log in for the first
+          time (Keycloak SSO creates the shadow user on first login).
+        """
+        log.info("[keystone] Syncing shadow users into federated-users group...")
+        openrc = self._build_openrc_env()
+        pod = self._get_keystone_api_pod()
+        env_prefix = " ".join(
+            f"{k}={shlex.quote(v)}" for k, v in openrc.items()
+        )
+
+        def _exec(subcmd: str) -> tuple[int, str, str]:
+            return self.kubectl._run(
+                f"exec {pod} -n {self.namespace} -c keystone-api -- "
+                f"env {env_prefix} {subcmd}"
+            )
+
+        for domain in self._iter_domains():
+            domain_name = domain.name
+            group_name = "federated-users"
+
+            # List all users in the federated domain
+            rc, out, err = _exec(
+                f"openstack user list --domain {shlex.quote(domain_name)} -f json"
+            )
+            if rc != 0:
+                log.warning(
+                    "[keystone] Could not list users in domain '%s': %s",
+                    domain_name, err or out,
+                )
+                continue
+
+            try:
+                users = json.loads(out)
+            except Exception:
+                log.warning("[keystone] Failed to parse user list JSON")
+                continue
+
+            for user in users:
+                username = user.get("Name") or user.get("name", "")
+                if not username:
+                    continue
+
+                # openstack group add user is idempotent — no-op if already a member
+                rc, _, err = _exec(
+                    f"openstack group add user {shlex.quote(group_name)} "
+                    f"{shlex.quote(username)} "
+                    f"--group-domain {shlex.quote(domain_name)} "
+                    f"--user-domain {shlex.quote(domain_name)}"
+                )
+                if rc == 0:
+                    log.debug(
+                        "[keystone] User '%s' added to group '%s' in domain '%s'",
+                        username, group_name, domain_name,
+                    )
+                else:
+                    log.warning(
+                        "[keystone] Could not add user '%s' to group '%s': %s",
+                        username, group_name, err,
+                    )
+
+        log.info("[keystone] Shadow user sync complete")
+
+    # -------------------------------------------------
+    # 11c) Deploy CronJob that keeps shadow users in sync automatically
+    # -------------------------------------------------
+    def _deploy_shadow_user_sync_cronjob(self, kubectl) -> None:
+        """
+        Deploy (or update) a Kubernetes CronJob that runs every 5 minutes and
+        adds every shadow user in each federated Keystone domain to the
+        ``federated-users`` group persistently.
+
+        WHY A CRONJOB IS NEEDED
+        -----------------------
+        Keystone creates a "shadow user" DB record the first time a federated
+        (SSO) user logs in through Keycloak.  The federation mapping places the
+        user into ``federated-users`` only for the lifetime of the token — the
+        group membership is NOT written to the DB.
+
+        Keystone's application-credential API validates roles by querying the DB
+        for group membership, so token-only membership is invisible to it.
+        Without persistent DB membership, a freshly-logged-in SSO user sees:
+
+            Invalid application credential: Could not find role assignment ...
+
+        This CronJob closes the gap: within ~5 minutes of a user's first login
+        their shadow user is persistently added to ``federated-users`` and they
+        can create Application Credentials without any admin intervention.
+
+        The sync is fully idempotent — ``openstack group add user`` is a no-op
+        when the user is already a group member.
+        """
+        log.info("[keystone] Deploying shadow-user sync CronJob...")
+
+        # Prefer the same image as the live keystone-api pods for CLI
+        # version consistency.  Fall back to the image from values.yaml.
+        rc, out, _ = kubectl._run(
+            "get deployment keystone-api -n openstack"
+            " -o jsonpath='{.spec.template.spec.containers[0].image}'"
+        )
+        keystone_image = (
+            out.strip().strip("'\"")
+            if rc == 0 and out.strip()
+            else "10.10.0.9:30003/openstack/keystone:2024.2-oidc"
+        )
+
+        openrc = self._build_openrc_env()
+        domain_names = [d.name for d in self._iter_domains()]
+
+        # Build the bash array literal, e.g.: daalu 'other-domain'
+        domains_bash = " ".join(shlex.quote(d) for d in domain_names)
+
+        # Pure bash script — avoids quoting edge-cases from inline Python.
+        # openstack group add user exits 0 whether or not the user is already
+        # a member, so the loop is fully idempotent.
+        sync_script = (
+            "#!/bin/bash\n"
+            "set -euo pipefail\n\n"
+            "DOMAINS=(" + domains_bash + ")\n\n"
+            'for DOMAIN in "${DOMAINS[@]}"; do\n'
+            '    echo "=== Syncing domain: $DOMAIN ==="\n'
+            '    openstack user list --domain "$DOMAIN" -f value -c Name'
+            " 2>/dev/null | while IFS= read -r USERNAME; do\n"
+            '        [[ -z "$USERNAME" ]] && continue\n'
+            '        openstack group add user federated-users "$USERNAME"'
+            ' --group-domain "$DOMAIN" --user-domain "$DOMAIN"'
+            ' && echo "  [ok] $USERNAME"'
+            ' || echo "  [skip] $USERNAME"\n'
+            "    done\n"
+            "done\n"
+            'echo "Sync complete."\n'
+        )
+
+        env_block = [{"name": k, "value": v} for k, v in openrc.items()]
+
+        cronjob = {
+            "apiVersion": "batch/v1",
+            "kind": "CronJob",
+            "metadata": {
+                "name": "keystone-federated-user-sync",
+                "namespace": self.namespace,
+                "labels": {
+                    "app": "keystone-federated-user-sync",
+                    "component": "federation",
+                },
+            },
+            "spec": {
+                "schedule": "*/5 * * * *",
+                "concurrencyPolicy": "Forbid",
+                "successfulJobsHistoryLimit": 3,
+                "failedJobsHistoryLimit": 3,
+                "jobTemplate": {
+                    "spec": {
+                        "template": {
+                            "spec": {
+                                "restartPolicy": "OnFailure",
+                                "containers": [
+                                    {
+                                        "name": "sync",
+                                        "image": keystone_image,
+                                        "command": ["/bin/bash", "-c", sync_script],
+                                        "env": env_block,
+                                    }
+                                ],
+                            }
+                        }
+                    }
+                },
+            },
+        }
+
+        kubectl.apply_objects(
+            [cronjob],
+            remote_path="/tmp/daalu-keystone-federated-sync-cronjob.yaml",
+        )
+        log.info("[keystone] CronJob 'keystone-federated-user-sync' deployed ✓")
+
+    # -------------------------------------------------
+    # 12) Create federation mappings
     # -------------------------------------------------
     def _create_federation_mappings(self):
-        log.debug("[keystone] Creating federation mappings...")
+        """
+        Create (or update) the Keystone federation mapping for each domain.
+
+        The mapping translates OIDC claims from Keycloak into a Keystone user
+        and group identity:
+          - ``OIDC-preferred_username``  →  ephemeral user name  (daalu domain)
+          - automatically adds the user to the ``federated-users`` group so they
+            inherit the ``member`` role on the ``daalu-default`` project.
+
+        The mapping is always synced (using ``openstack mapping set``) so that
+        adding a new attribute mapping on a re-run is picked up without having
+        to manually delete the old mapping first.
+        """
+        log.debug("[keystone] Syncing federation mappings...")
         openrc = self._build_openrc_env()
         pod = self._get_keystone_api_pod()
         env_prefix = " ".join(
@@ -401,22 +731,25 @@ class KeystoneComponent(InfraComponent):
         )
         for domain in self._iter_domains():
             mapping_name = f"{domain.name}-mapping"
-            # Check if mapping already exists
-            check_cmd = (
-                f"exec {pod} -n {self.namespace} -c keystone-api -- "
-                f"env {env_prefix} "
-                f"openstack mapping show {mapping_name} -f json"
-            )
-            rc, out, err = self.kubectl._run(check_cmd)
-            if rc == 0:
-                log.debug(f"[keystone] Mapping '{mapping_name}' already exists")
-                continue
+
             rules = json.dumps([
                 {
                     "local": [
+                        # Ephemeral user in the domain — name taken from the
+                        # Keycloak "preferred_username" OIDC claim.
                         {
-                            "user": {"name": "{0}"},
-                            "domain": {"name": domain.name},
+                            "user": {
+                                "name": "{0}",
+                                "domain": {"name": domain.name},
+                            },
+                        },
+                        # Assign the user to the federated-users group so they
+                        # inherit project roles (created in _create_federated_group_and_project).
+                        {
+                            "group": {
+                                "name": "federated-users",
+                                "domain": {"name": domain.name},
+                            },
                         },
                     ],
                     "remote": [
@@ -424,26 +757,31 @@ class KeystoneComponent(InfraComponent):
                     ],
                 }
             ])
-            # Write rules and create mapping in a single exec to
-            # ensure the file exists when the openstack CLI reads it.
-            # Use double quotes for the inner bash -c to avoid
-            # nested single-quote breakage with the SSH runner's
-            # sudo bash -c '...' wrapper.
+
+            # Check if mapping already exists to choose create vs set.
+            check_cmd = (
+                f"exec {pod} -n {self.namespace} -c keystone-api -- "
+                f"env {env_prefix} "
+                f"openstack mapping show {mapping_name} -f json"
+            )
+            rc, _, _ = self.kubectl._run(check_cmd)
+            action = "set" if rc == 0 else "create"
+
             rules_b64 = base64.b64encode(rules.encode()).decode()
-            create_cmd = (
+            apply_cmd = (
                 f"exec {pod} -n {self.namespace} -c keystone-api -- "
                 f'bash -c "echo -n {rules_b64} | base64 -d > /tmp/mapping-rules.json '
                 f"&& env {env_prefix} "
-                f"openstack mapping create {mapping_name} "
+                f"openstack mapping {action} {mapping_name} "
                 f'--rules /tmp/mapping-rules.json"'
             )
-            rc, out, err = self.kubectl._run(create_cmd)
+            rc, out, err = self.kubectl._run(apply_cmd)
             if rc != 0:
                 raise RuntimeError(
-                    f"Failed to create mapping '{mapping_name}': {err or out}"
+                    f"Failed to {action} mapping '{mapping_name}': {err or out}"
                 )
-            log.debug(f"[keystone] Mapping '{mapping_name}' created")
-        log.debug("[keystone] Federation mappings created")
+            log.debug(f"[keystone] Mapping '{mapping_name}' {action}d")
+        log.debug("[keystone] Federation mappings synced")
 
     # -------------------------------------------------
     # 12) Create federation protocols
@@ -575,9 +913,7 @@ class KeystoneComponent(InfraComponent):
             secrets_path=self.secrets_path,
             namespace=self.namespace,
             region_name="RegionOne",
-            keystone_public_host=str(self.keycloak_config.admin.base_url)
-            .replace("https://", "")
-            .rstrip("/"),
+            keystone_public_host=self.istio_host,
             service="keystone",
         )
 
@@ -658,6 +994,19 @@ class KeystoneComponent(InfraComponent):
         for iam in self._iter_iam_managers():
             iam.run(kubectl)
 
+        # -------------------------------------------------
+        # 5) Override _oidc_client_secret with actual Keycloak secret
+        # -------------------------------------------------
+        # SharedKeycloakIAMManager.run() stores the real client secret in a K8s
+        # Secret named "{client_id}-client-secret". Read it back so the Helm
+        # chart gets the correct OIDCClientSecret — not the placeholder from
+        # secrets.yaml. This must happen BEFORE values() is called for Helm install.
+        for iam in self._iter_iam_managers():
+            if any(c.id == "keystone" for c in iam.cfg.clients):
+                self._oidc_client_secret = iam.read_client_secret(kubectl, client_id="keystone")
+                log.debug("[keystone] Keycloak client secret loaded from K8s ✓")
+                break
+
         log.debug("[keystone] pre-install complete ✓")
 
 
@@ -722,6 +1071,10 @@ class KeystoneComponent(InfraComponent):
         self._create_identity_providers()
         log.info("[keystone] Identity providers created")
 
+        log.info("[keystone] Creating federated group and project...")
+        self._create_federated_group_and_project()
+        log.info("[keystone] Federated group and project ready")
+
         log.info("[keystone] Creating federation mappings...")
         self._create_federation_mappings()
         log.info("[keystone] Federation mappings created")
@@ -729,6 +1082,14 @@ class KeystoneComponent(InfraComponent):
         log.info("[keystone] Creating federation protocols...")
         self._create_federation_protocols()
         log.info("[keystone] Federation protocols created")
+
+        log.info("[keystone] Syncing shadow users into federated-users group...")
+        self._sync_shadow_users_to_group()
+        log.info("[keystone] Shadow user sync complete")
+
+        log.info("[keystone] Deploying shadow-user sync CronJob...")
+        self._deploy_shadow_user_sync_cronjob(kubectl)
+        log.info("[keystone] Shadow-user sync CronJob deployed")
 
         log.info("[keystone] Post-install complete")
 
@@ -746,7 +1107,7 @@ class KeystoneComponent(InfraComponent):
         One IAM manager per Keycloak realm.
         """
         for domain in self._iter_domains():
-            yield KeycloakIAMManager(
+            yield SharedKeycloakIAMManager(
                 KeycloakIAMConfig(
                     k8s_namespace=self.keycloak_config.k8s_namespace,
                     admin=self.keycloak_config.admin,
@@ -755,7 +1116,7 @@ class KeystoneComponent(InfraComponent):
                         display_name=domain.label,
                     ),
                     clients=[domain.client] if domain.client else [],
-                    oidc_issuer_url=f"{self.keycloak_config.admin.base_url}/realms/{domain.keycloak_realm}",
+                    oidc_issuer_url=f"{str(self.keycloak_config.admin.base_url).rstrip('/')}/realms/{domain.keycloak_realm}",
                     oauth2_proxy_ssl_insecure_skip_verify=
                         self.keycloak_config.oauth2_proxy_ssl_insecure_skip_verify,
                 )

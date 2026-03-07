@@ -111,13 +111,16 @@ class HelmInfraEngine:
                 if self.logger:
                     self.logger.set_stage("helm.install_or_upgrade")
 
-                self.helm.install_or_upgrade(
-                    name=component.release_name,
-                    chart=str(chart_path),
-                    namespace=component.namespace,
-                    values=values,
-                    kubeconfig=component.kubeconfig,
-                )
+                if self.helm.release_is_deployed(component.release_name, component.namespace):
+                    log.info("[%s] Release already installed — skipping.", component.name)
+                else:
+                    self.helm.install_or_upgrade(
+                        name=component.release_name,
+                        chart=str(chart_path),
+                        namespace=component.namespace,
+                        values=values,
+                        kubeconfig=component.kubeconfig,
+                    )
 
                 # ---------------- Wait ----------------
                 if component.wait_for_pods:

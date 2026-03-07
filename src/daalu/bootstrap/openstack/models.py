@@ -68,6 +68,10 @@ class KeycloakOpenstackConfig(BaseModel):
 
     oidc_issuer_url: str
 
+    # Public FQDN for Keystone (e.g. identity.daalu.io).
+    # This is distinct from base_url which is the Keycloak URL.
+    keystone_public_fqdn: str
+
     model_config = {
         "extra": "forbid"
     }

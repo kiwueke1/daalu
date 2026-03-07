@@ -10,9 +10,18 @@ from daalu.utils.ssh_runner import SSHRunner
 
 
 class OpenStackManager:
-    def __init__(self, *, helm: HelmCliRunner, ssh: SSHRunner):
+    def __init__(
+        self,
+        *,
+        helm: HelmCliRunner,
+        ssh: SSHRunner,
+        registry_url: str | None = None,
+        registry_project: str = "openstack",
+    ):
         self.helm = helm
         self.ssh = ssh
+        self.registry_url = registry_url
+        self.registry_project = registry_project
 
     def deploy(self, components, *, phase: str | None = None):
         logger = InfraJsonlLogger()
@@ -20,6 +29,8 @@ class OpenStackManager:
             helm=self.helm,
             ssh=self.ssh,
             logger=logger,
+            registry_url=self.registry_url,
+            registry_project=self.registry_project,
         )
 
         for component in components:

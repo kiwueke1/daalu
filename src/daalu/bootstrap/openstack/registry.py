@@ -43,6 +43,7 @@ from daalu.bootstrap.openstack.components.manila.manila import ManilaComponent
 from daalu.bootstrap.openstack.components.horizon.horizon import HorizonComponent
 from daalu.bootstrap.openstack.components.openstack_exporter.openstack_exporter import OpenStackExporterComponent
 from daalu.bootstrap.openstack.components.openstack_cli.openstack_cli import OpenStackCliComponent
+from daalu.bootstrap.infrastructure.components.kube_coredns import KubeCoreDNSPatchComponent
 
 
 def build_openstack_components(
@@ -53,9 +54,15 @@ def build_openstack_components(
     cfg,
     ssh=None,
     ceph_ssh=None,
+    node_hosts=None,
 ):
     components: List = []
     secrets_path = workspace_root / "cloud-config" / "secrets.yaml"
+
+    # Derive per-service public FQDNs from the keystone FQDN once
+    # e.g. identity.daalu.io -> base = daalu.io -> network.daalu.io etc.
+    _keystone_fqdn = _keystone_fqdn
+    _base_domain = ".".join(_keystone_fqdn.split(".")[1:])
 
 
     # ------------------------------------------------------------
@@ -157,10 +164,7 @@ def build_openstack_components(
                     workspace_root, "barbican", "values.yaml"
                 ),
                 secrets_path=workspace_root / "cloud-config" / "secrets.yaml",
-                keystone_public_host=str(cfg.keycloak.openstack.base_url)
-                    .replace("https://", "")
-                    .replace("http://", "")
-                    .rstrip("/"),
+                keystone_public_host=_keystone_fqdn,
             )
         )
 
@@ -219,10 +223,8 @@ def build_openstack_components(
                     workspace_root, "glance", "values.yaml"
                 ),
                 secrets_path=workspace_root / "cloud-config" / "secrets.yaml",
-                glance_public_host=str(cfg.keycloak.openstack.base_url)
-                    .replace("https://", "")
-                    .replace("http://", "")
-                    .rstrip("/"),
+                glance_public_host=f"images.{_base_domain}",
+                keystone_public_host=_keystone_fqdn,
             )
         )
 
@@ -239,10 +241,7 @@ def build_openstack_components(
                     workspace_root, "staffeln", "values.yaml"
                 ),
                 secrets_path=workspace_root / "cloud-config" / "secrets.yaml",
-                keystone_public_host=str(cfg.keycloak.openstack.base_url)
-                    .replace("https://", "")
-                    .replace("http://", "")
-                    .rstrip("/"),
+                keystone_public_host=_keystone_fqdn,
             )
         )
 
@@ -259,10 +258,8 @@ def build_openstack_components(
                     workspace_root, "cinder", "values.yaml"
                 ),
                 secrets_path=workspace_root / "cloud-config" / "secrets.yaml",
-                keystone_public_host=str(cfg.keycloak.openstack.base_url)
-                    .replace("https://", "")
-                    .replace("http://", "")
-                    .rstrip("/"),
+                keystone_public_host=_keystone_fqdn,
+                cinder_public_host=f"volume.{_base_domain}",
             )
         )
 
@@ -279,10 +276,8 @@ def build_openstack_components(
                     workspace_root, "placement", "values.yaml"
                 ),
                 secrets_path=workspace_root / "cloud-config" / "secrets.yaml",
-                keystone_public_host=str(cfg.keycloak.openstack.base_url)
-                    .replace("https://", "")
-                    .replace("http://", "")
-                    .rstrip("/"),
+                keystone_public_host=_keystone_fqdn,
+                placement_public_host=f"placement.{_base_domain}",
             )
         )
 
@@ -341,6 +336,7 @@ def build_openstack_components(
                     workspace_root, "openvswitch", "values.yaml"
                 ),
                 ssh=ssh,
+                node_hosts=node_hosts,
             )
         )
 
@@ -415,10 +411,8 @@ def build_openstack_components(
                     workspace_root, "neutron", "values.yaml"
                 ),
                 secrets_path=workspace_root / "cloud-config" / "secrets.yaml",
-                keystone_public_host=str(cfg.keycloak.openstack.base_url)
-                    .replace("https://", "")
-                    .replace("http://", "")
-                    .rstrip("/"),
+                keystone_public_host=_keystone_fqdn,
+                network_public_host=f"network.{_base_domain}",
                 network_backend=network_backend,
             )
         )
@@ -436,10 +430,7 @@ def build_openstack_components(
                     workspace_root, "nova", "values.yaml"
                 ),
                 secrets_path=workspace_root / "cloud-config" / "secrets.yaml",
-                keystone_public_host=str(cfg.keycloak.openstack.base_url)
-                    .replace("https://", "")
-                    .replace("http://", "")
-                    .rstrip("/"),
+                keystone_public_host=_keystone_fqdn,
                 network_backend=network_backend,
                 nova_flavors=[
                     {"name": "m1.tiny", "vcpus": 1, "ram": 512, "disk": 1},
@@ -464,10 +455,9 @@ def build_openstack_components(
                     workspace_root, "heat", "values.yaml"
                 ),
                 secrets_path=workspace_root / "cloud-config" / "secrets.yaml",
-                keystone_public_host=str(cfg.keycloak.openstack.base_url)
-                    .replace("https://", "")
-                    .replace("http://", "")
-                    .rstrip("/"),
+                keystone_public_host=_keystone_fqdn,
+                heat_public_host=f"orchestration.{_base_domain}",
+                heat_cfn_public_host=f"cloudformation.{_base_domain}",
             )
         )
 
@@ -484,10 +474,7 @@ def build_openstack_components(
                     workspace_root, "ceilometer", "values.yaml"
                 ),
                 secrets_path=workspace_root / "cloud-config" / "secrets.yaml",
-                keystone_public_host=str(cfg.keycloak.openstack.base_url)
-                    .replace("https://", "")
-                    .replace("http://", "")
-                    .rstrip("/"),
+                keystone_public_host=_keystone_fqdn,
             )
         )
 
@@ -504,10 +491,7 @@ def build_openstack_components(
                     workspace_root, "octavia", "values.yaml"
                 ),
                 secrets_path=workspace_root / "cloud-config" / "secrets.yaml",
-                keystone_public_host=str(cfg.keycloak.openstack.base_url)
-                    .replace("https://", "")
-                    .replace("http://", "")
-                    .rstrip("/"),
+                keystone_public_host=_keystone_fqdn,
             )
         )
 
@@ -524,10 +508,7 @@ def build_openstack_components(
                     workspace_root, "magnum", "values.yaml"
                 ),
                 secrets_path=workspace_root / "cloud-config" / "secrets.yaml",
-                keystone_public_host=str(cfg.keycloak.openstack.base_url)
-                    .replace("https://", "")
-                    .replace("http://", "")
-                    .rstrip("/"),
+                keystone_public_host=_keystone_fqdn,
             )
         )
 
@@ -544,10 +525,7 @@ def build_openstack_components(
                     workspace_root, "manila", "values.yaml"
                 ),
                 secrets_path=workspace_root / "cloud-config" / "secrets.yaml",
-                keystone_public_host=str(cfg.keycloak.openstack.base_url)
-                    .replace("https://", "")
-                    .replace("http://", "")
-                    .rstrip("/"),
+                keystone_public_host=_keystone_fqdn,
             )
         )
 
@@ -564,10 +542,7 @@ def build_openstack_components(
                     workspace_root, "horizon", "values.yaml"
                 ),
                 secrets_path=workspace_root / "cloud-config" / "secrets.yaml",
-                keystone_public_host=str(cfg.keycloak.openstack.base_url)
-                    .replace("https://", "")
-                    .replace("http://", "")
-                    .rstrip("/"),
+                keystone_public_host=_keystone_fqdn,
             )
         )
 
@@ -591,10 +566,34 @@ def build_openstack_components(
                 kubeconfig=kubeconfig_path,
                 ssh=ssh,
                 secrets_path=workspace_root / "cloud-config" / "secrets.yaml",
-                keystone_public_host=str(cfg.keycloak.openstack.base_url)
-                    .replace("https://", "")
-                    .replace("http://", "")
-                    .rstrip("/"),
+                keystone_public_host=_keystone_fqdn,
+            )
+        )
+
+    # ----------------------------
+    # Kube CoreDNS split-horizon DNS patch — MUST run LAST
+    #
+    # All OpenStack Istio VirtualServices must already exist before this runs
+    # so that _collect_vs_hostnames() picks up every public FQDN
+    # (identity.daalu.io, dashboard.daalu.io, auth.daalu.io, etc.).
+    #
+    # On a fresh install those VirtualServices are created during this very
+    # bootstrap run. Running this component first (as was done previously)
+    # means CoreDNS is patched before the VirtualServices exist and misses
+    # all the OpenStack FQDNs, leaving pods resolving them to the external
+    # ISP IP. mod_auth_openidc in Keystone then hits the router's self-signed
+    # certificate when fetching the Keycloak OIDC discovery document and
+    # returns HTTP 500 on the WebSSO login page.
+    #
+    # The OIDC calls happen at user login time (runtime), not at install time,
+    # so Keystone does not need this fix to be in place during bootstrap.
+    # ----------------------------
+    if selection.components is None or "kube-coredns-patch" in selection.components:
+        components.append(
+            KubeCoreDNSPatchComponent(
+                kubeconfig=kubeconfig_path,
+                istio_gateway_namespace="istio-ingress",
+                istio_gateway_service="istio-ingressgateway",
             )
         )
 

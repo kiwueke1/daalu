@@ -130,19 +130,28 @@ class HorizonComponent(InfraComponent):
         ]
 
         # Inject SSO / WebSSO settings using the keystone public host
-        # (mirrors _horizon_helm_values.conf.horizon.local_settings.config.raw)
         keystone_fqdn = self.keystone_public_host
-        raw = base["conf"]["horizon"]["local_settings"]["config"].setdefault("raw", {})
-        raw["WEBSSO_ENABLED"] = True
-        raw["WEBSSO_KEYSTONE_URL"] = f"https://{keystone_fqdn}/v3"
-        raw["WEBSSO_INITIAL_CHOICE"] = "credentials"
-        raw["WEBSSO_CHOICES"] = (
-            ("credentials", "Keystone Credentials"),
-            ("mapped", "Daalu SSO"),
-        )
-        raw["WEBSSO_IDP_MAPPING"] = {
-            "mapped": ("daalu", "openid"),
+        config = base["conf"]["horizon"]["local_settings"]["config"]
+
+        # Use native chart SSO keys so booleans are rendered correctly as Python
+        config.setdefault("auth", {})
+        config["auth"]["sso"] = {
+            "enabled": True,
+            "initial_choice": "credentials",
         }
+        config["auth"]["idp_mapping"] = [
+            {
+                "name": "mapped",
+                "label": "Daalu SSO",
+                "idp": "daalu",
+                "protocol": "openid",
+            }
+        ]
+
+        # WEBSSO_KEYSTONE_URL and LOGOUT_URL have no native chart keys; use raw
+        # (both are strings, so toJson renders them correctly in Python)
+        raw = config.setdefault("raw", {})
+        raw["WEBSSO_KEYSTONE_URL"] = f"https://{keystone_fqdn}/v3"
         raw["LOGOUT_URL"] = (
             f"https://{keystone_fqdn}/v3/auth/OS-FEDERATION/identity_providers/"
             f"redirect?logout=https://{self._horizon_api_host}/auth/logout/"
@@ -187,7 +196,7 @@ class HorizonComponent(InfraComponent):
 
     def _cleanup_stale_jobs(self, kubectl):
         """Remove stale horizon jobs to avoid upgrade conflicts."""
-        for job_name in ("horizon-db-sync",):
+        for job_name in ("horizon-db-init", "horizon-db-sync"):
             rc, _, _ = kubectl._run(
                 f"get job {job_name} -n {self.namespace} -o name"
             )

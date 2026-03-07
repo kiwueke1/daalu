@@ -199,12 +199,8 @@ class KeycloakIAMManager:
         community.general.keycloak_authentication_required_actions
         """
 
-        self._ensure_logged_in()
-
-        url = (
-            f"{self.admin.base_url.rstrip('/')}"
-            f"/admin/realms/{realm}/authentication/required-actions/{alias}"
-        )
+        base = str(self.config.admin.base_url).rstrip("/")
+        url = f"{base}/admin/realms/{realm}/authentication/required-actions/{alias}"
 
         payload = {
             "alias": alias,
@@ -214,7 +210,7 @@ class KeycloakIAMManager:
             "defaultAction": default_action,
         }
 
-        r = self.session.put(url, json=payload, verify=self.admin.verify_tls)
+        r = requests.put(url, json=payload, headers=self._headers(), verify=self.config.admin.verify_tls, timeout=30)
 
         # Keycloak returns:
         # - 204 if updated
@@ -225,12 +221,8 @@ class KeycloakIAMManager:
 
         if r.status_code == 404:
             # Create if missing
-            create_url = (
-                f"{self.admin.base_url.rstrip('/')}"
-                f"/admin/realms/{realm}/authentication/required-actions"
-            )
-
-            r = self.session.post(create_url, json=payload, verify=self.admin.verify_tls)
+            create_url = f"{base}/admin/realms/{realm}/authentication/required-actions"
+            r = requests.post(create_url, json=payload, headers=self._headers(), verify=self.config.admin.verify_tls, timeout=30)
             r.raise_for_status()
             return
 

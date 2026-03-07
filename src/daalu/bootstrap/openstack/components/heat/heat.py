@@ -44,6 +44,8 @@ class HeatComponent(InfraComponent):
         release_name: str = "heat",
         secrets_path: Path,
         keystone_public_host: str,
+        heat_public_host: str,
+        heat_cfn_public_host: str,
         enable_argocd: bool = False,
     ):
         super().__init__(
@@ -61,12 +63,20 @@ class HeatComponent(InfraComponent):
             wait_for_pods=True,
             min_running_pods=1,
             enable_argocd=enable_argocd,
+            istio_enabled=True,
+            istio_host=heat_public_host,
+            istio_service="heat-api",
+            istio_service_namespace=namespace,
+            istio_service_port=8004,
+            istio_expected_status=200,
         )
 
         self.values_path = values_path
         self._assets_dir = assets_dir
         self.secrets_path = secrets_path
         self.keystone_public_host = keystone_public_host
+        self.heat_public_host = heat_public_host
+        self.heat_cfn_public_host = heat_cfn_public_host
         self.wait_for_pods = True
         self.min_running_pods = 1
 
@@ -114,6 +124,18 @@ class HeatComponent(InfraComponent):
             "project_name": "service",
             "user_domain_name": "service",
             "project_domain_name": "service",
+        }
+
+        # Public endpoint overrides so ks_endpoints registers correct public URLs
+        endpoints["orchestration"] = {
+            "host_fqdn_override": {"public": {"host": self.heat_public_host}},
+            "scheme": {"default": "http", "service": "http", "public": "https"},
+            "port": {"api": {"default": 8004, "public": 443}},
+        }
+        endpoints["cloudformation"] = {
+            "host_fqdn_override": {"public": {"host": self.heat_cfn_public_host}},
+            "scheme": {"default": "http", "service": "http", "public": "https"},
+            "port": {"api": {"default": 8000, "public": 443}},
         }
 
         base["endpoints"] = endpoints

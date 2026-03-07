@@ -35,6 +35,7 @@ class PlacementComponent(InfraComponent):
         release_name: str = "placement",
         secrets_path: Path,
         keystone_public_host: str,
+        placement_public_host: str,
         enable_argocd: bool = False,
     ):
         super().__init__(
@@ -52,12 +53,19 @@ class PlacementComponent(InfraComponent):
             wait_for_pods=True,
             min_running_pods=1,
             enable_argocd=enable_argocd,
+            istio_enabled=True,
+            istio_host=placement_public_host,
+            istio_service="placement-api",
+            istio_service_namespace=namespace,
+            istio_service_port=8778,
+            istio_expected_status=200,
         )
 
         self.values_path = values_path
         self._assets_dir = assets_dir
         self.secrets_path = secrets_path
         self.keystone_public_host = keystone_public_host
+        self.placement_public_host = placement_public_host
         self.wait_for_pods = True
         self.min_running_pods = 1
 
@@ -82,6 +90,13 @@ class PlacementComponent(InfraComponent):
             "user_domain_name": "service",
             "project_domain_name": "service",
         }
+        # Public endpoint override so ks_endpoints registers https://placement.daalu.io/
+        endpoints["placement"] = {
+            "host_fqdn_override": {"public": {"host": self.placement_public_host}},
+            "scheme": {"default": "http", "service": "http", "public": "https"},
+            "port": {"api": {"default": 8778, "public": 443}},
+        }
+
         base["endpoints"] = endpoints
         return base
 

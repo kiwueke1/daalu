@@ -20,9 +20,18 @@ class InfrastructureManager:
     - SSH lifecycle is owned by the caller (cli/app.py).
     """
 
-    def __init__(self, *, helm, ssh: SSHRunner):
+    def __init__(
+        self,
+        *,
+        helm,
+        ssh: SSHRunner,
+        registry_url: str | None = None,
+        registry_project: str = "openstack",
+    ):
         self.helm = helm
         self.ssh = ssh
+        self.registry_url = registry_url
+        self.registry_project = registry_project
 
     def deploy(self, components: list[InfraComponent]) -> None:
         if not components:
@@ -55,7 +64,9 @@ class InfrastructureManager:
         engine = HelmInfraEngine(
             helm=self.helm,
             ssh=logged_ssh,
-            logger=infra_logger,  # new. for logging functionality.
+            logger=infra_logger,
+            registry_url=self.registry_url,
+            registry_project=self.registry_project,
         )
 
         for component in components:

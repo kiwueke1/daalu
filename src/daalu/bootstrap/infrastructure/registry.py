@@ -39,6 +39,9 @@ from daalu.bootstrap.infrastructure.components.keycloak import KeycloakComponent
 from daalu.bootstrap.infrastructure.components.keepalived import (
     KeepalivedComponent,
 )
+from daalu.bootstrap.infrastructure.components.kube_coredns import (
+    KubeCoreDNSPatchComponent,
+)
 
 
 
@@ -48,6 +51,8 @@ def build_infrastructure_components(
     workspace_root: Path,
     kubeconfig_path: str,
     keycloak_admin_password: str = "",
+    registry_url: str | None = None,
+    registry_project: str = "openstack",
 ) -> list[InfraComponent]:
     components: list[InfraComponent] = []
 
@@ -75,7 +80,9 @@ def build_infrastructure_components(
                     component="argocd",
                     filename="values.yaml",
                 ),
-                kubeconfig=kubeconfig_path
+                kubeconfig=kubeconfig_path,
+                harbor_url=registry_url,
+                harbor_project=registry_project,
             )
         )
 
@@ -236,5 +243,13 @@ def build_infrastructure_components(
             )
         )
 
+    # Must run LAST so all VirtualServices (including Keycloak's) are already
+    # created before we collect hostnames and patch CoreDNS.
+    if selection.components is None or "kube-coredns-patch" in selection.components:
+        components.append(
+            KubeCoreDNSPatchComponent(
+                kubeconfig=kubeconfig_path,
+            )
+        )
 
     return components

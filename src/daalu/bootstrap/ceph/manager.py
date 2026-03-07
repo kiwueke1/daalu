@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import base64
 import os
 import logging
 import paramiko
@@ -114,16 +115,19 @@ class CephManager:
         env: Optional[dict] = None,
         sudo: bool = True,
         host: Optional["CephHost"] = None,
+        timeout: Optional[float] = None,
     ) -> Tuple[int, str, str]:
         """
         Run a shell command on a remote host via SSH.
-        - Writes all commands/output into the main ceph-deploy log file.
-        - Each command block is tagged with the hostname.
-        - No output printed to CLI.
+        - Mirrors all commands and output to both the ceph deploy log file
+          and the main daalu logger (log.debug), so everything appears in
+          the main daalu run log.
+        - Enforces a wall-clock deadline (timeout arg, falls back to self.cmd_timeout).
         """
         import time
 
-        log_file = Path(self._log_file)  # central log file
+        deadline = time.monotonic() + (timeout if timeout is not None else self.cmd_timeout)
+        log_file = Path(self._log_file)
         hostname = host.hostname if host else "unknown"
 
         prefix = ""
@@ -133,26 +137,43 @@ class CephManager:
         shell_cmd = f"{prefix}{cmd}"
         final = f"sudo -S bash -lc {self._shq(shell_cmd)}" if sudo else f"bash -lc {self._shq(shell_cmd)}"
 
-        # Write command header
+        start_ts = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        header = f"[{start_ts}] ({hostname}) $ {cmd}"
+        log.debug(header)
         with open(log_file, "a", encoding="utf-8") as f:
-            start_ts = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-            f.write(f"\n[{start_ts}] ({hostname}) $ {final}\n")
+            f.write(f"\n{header}\n")
 
         stdin, stdout, stderr = cli.exec_command(final, timeout=self.cmd_timeout)
 
+        # Feed sudo password via stdin when the host uses password auth
+        if sudo and host and host.password:
+            try:
+                stdin.write(host.password + "\n")
+                stdin.flush()
+            except Exception:
+                pass
+
         out_chunks, err_chunks = [], []
         while not stdout.channel.exit_status_ready():
+            if time.monotonic() > deadline:
+                elapsed = timeout or self.cmd_timeout
+                msg = f"({hostname}) [TIMEOUT after {elapsed}s — channel closed]"
+                log.debug(msg)
+                stdout.channel.close()
+                with open(log_file, "a", encoding="utf-8") as f:
+                    f.write(msg + "\n")
+                return 124, "".join(out_chunks), "".join(err_chunks) + "\n[timed out]"
             if stdout.channel.recv_ready():
-                chunk = stdout.channel.recv(1024).decode("utf-8", "replace")
+                chunk = stdout.channel.recv(4096).decode("utf-8", "replace")
                 out_chunks.append(chunk)
                 with open(log_file, "a", encoding="utf-8") as f:
-                    f.write(f"({hostname}) [stdout] {chunk}")
+                    f.write(chunk)
             if stdout.channel.recv_stderr_ready():
-                chunk = stdout.channel.recv_stderr(1024).decode("utf-8", "replace")
+                chunk = stdout.channel.recv_stderr(4096).decode("utf-8", "replace")
                 err_chunks.append(chunk)
                 with open(log_file, "a", encoding="utf-8") as f:
-                    f.write(f"({hostname}) [stderr] {chunk}")
-            time.sleep(0.2)
+                    f.write(chunk)
+            time.sleep(0.1)
 
         rc = stdout.channel.recv_exit_status()
         out_rem = stdout.read().decode("utf-8", "replace")
@@ -162,12 +183,25 @@ class CephManager:
         if err_rem:
             err_chunks.append(err_rem)
 
+        full_out = "".join(out_chunks).strip()
+        full_err = "".join(err_chunks).strip()
+
+        exit_line = f"({hostname}) [exit {rc}]"
         with open(log_file, "a", encoding="utf-8") as f:
             if out_rem.strip():
-                f.write(f"({hostname}) [stdout]\n{out_rem}\n")
+                f.write(out_rem)
             if err_rem.strip():
-                f.write(f"({hostname}) [stderr]\n{err_rem}\n")
-            f.write(f"({hostname}) [exit {rc}]\n")
+                f.write(err_rem)
+            f.write(f"\n{exit_line}\n")
+
+        # Mirror combined output to the main daalu logger
+        if full_out:
+            for line in full_out.splitlines():
+                log.debug("  [stdout] %s", line)
+        if full_err:
+            for line in full_err.splitlines():
+                log.debug("  [stderr] %s", line)
+        log.debug(exit_line)
 
         return rc, "".join(out_chunks), "".join(err_chunks)
 
@@ -212,12 +246,12 @@ class CephManager:
         log.debug(f"[ceph] Docker installed successfully: {out.strip()}")
 
 
-    def _install_cephadm(self, cli) -> None:
+    def _install_cephadm(self, cli, version: str = "20.2.0") -> None:
         """
-        Installs cephadm on the remote host if missing.
+        Installs cephadm on the remote host at the given version.
         Must be run as a user with passwordless sudo privileges.
         """
-        cephadm_url = "https://download.ceph.com/rpm-20.2.0/el9/noarch/cephadm"
+        cephadm_url = f"https://download.ceph.com/rpm-{version}/el9/noarch/cephadm"
 
         # Download cephadm to /usr/local/bin directly (requires sudo)
         install_cmd = (
@@ -244,9 +278,12 @@ class CephManager:
 
         image = cfg.image or f"quay.io/ceph/ceph:v{cfg.version}"
         primary = hosts[0]
-        log.debug(f"ceph primary host is {primary}")
         others = hosts[1:]
+        log.debug("[ceph] primary=%s  others=%s  image=%s", primary.hostname, [h.hostname for h in others], image)
+
+        log.debug("[ceph] connecting to primary %s (%s)...", primary.hostname, primary.address)
         cli = self._connect(primary)
+        log.debug("[ceph] connected to primary %s", primary.hostname)
 
         self.bus.emit(
             CephStarted(stage="init", message=f"Starting Ceph deployment on {primary.hostname}", **self.run_ctx)
@@ -254,25 +291,48 @@ class CephManager:
 
         try:
             # 1. Base prerequisites
+            log.debug("[ceph] step 1/6: ensuring container engine on %s", primary.hostname)
             self._ensure_container_engine(cli, primary)
-            self._ensure_cephadm(cli, primary)
-            self._patch_cephadm_apparmor_bug_on_hosts(hosts)
+            log.debug("[ceph] step 2/6: ensuring cephadm on %s", primary.hostname)
+            self._ensure_cephadm(cli, primary, cfg.version)
+            log.debug("[ceph] step 3/6: pre-pulling image %s", image)
             self._prepull_image(cli, image)
+            log.debug("[ceph] fixing apparmor bug")
+            self._patch_cephadm_apparmor_bug_on_hosts(hosts)
 
             # 2. Bootstrap cluster
+            log.debug("[ceph] step 4/6: bootstrapping cluster on %s", primary.hostname)
             self._bootstrap_cluster(cli, cfg, image, primary)
 
+            # Re-patch after bootstrap: cephadm deploys a new extracted copy of
+            # itself into /var/lib/ceph/<fsid>/cephadm.<hash>/__main__.py during
+            # bootstrap. That copy is unpatched and must be fixed before any
+            # orchestrator operations (orch daemon add, orch apply, etc.).
+            log.debug("[ceph] re-patching cephadm AppArmor bug on primary after bootstrap")
+            self._patch_cephadm_apparmor_bug_on_hosts([primary])
+
             # 3. SSH + hosts
+            log.debug("[ceph] step 5/6: distributing SSH keys to %d host(s)", len(others))
             self._distribute_ssh_keys(primary, others)
             self._configure_global_image(cli, image)
-            self._add_hosts(cli, primary, others)
+            log.debug("[ceph] adding %d additional host(s) to cluster", len(others))
+            self._add_hosts(cli, primary, others, cfg.version)
+
+            # After host-add, cephadm deploys an extracted copy of itself into
+            # /var/lib/ceph/<fsid>/cephadm.<hash>/ on every newly added host.
+            # That copy is unpatched and must be fixed before OSD operations.
+            log.debug("[ceph] re-patching cephadm AppArmor bug on all hosts after host add")
+            self._patch_cephadm_apparmor_bug_on_hosts(hosts)
 
             self._restart_mgr(cli)
 
-            # 5. Placements + OSDs
+            # 4. Placements + OSDs
+            log.debug("[ceph] step 6/6: applying placements and OSDs")
             self._apply_placements(cli, cfg, hosts)
-            #self._apply_osds(cli, cfg)
             self._apply_osds(cli, cfg, hosts)
+
+            # 5. Post-OSD cleanup
+            self._post_osd_cleanup(cli)
 
             # 6. Health check
             self._check_health(cli)
@@ -282,15 +342,31 @@ class CephManager:
 
 
     # ----------------------------------------------------------------------
-    def _ensure_cephadm(self, cli, host: CephHost):
-        """Ensure cephadm is installed."""
+    def _ensure_cephadm(self, cli, host: CephHost, version: str = "20.2.0"):
+        """Ensure cephadm is installed and matches the target Ceph image version.
+
+        If cephadm is present but its major version doesn't match the target
+        (e.g. tentacle binary vs reef image), it is reinstalled automatically.
+        """
         self.bus.emit(CephProgress(stage="cephadm_check", message="Checking cephadm presence...", **self.run_ctx))
         rc, out, err = self._run(cli, "command -v cephadm || echo MISSING", sudo=False)
         if "MISSING" in (out + err):
-            self.bus.emit(CephProgress(stage="cephadm_install", message=f"Installing cephadm on {host.hostname}", **self.run_ctx))
-            self._install_cephadm(cli)
+            self.bus.emit(CephProgress(stage="cephadm_install", message=f"Installing cephadm {version} on {host.hostname}", **self.run_ctx))
+            self._install_cephadm(cli, version)
+            return
+
+        # Verify version matches — "cephadm version" prints e.g. "cephadm version 20.2.0-0 ..."
+        _, ver_out, _ = self._run(cli, "cephadm version 2>&1 || true", sudo=True, timeout=15)
+        major = version.split(".")[0]  # e.g. "20" for "20.2.0"
+        if major not in ver_out:
+            self.bus.emit(CephProgress(
+                stage="cephadm_reinstall",
+                message=f"cephadm version mismatch (wanted {version}, got: {ver_out.strip()!r}); reinstalling on {host.hostname}",
+                **self.run_ctx,
+            ))
+            self._install_cephadm(cli, version)
         else:
-            self.bus.emit(CephProgress(stage="cephadm_check", message="cephadm already installed", **self.run_ctx))
+            self.bus.emit(CephProgress(stage="cephadm_check", message=f"cephadm {version} already installed", **self.run_ctx))
 
     # ----------------------------------------------------------------------
     def _ensure_container_engine(self, cli, host: CephHost):
@@ -346,9 +422,20 @@ class CephManager:
 
     # ----------------------------------------------------------------------
     def _prepull_image(self, cli, image: str):
-        """Pull Ceph image ahead of bootstrap."""
-        self.bus.emit(CephProgress(stage="image_pull", message=f"Pulling Ceph image {image}", **self.run_ctx))
-        self._run(cli, f"(podman pull {image} || docker pull {image}) || true", sudo=True)
+        """Pull Ceph image ahead of bootstrap, skipping if already present locally."""
+        # Check whether the image is already available (avoid a potentially long pull)
+        check_cmd = (
+            f"(docker image inspect {image} >/dev/null 2>&1) || "
+            f"(podman image inspect {image} >/dev/null 2>&1)"
+        )
+        rc, _, _ = self._run(cli, check_cmd, sudo=True, timeout=15)
+        if rc == 0:
+            self.bus.emit(CephProgress(stage="image_pull", message=f"Ceph image {image} already present, skipping pull", **self.run_ctx))
+            return
+
+        self.bus.emit(CephProgress(stage="image_pull", message=f"Pulling Ceph image {image} (this may take several minutes)...", **self.run_ctx))
+        # Allow up to 20 minutes for a large image pull
+        self._run(cli, f"(podman pull {image} || docker pull {image}) || true", sudo=True, timeout=1200)
 
     # ----------------------------------------------------------------------
     def _bootstrap_cluster(self, cli, cfg: CephConfig, image: str, host: CephHost):
@@ -373,7 +460,7 @@ class CephManager:
             f"cephadm --image {image} bootstrap --mon-ip {mon_ip} "
             f"--initial-dashboard-user {cfg.initial_dashboard_user} "
             f"--initial-dashboard-password {cfg.initial_dashboard_password} "
-            "--skip-monitoring-stack --allow-overwrite"
+            "--skip-monitoring-stack --allow-overwrite --allow-mismatched-release"
         )
 
         rc, out, err = self._run(cli, cmd, sudo=True)
@@ -407,10 +494,10 @@ class CephManager:
         self._run(cli, f"cephadm shell -- ceph config set global container_image {image}", sudo=True)
 
     # ----------------------------------------------------------------------
-    def _add_hosts(self, primary_cli, primary: CephHost, others: List[CephHost]):
+    def _add_hosts(self, primary_cli, primary: CephHost, others: List[CephHost], version: str = "20.2.0"):
         """
         Add other Ceph hosts to the cluster.
-        Ensures each has a container engine before adding.
+        Ensures each has a matching container engine and cephadm version before adding.
         """
         for h in others:
             self._log(f"[cephadm] Validating container engine on {h.hostname} ({h.address})...")
@@ -422,6 +509,8 @@ class CephManager:
                     self._ensure_container_engine(cli, h)
                 else:
                     self._log(f"[cephadm] Container engine already present on {h.hostname}.")
+
+                self._ensure_cephadm(cli, h, version)
 
                 self._log(f"[cephadm] Adding host {h.hostname} ({h.address}) to cluster...")
                 add_cmd = f"cephadm shell -- ceph orch host add {h.hostname} {h.address}"
@@ -438,37 +527,253 @@ class CephManager:
 
     # ----------------------------------------------------------------------
     def _apply_placements(self, cli, cfg: CephConfig, hosts: List[CephHost]):
-        """Apply mon and mgr placements."""
-        desired_mon = cfg.mon_count if cfg.mon_count is not None else min(3, len(hosts))
-        self._run(cli, f'cephadm shell -- ceph orch apply mon --placement="count:{desired_mon}"', sudo=True)
-        self._run(cli, f'cephadm shell -- ceph orch apply mgr --placement="count:{cfg.mgr_count}"', sudo=True)
+        """Apply mon and mgr placements.
+
+        Mon and mgr daemons are only placed on hosts where ``is_mon_host=True``
+        (i.e. K8s cluster nodes).  Dedicated storage hosts (``is_mon_host=False``)
+        are excluded so cephadm does not attempt to deploy mon/mgr there.
+
+        Explicit hostname lists are used instead of ``count:N`` so cephadm
+        cannot pick a storage-only host when the desired count equals the
+        total number of cluster members.
+        """
+        mon_hosts = [h for h in hosts if h.is_mon_host]
+        if not mon_hosts:
+            log.warning("[ceph] No mon-eligible hosts found; falling back to all hosts for placement")
+            mon_hosts = hosts
+
+        desired_mon = cfg.mon_count if cfg.mon_count is not None else min(3, len(mon_hosts))
+        mon_names = " ".join(h.hostname for h in mon_hosts[:desired_mon])
+        log.debug("[ceph] mon placement: %s", mon_names)
+        self._run(cli, f'cephadm shell -- ceph orch apply mon --placement="{mon_names}"', sudo=True)
+
+        desired_mgr = min(cfg.mgr_count, len(mon_hosts))
+        mgr_names = " ".join(h.hostname for h in mon_hosts[:desired_mgr])
+        log.debug("[ceph] mgr placement: %s", mgr_names)
+        self._run(cli, f'cephadm shell -- ceph orch apply mgr --placement="{mgr_names}"', sudo=True)
 
     # ----------------------------------------------------------------------
 
+    def _discover_available_devices(self, cli, hostname: str) -> List[str]:
+        """Query ceph orch device ls for available (unused) block devices on a host.
+
+        Returns a list of device paths (e.g. ["/dev/sdb", "/dev/sdc"]) that
+        Ceph considers available for OSD provisioning.
+        """
+        import json as _json
+
+        rc, out, err = self._run(
+            cli,
+            f"cephadm shell -- ceph orch device ls --hostname {hostname} --format json",
+            sudo=True,
+            timeout=60,
+        )
+        if rc != 0:
+            log.debug("[ceph] device ls failed for %s (rc=%d): %s", hostname, rc, err or out)
+            return []
+
+        try:
+            data = _json.loads(out.strip())
+        except _json.JSONDecodeError:
+            log.debug("[ceph] could not parse device ls JSON for %s: %r", hostname, out[:200])
+            return []
+
+        # ceph orch device ls --format json returns a list of per-host objects.
+        # The hostname field may be keyed as "hostname", "name", or "addr"
+        # depending on the Ceph version.
+        devices = []
+        for entry in data:
+            host_key = entry.get("hostname") or entry.get("name") or entry.get("addr") or ""
+            if host_key != hostname:
+                continue
+            for dev in entry.get("devices", []):
+                path = dev.get("path", "")
+                available = dev.get("available", False)
+                reasons = dev.get("rejected_reasons", [])
+                dev_type = dev.get("human_readable_type", "unknown")
+                size = dev.get("sys_api", {}).get("human_readable_size", "?")
+                if available:
+                    log.debug(
+                        "[ceph] [%s] device %s (%s, %s) — available",
+                        hostname, path, dev_type, size,
+                    )
+                    devices.append(path)
+                else:
+                    log.debug(
+                        "[ceph] [%s] device %s (%s, %s) — not available: %s",
+                        hostname, path, dev_type, size, ", ".join(reasons) or "no reason given",
+                    )
+
+        if not devices:
+            log.debug("[ceph] [%s] no available devices discovered", hostname)
+        else:
+            log.debug("[ceph] [%s] discovered %d available device(s): %s", hostname, len(devices), devices)
+
+        return devices
+
     def _apply_osds(self, cli, cfg: CephConfig, hosts: list[CephHost]) -> None:
-        """Apply OSDs explicitly on all Ceph hosts."""
+        """Apply OSDs on all Ceph hosts.
+
+        Hosts with an explicit osd_devices list use those devices directly.
+        Hosts with no configured devices are auto-discovered via
+        ``ceph orch device ls`` — only devices Ceph reports as available are
+        added.  Hosts with neither configured nor discoverable devices are
+        skipped.
+        Each device add is checked for success; failures emit a warning
+        rather than aborting the deployment.
+        """
         if not cfg.apply_osds_all_devices:
             return
 
-        for host in hosts:
-            log.debug(f"[ceph] Adding OSD disk /dev/sdb on host {host.hostname}")
+        total_attempted = 0
+        total_ok = 0
 
-            self._run(
-                cli,
-                f"cephadm shell -- ceph orch daemon add osd {host.hostname}:/dev/sdb",
-                sudo=True,
-            )
+        for host in hosts:
+            if not host.osd_devices:
+                log.debug("[ceph] No OSD devices configured for %s — auto-detecting...", host.hostname)
+                discovered = self._discover_available_devices(cli, host.hostname)
+                if not discovered:
+                    log.debug("[ceph] No available devices found for %s — skipping", host.hostname)
+                    continue
+                log.debug("[ceph] Auto-discovered %d device(s) on %s: %s", len(discovered), host.hostname, discovered)
+                host = CephHost(
+                    hostname=host.hostname,
+                    address=host.address,
+                    username=host.username,
+                    port=host.port,
+                    password=host.password,
+                    pkey_path=host.pkey_path,
+                    osd_devices=discovered,
+                )
+
+            self.bus.emit(CephProgress(
+                stage="osd_add",
+                message=f"Adding {len(host.osd_devices)} OSD(s) on {host.hostname}: {', '.join(host.osd_devices)}",
+                **self.run_ctx,
+            ))
+
+            for device in host.osd_devices:
+                total_attempted += 1
+                log.debug("[ceph] Adding OSD %s on %s", device, host.hostname)
+                rc, out, err = self._run(
+                    cli,
+                    f"cephadm shell -- ceph orch daemon add osd {host.hostname}:{device}",
+                    sudo=True,
+                )
+                if rc == 0:
+                    total_ok += 1
+                    self.bus.emit(CephProgress(
+                        stage="osd_add",
+                        message=f"OSD added: {host.hostname}:{device}",
+                        **self.run_ctx,
+                    ))
+                else:
+                    msg = (err or out or "").strip()
+                    log.warning("[ceph] OSD add failed for %s:%s (rc=%d): %s", host.hostname, device, rc, msg)
+                    self.bus.emit(CephProgress(
+                        stage="osd_add_warn",
+                        message=f"OSD {host.hostname}:{device} failed (rc={rc}): {msg[:200]}",
+                        **self.run_ctx,
+                    ))
+
+        summary = f"OSD provisioning: {total_ok}/{total_attempted} device(s) added successfully"
+        log.debug("[ceph] %s", summary)
+        self.bus.emit(CephProgress(stage="osd_summary", message=summary, **self.run_ctx))
 
 
     # ----------------------------------------------------------------------
+    def _post_osd_cleanup(self, cli) -> None:
+        """Fix common post-OSD health warnings.
+
+        1. Remove OSD service specs with 0 managed OSDs (leftover ``osd.default``
+           specs created by previous ``--all-available-devices`` runs that
+           are no longer needed when we manage OSDs via ``daemon add``).
+        2. Enable applications on pools that have none set (e.g.
+           ``device_health_metrics`` needs the ``mgr`` application tag).
+        """
+        import json as _json
+
+        log.debug("[ceph] post-OSD cleanup: removing empty OSD specs and fixing pool applications")
+
+        # --- 1. Remove failing / empty OSD service specs ---
+        rc, out, _ = self._run(
+            cli,
+            "cephadm shell -- ceph orch ls --service-type osd --format json",
+            sudo=True, timeout=30,
+        )
+        if rc == 0:
+            try:
+                specs = _json.loads(out.strip())
+            except _json.JSONDecodeError:
+                specs = []
+
+            for spec in specs:
+                name = spec.get("service_name", "")
+                # Remove the auto-created osd.default spec unconditionally.
+                # This spec is created by cephadm when using --all-available-devices
+                # and conflicts with our per-device daemon add approach.
+                # Removing the spec does NOT remove running OSD daemons — they
+                # continue operating but are no longer managed by the spec.
+                if name == "osd.default":
+                    log.debug("[ceph] Removing auto-created OSD spec '%s'", name)
+                    self._run(
+                        cli,
+                        f"cephadm shell -- ceph orch rm {name}",
+                        sudo=True, timeout=30,
+                    )
+
+        # --- 2. Enable applications on pools missing one ---
+        # Known pool-name → application mappings
+        _APP_HINTS = {
+            "device_health_metrics": "mgr",
+            ".mgr":                  "mgr",
+            "cephfs":                "cephfs",
+            "rbd":                   "rbd",
+            "rgw":                   "rgw",
+        }
+
+        rc, out, _ = self._run(
+            cli,
+            "cephadm shell -- ceph osd pool ls detail --format json",
+            sudo=True, timeout=30,
+        )
+        if rc == 0:
+            try:
+                pools = _json.loads(out.strip())
+            except _json.JSONDecodeError:
+                pools = []
+
+            for pool in pools:
+                pool_name = pool.get("pool_name", "")
+                apps = pool.get("application_metadata", {})
+                if apps:
+                    continue  # already tagged
+
+                app = next((v for k, v in _APP_HINTS.items() if k in pool_name), None)
+                if app is None:
+                    log.debug("[ceph] pool '%s' has no application tag and no known hint — skipping", pool_name)
+                    continue
+
+                log.debug("[ceph] Enabling application '%s' on pool '%s'", app, pool_name)
+                self._run(
+                    cli,
+                    f"cephadm shell -- ceph osd pool application enable {pool_name} {app}",
+                    sudo=True, timeout=30,
+                )
+
+    # ----------------------------------------------------------------------
     def _check_health(self, cli):
-        """Run final health check."""
+        """Run final health check (soft failure — logs warning but does not abort)."""
         rc, out, err = self._run(cli, "cephadm shell -- ceph -s", sudo=True)
         if rc == 0:
             self.bus.emit(CephSucceeded(stage="completed", message="Ceph deployment completed successfully", **self.run_ctx))
             log.debug(out)
         else:
-            self.bus.emit(CephFailed(stage="health_check", error=err or out, **self.run_ctx))
+            # Non-fatal: cluster daemons may still be starting up, or the image
+            # version used by the running cluster differs from the cephadm binary.
+            # Emit a warning rather than aborting the deployment.
+            log.warning("[ceph] health check returned non-zero (rc=%d) — cluster may still be converging: %s", rc, err or out)
+            self.bus.emit(CephProgress(stage="health_check_warn", message=f"Health check warning (rc={rc}): {(err or out)[:200]}", **self.run_ctx))
 
     def _patch_cephadm_apparmor_bug(self, cli, hosts: List[CephHost]) -> None:
         """
@@ -486,57 +791,91 @@ class CephManager:
             **self.run_ctx,
         ))
 
+        # The patch script is base64-encoded so it survives the
+        # sudo -S bash -lc '...' wrapping without any quoting issues.
+        #
+        # cephadm is distributed as a Python zipapp — a single zip file whose
+        # tracebacks show "/__main__.py" even though it is one file on disk.
+        # We must patch __main__.py *inside* the zip, preserving the shebang
+        # prefix that precedes the zip magic bytes.
+        _PATCH_SCRIPT = """\
+import glob, io, pathlib, sys, zipfile
+
+NEEDLE_SP  = "item, mode = line.split(' ')"
+NEEDLE_DQ  = 'item, mode = line.split(" ")'
+REPLACE    = 'item, mode = line.split(None, 1)'
+
+CANDIDATES = ['/usr/local/bin/cephadm', '/usr/sbin/cephadm']
+CANDIDATES += glob.glob('/var/lib/ceph/*/cephadm')
+
+def patch_text(src):
+    return src.replace(NEEDLE_SP, REPLACE).replace(NEEDLE_DQ, REPLACE)
+
+for path in CANDIDATES:
+    p = pathlib.Path(path)
+    if not p.is_file():
+        continue
+    raw = p.read_bytes()
+
+    if zipfile.is_zipfile(io.BytesIO(raw)):
+        # --- zipapp layout: patch __main__.py inside the zip ---
+        zip_start = raw.find(b'PK\\x03\\x04')
+        prefix = raw[:zip_start] if zip_start >= 0 else b''
+        changed = False
+        buf_out = io.BytesIO()
+        with zipfile.ZipFile(io.BytesIO(raw), 'r') as zin, \\
+             zipfile.ZipFile(buf_out, 'w', zipfile.ZIP_DEFLATED) as zout:
+            for info in zin.infolist():
+                data = zin.read(info.filename)
+                if info.filename == '__main__.py':
+                    src = data.decode('utf-8')
+                    new_src = patch_text(src)
+                    if new_src != src:
+                        data = new_src.encode('utf-8')
+                        changed = True
+                zout.writestr(info, data)
+        if changed:
+            p.write_bytes(prefix + buf_out.getvalue())
+            sys.stdout.write('patched zipapp: ' + path + '\\n')
+        else:
+            sys.stdout.write('no match in zipapp __main__.py: ' + path + '\\n')
+    else:
+        # --- plain script layout ---
+        src = raw.decode('utf-8')
+        new_src = patch_text(src)
+        if new_src != src:
+            p.write_text(new_src)
+            sys.stdout.write('patched plain: ' + path + '\\n')
+        else:
+            sys.stdout.write('no match in plain script: ' + path + '\\n')
+
+# 2. Extracted cephadm __main__.py deployed by bootstrap into
+#    /var/lib/ceph/<fsid>/cephadm.<hash>/__main__.py
+#    These are plain Python files created after bootstrap runs.
+main_candidates = glob.glob('/var/lib/ceph/*/cephadm/__main__.py')
+main_candidates += glob.glob('/var/lib/ceph/*/cephadm.*/__main__.py')
+
+for path in main_candidates:
+    p = pathlib.Path(path)
+    if not p.is_file():
+        continue
+    src = p.read_text('utf-8')
+    new_src = patch_text(src)
+    if new_src != src:
+        p.write_text(new_src)
+        sys.stdout.write('patched deployed __main__.py: ' + path + '\\n')
+    else:
+        sys.stdout.write('no match in deployed __main__.py: ' + path + '\\n')
+"""
+        _PATCH_B64 = base64.b64encode(_PATCH_SCRIPT.encode()).decode()
+
         for host in hosts:
-            self._log(f"[ceph] Fixing cephadm on {host.hostname}")
+            self._log(f"[ceph] Fixing cephadm AppArmor bug on {host.hostname}")
             host_cli = self._connect(host)
-
             try:
-                patch_cmd = r'''
-    set -euo pipefail
-
-    patch_file() {
-    f="$1"
-    [ -f "$f" ] || return 0
-
-    if ! grep -q "item, mode = line.split" "$f"; then
-        echo "ERROR: expected AppArmor line not found in $f" >&2
-        exit 1
-    fi
-
-    cp "$f" "$f.bak"
-
-    python3 - <<EOF
-    from pathlib import Path
-import logging
-
-log = logging.getLogger("daalu")
-    p = Path("$f")
-    txt = p.read_text()
-    txt = txt.replace(
-        "item, mode = line.split(' ')",
-        "item, mode = line.split(None, 1)"
-    ).replace(
-        'item, mode = line.split(" ")',
-        "item, mode = line.split(None, 1)"
-    )
-    p.write_text(txt)
-    EOF
-
-    python3 -m py_compile "$f"
-    }
-
-    # System cephadm binaries
-    patch_file /usr/local/bin/cephadm
-    patch_file /usr/sbin/cephadm
-
-    # Runtime cephadm copies
-    for f in /var/lib/ceph/*/cephadm.*; do
-    patch_file "$f"
-    done
-    '''
-
-                self._run(host_cli, patch_cmd, sudo=True, host=host)
-
+                # Base64 payload has no quotes, no special chars — zero quoting issues
+                cmd = f"echo {_PATCH_B64} | base64 -d | python3"
+                self._run(host_cli, cmd, sudo=True, host=host)
             finally:
                 host_cli.close()
 

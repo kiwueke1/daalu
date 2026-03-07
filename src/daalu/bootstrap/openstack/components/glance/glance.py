@@ -39,6 +39,7 @@ class GlanceComponent(InfraComponent):
         namespace: str = "openstack",
         release_name: str = "glance",
         glance_public_host: str,
+        keystone_public_host: str,
         secrets_path: Path,
         images: Optional[List[GlanceImageSpec]] = None,
         enable_argocd: bool = False,
@@ -70,6 +71,7 @@ class GlanceComponent(InfraComponent):
         self._assets_dir = assets_dir
         self.secrets_path = secrets_path
         self.glance_public_host = glance_public_host
+        self.keystone_public_host = keystone_public_host
         self.images = images or []
         self.wait_for_pods = True
         self.min_running_pods = 1
@@ -96,6 +98,25 @@ class GlanceComponent(InfraComponent):
             "user_domain_name": "service",
             "project_domain_name": "service",
         }
+        # Override the Glance public endpoint so ks_endpoints registers the
+        # correct public URL (https://images.daalu.io/) instead of the
+        # chart default (http://glance.openstack.svc.cluster.local/).
+        endpoints["image"] = {
+            "host_fqdn_override": {
+                "public": {"host": self.glance_public_host},
+            },
+            "scheme": {
+                "default": "http",
+                "service": "http",
+                "public": "https",
+            },
+            "port": {
+                "api": {
+                    "default": 9292,
+                    "public": 443,
+                },
+            },
+        }
         base["endpoints"] = endpoints
         return base
 
@@ -119,7 +140,7 @@ class GlanceComponent(InfraComponent):
             secrets_path=self.secrets_path,
             namespace=self.namespace,
             region_name="RegionOne",
-            keystone_public_host=self.glance_public_host,
+            keystone_public_host=self.keystone_public_host,
             service="glance",
         )
 

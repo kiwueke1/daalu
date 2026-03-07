@@ -46,6 +46,7 @@ class NeutronComponent(InfraComponent):
         release_name: str = "neutron",
         secrets_path: Path,
         keystone_public_host: str,
+        network_public_host: str,
         network_backend: str = "ovn",
         enable_argocd: bool = False,
     ):
@@ -64,12 +65,19 @@ class NeutronComponent(InfraComponent):
             wait_for_pods=True,
             min_running_pods=1,
             enable_argocd=enable_argocd,
+            istio_enabled=True,
+            istio_host=network_public_host,
+            istio_service="neutron-server",
+            istio_service_namespace=namespace,
+            istio_service_port=9696,
+            istio_expected_status=200,
         )
 
         self.values_path = values_path
         self._assets_dir = assets_dir
         self.secrets_path = secrets_path
         self.keystone_public_host = keystone_public_host
+        self.network_public_host = network_public_host
         self.network_backend = network_backend
         self.wait_for_pods = True
         self.min_running_pods = 1
@@ -106,6 +114,13 @@ class NeutronComponent(InfraComponent):
             "project_name": "service",
             "user_domain_name": "service",
             "project_domain_name": "service",
+        }
+
+        # Public endpoint override so ks_endpoints registers https://network.daalu.io/
+        endpoints["network"] = {
+            "host_fqdn_override": {"public": {"host": self.network_public_host}},
+            "scheme": {"default": "http", "service": "http", "public": "https"},
+            "port": {"api": {"default": 9696, "public": 443}},
         }
 
         base["endpoints"] = endpoints
@@ -147,11 +162,17 @@ class NeutronComponent(InfraComponent):
                         ),
                     },
                 },
-                "ovn_metadata_agent": {
-                    "DEFAULT": {
-                        "metadata_proxy_shared_secret": self._metadata_secret,
-                    },
-                },
+                **(
+                    {
+                        "ovn_metadata_agent": {
+                            "DEFAULT": {
+                                "metadata_proxy_shared_secret": self._metadata_secret,
+                            },
+                        }
+                    }
+                    if self._metadata_secret
+                    else {}
+                ),
                 "ovn_vpn_agent": {
                     "AGENT": {
                         "extensions": "vpnaas",

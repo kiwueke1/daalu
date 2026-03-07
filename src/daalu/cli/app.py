@@ -13,6 +13,7 @@ import typer
 import paramiko
 
 from daalu.config.loader import load_config
+from daalu.config.models import DaaluConfig
 from daalu.helm.cli_runner import HelmCliRunner
 
 from daalu.bootstrap.cluster_api_manager import ClusterAPIManager
@@ -56,6 +57,9 @@ from daalu.bootstrap.shared.keycloak.models import KeycloakIAMConfig, KeycloakAd
 from daalu.bootstrap.openstack.models import parse_openstack_flag
 from daalu.bootstrap.openstack.registry import build_openstack_components
 from daalu.bootstrap.openstack.manager import OpenStackManager
+from daalu.bootstrap.registry.manager import RegistryManager
+from daalu.bootstrap.mgmt.manager import MgmtClusterManager
+from daalu.bootstrap.mgmt.cleaner import MgmtClusterCleaner
 
 
 
@@ -93,6 +97,7 @@ def resolve_install_plan(install: Optional[str]) -> Set[str]:
     Rules:
     - No --install → install everything
     - --install all → install everything
+    - --install none → install nothing (useful when only --install-local-registry is wanted)
     - Otherwise → install only specified targets
     """
     if not install:
@@ -101,6 +106,8 @@ def resolve_install_plan(install: Optional[str]) -> Set[str]:
     items = {i.strip() for i in install.split(",") if i.strip()}
     if "all" in items:
         return set(ALL_TARGETS)
+    if "none" in items:
+        return set()
 
     unknown = items - ALL_TARGETS
     if unknown:
@@ -252,6 +259,7 @@ def deploy_nodes(
         domain_suffix=domain_suffix,
         managed_user=managed_user,
         managed_user_password_plain=managed_user_password,
+        insecure_registries=cfg.insecure_registries,
     )
 
     SshBootstrapper().bootstrap(hosts, plan, opts)
@@ -338,9 +346,15 @@ def deploy_ceph(
     ssh_key: Optional[Path],
     ceph_version: str,
     ceph_image: Optional[str],
+    cfg: Optional[DaaluConfig] = None,
 ) -> List[CephHost]:
     """
     Deploy Ceph and return the resolved Ceph host list (used by CSI).
+
+    In-cluster Ceph hosts are read from the inventory [ceph] group.
+    Additional dedicated storage hosts (not part of the K8s cluster) are
+    taken from cfg.ceph.additional_ceph_hosts and appended with their
+    explicit OSD device lists.
     """
     typer.echo("\n[ceph] Installing Ceph...")
 
@@ -355,6 +369,26 @@ def deploy_ceph(
         )
         for h, a in ceph_pairs
     ]
+
+    # Append dedicated storage hosts from cluster config
+    if cfg and cfg.ceph and cfg.ceph.additional_ceph_hosts:
+        for ext in cfg.ceph.additional_ceph_hosts:
+            ceph_hosts.append(
+                CephHost(
+                    hostname=ext.hostname,
+                    address=ext.address,
+                    username=ext.username,
+                    port=ext.port,
+                    password=ext.password or None,
+                    pkey_path=ext.pkey_path or None,
+                    osd_devices=ext.osd_devices,
+                    is_mon_host=False,  # dedicated storage host — no mon/mgr
+                )
+            )
+            typer.echo(
+                f"[ceph] External host: {ext.hostname} ({ext.address}) "
+                f"with {len(ext.osd_devices)} OSD device(s)"
+            )
 
     CephManager(
         bus=EventBus(observers=[ConsoleObserver()])
@@ -393,6 +427,130 @@ def deploy_csi(
     )
 
 
+def _verify_and_get_registry_url(cfg, mgmt_kubeconfig: Optional[str]) -> str:
+    """
+    Verify that Harbor is already deployed on the mgmt cluster and return its URL.
+
+    Called when --local-registry is used without --install-local-registry.
+    Exits with an informative error if Harbor is not found.
+    """
+    import json
+    import subprocess
+    from daalu.config.models import RegistryConfig
+
+    registry_cfg = cfg.registry or RegistryConfig()
+    effective_kubeconfig = mgmt_kubeconfig or getattr(registry_cfg, "mgmt_kubeconfig", None)
+
+    if not effective_kubeconfig:
+        typer.secho(
+            "[registry] ERROR: --local-registry requires --mgmt-kubeconfig or "
+            "registry.mgmt_kubeconfig to be set in cluster.yaml.",
+            fg=typer.colors.RED, err=True,
+        )
+        raise typer.Exit(1)
+
+    result = subprocess.run(
+        [
+            "helm", "--kubeconfig", effective_kubeconfig,
+            "list", "-n", registry_cfg.harbor_namespace,
+            "--filter", "^harbor$", "-o", "json",
+        ],
+        capture_output=True, text=True, check=False,
+    )
+    deployed = False
+    if result.returncode == 0:
+        try:
+            releases = json.loads(result.stdout)
+            deployed = any(
+                r.get("name") == "harbor" and r.get("status") == "deployed"
+                for r in releases
+            )
+        except Exception:
+            pass
+
+    if not deployed:
+        typer.secho(
+            "[registry] ERROR: --local-registry was specified but the Harbor registry "
+            "does not appear to be deployed on the mgmt cluster "
+            f"(namespace: {registry_cfg.harbor_namespace}). "
+            "Deploy it first with --install-local-registry, or remove --local-registry "
+            "if you do not need local registry image pulls.",
+            fg=typer.colors.RED, err=True,
+        )
+        raise typer.Exit(1)
+
+    # Prefer explicit harbor_node_ip (provisioning NIC) over auto-detected InternalIP
+    node_ip = getattr(registry_cfg, "harbor_node_ip", None)
+    if not node_ip:
+        node_result = subprocess.run(
+            [
+                "kubectl", "--kubeconfig", effective_kubeconfig,
+                "get", "nodes",
+                "-o", "jsonpath={.items[0].status.addresses[?(@.type==\"InternalIP\")].address}",
+            ],
+            capture_output=True, text=True, check=False,
+        )
+        node_ip = node_result.stdout.strip() or registry_cfg.harbor_hostname
+
+    port_result = subprocess.run(
+        [
+            "kubectl", "--kubeconfig", effective_kubeconfig,
+            "get", "svc", "harbor", "-n", registry_cfg.harbor_namespace,
+            "-o", "jsonpath={.spec.ports[?(@.port==443)].nodePort}",
+        ],
+        capture_output=True, text=True, check=False,
+    )
+    nodeport = port_result.stdout.strip() or "30003"
+
+    url = f"{node_ip}:{nodeport}"
+    typer.echo(f"[registry] Using existing local registry at https://{url}")
+    return url
+
+
+def deploy_registry(
+    *,
+    cfg,
+    workspace_root: Path,
+    mgmt_kubeconfig: Optional[str],
+    ssh_key: Optional[Path] = "~/.ssh/openstack-key",
+    ssh_username: str = "kez",
+    cluster_kubeconfig: Optional[str] = None,
+) -> str:
+    """
+    Deploy Harbor registry on the mgmt cluster and mirror all images from assets/.
+
+    If cluster_kubeconfig is provided, also configures containerd on all infra
+    cluster nodes to trust Harbor's self-signed certificate (skip_verify).
+
+    Returns the Harbor registry URL.
+    """
+    from daalu.config.models import RegistryConfig
+
+    # Use registry block from cluster.yaml/secrets.yaml merge; fall back to defaults if absent.
+    registry_cfg = cfg.registry or RegistryConfig()
+
+    typer.echo("\n[registry] Deploying Harbor container registry...")
+
+    mgr = RegistryManager(
+        registry_cfg=registry_cfg,
+        workspace_root=workspace_root,
+        secrets_path=workspace_root / "cloud-config" / "secrets.yaml",  # kept for API compat
+    )
+
+    effective_kubeconfig = mgmt_kubeconfig or registry_cfg.mgmt_kubeconfig
+    mgr.deploy_harbor(
+        mgmt_kubeconfig=effective_kubeconfig,
+        ssh_key=str(Path(ssh_key).expanduser()) if ssh_key else None,
+        ssh_username=ssh_username,
+        cluster_kubeconfig=cluster_kubeconfig,
+    )
+    mgr.mirror_images()
+
+    url = mgr.harbor_registry_url()
+    typer.echo(f"\n[registry] Harbor available at https://{url}")
+    return url
+
+
 def deploy_infrastructure(
     *,
     helm: HelmCliRunner,
@@ -401,6 +559,8 @@ def deploy_infrastructure(
     infra_flag: Optional[str],
     kubeconfig_path: str,
     keycloak_admin_password: str = "",
+    registry_url: Optional[str] = None,
+    registry_project: str = "openstack",
 ) -> None:
     """
     Deploy infra components (e.g. metallb, argocd, jenkins, etc.)
@@ -414,11 +574,15 @@ def deploy_infrastructure(
         workspace_root=workspace_root,
         kubeconfig_path=kubeconfig_path,
         keycloak_admin_password=keycloak_admin_password,
+        registry_url=registry_url,
+        registry_project=registry_project,
     )
 
     InfrastructureManager(
         helm=helm,
         ssh=ssh,
+        registry_url=registry_url,
+        registry_project=registry_project,
     ).deploy(components)
 
 
@@ -430,6 +594,8 @@ def deploy_monitoring(
     workspace_root: Path,
     infra_flag: Optional[str],
     kubeconfig_path: str,
+    registry_url: Optional[str] = None,
+    registry_project: str = "openstack",
 ) -> None:
     """
     Deploy monitoring components (e.g. node-feature-discovery).
@@ -446,10 +612,11 @@ def deploy_monitoring(
         cfg=cfg,
     )
 
-
     MonitoringManager(
         helm=helm,
         ssh=ssh,
+        registry_url=registry_url,
+        registry_project=registry_project,
     ).deploy(components)
 
 
@@ -465,6 +632,8 @@ def deploy_openstack(
     managed_user: str = "builder",
     ssh_key: Optional[Path] = None,
     ssh_password: Optional[str] = None,
+    registry_url: Optional[str] = None,
+    registry_project: str = "openstack",
 ):
     typer.echo("\n[openstack] Installing OpenStack components...")
     if phase:
@@ -492,6 +661,20 @@ def deploy_openstack(
         ceph_ssh = SSHRunner(ceph_client)
 
     try:
+        # Build Host objects for all nodes so OpenvSwitchComponent.post_install
+        # can open per-node SSH connections for the provisioning bridge migration.
+        inv = inventory_path(workspace_root)
+        _inv_hosts = read_hosts_from_inventory(inv)
+        _node_hosts = [
+            Host(
+                hostname=h.hostname,
+                address=h.address,
+                username=managed_user,
+                pkey_path=ssh_key,
+            )
+            for h in _inv_hosts
+        ]
+
         components = build_openstack_components(
             cfg=cfg,
             selection=selection,
@@ -499,11 +682,14 @@ def deploy_openstack(
             kubeconfig_path=kubeconfig_path,
             ssh=ssh,
             ceph_ssh=ceph_ssh,
+            node_hosts=_node_hosts,
         )
 
         OpenStackManager(
             helm=helm,
             ssh=ssh,
+            registry_url=registry_url,
+            registry_project=registry_project,
         ).deploy(components, phase=phase)
     finally:
         if ceph_ssh is not None:
@@ -525,6 +711,31 @@ def deploy(
         None,
         "--infra",
         help="Infrastructure components (e.g. metallb,argocd or all)",
+    ),
+    install_local_registry: bool = typer.Option(
+        False,
+        "--install-local-registry",
+        help="Deploy Harbor registry on mgmt cluster and mirror images before installing components",
+    ),
+    local_registry: bool = typer.Option(
+        False,
+        "--local-registry",
+        help="Pull images from the local Harbor registry (assumes registry is already deployed unless --install-local-registry is also set)",
+    ),
+    registry_url: Optional[str] = typer.Option(
+        None,
+        "--registry-url",
+        help="Use an existing Harbor registry at host:port (skips deploy and mirroring, but rewrites image URLs)",
+    ),
+    mgmt_kubeconfig: Optional[str] = typer.Option(
+        None,
+        "--mgmt-kubeconfig",
+        help="Kubeconfig for mgmt cluster (overrides cluster.yaml registry.mgmt_kubeconfig)",
+    ),
+    cluster_kubeconfig: Optional[str] = typer.Option(
+        None,
+        "--cluster-kubeconfig",
+        help="Kubeconfig for the infra cluster — used with --install-local-registry to configure containerd trust on all nodes",
     ),
     context: Optional[str] = typer.Option(None, "--context"),
     mgmt_context: Optional[str] = typer.Option(None, "--mgmt-context"),
@@ -561,6 +772,31 @@ def deploy(
     #cfg = load_config(config)
     cfg: DaaluConfig = load_config(config)
     install_plan = resolve_install_plan(install)
+
+    # ------------------------------------------------------------------------------
+    # 0) Harbor registry (runs before any --install stages)
+    # ------------------------------------------------------------------------------
+    effective_registry_url: Optional[str] = None
+    registry_project: str = "openstack"
+
+    if registry_url:
+        # Explicit URL override — no deploy or mirroring, just set the URL.
+        effective_registry_url = registry_url
+        registry_project = (cfg.registry.project if cfg.registry else None) or "openstack"
+        typer.echo(f"[registry] Using existing registry at {effective_registry_url} (skipping deploy/mirror)")
+    elif install_local_registry:
+        # Deploy Harbor then use it for all image pulls.
+        effective_registry_url = deploy_registry(
+            cfg=cfg,
+            workspace_root=WORKSPACE_ROOT,
+            mgmt_kubeconfig=mgmt_kubeconfig,
+            cluster_kubeconfig=cluster_kubeconfig,
+        )
+        registry_project = (cfg.registry.project if cfg.registry else None) or "openstack"
+    elif local_registry:
+        # Use an existing local registry — verify it is actually deployed first.
+        effective_registry_url = _verify_and_get_registry_url(cfg, mgmt_kubeconfig)
+        registry_project = (cfg.registry.project if cfg.registry else None) or "openstack"
 
     # ------------------------------------------------------------------------------
     # 1) Cluster API
@@ -671,6 +907,7 @@ def deploy(
                 ssh_key=ssh_key,
                 ceph_version=ceph_version,
                 ceph_image=ceph_image,
+                cfg=cfg,
             )
         else:
             # If CSI is requested but Ceph wasn't installed in this run,
@@ -713,8 +950,10 @@ def deploy(
                 infra_flag=infra,
                 kubeconfig_path=kubeconfig_path,
                 keycloak_admin_password=kc_admin_pw,
+                registry_url=effective_registry_url,
+                registry_project=registry_project,
             )
-        
+
         #------------------------------------------------------------------
         # 6) Monitoring
         #------------------------------------------------------------------
@@ -725,7 +964,9 @@ def deploy(
                 ssh=ssh,
                 workspace_root=WORKSPACE_ROOT,
                 infra_flag=infra,
-                kubeconfig_path=kubeconfig_path
+                kubeconfig_path=kubeconfig_path,
+                registry_url=effective_registry_url,
+                registry_project=registry_project,
             )
         # ------------------------------------------------------------------------------
         # 7) OpenStack
@@ -742,11 +983,367 @@ def deploy(
                 managed_user=managed_user,
                 ssh_key=ssh_key,
                 ssh_password=ssh_password,
+                registry_url=effective_registry_url,
+                registry_project=registry_project,
             )
 
     finally:
         if client is not None:
             client.close()
+
+
+# ------------------------------------------------------------------------------
+# mgmt command — bootstrap a management cluster on a fresh Ubuntu node
+# ------------------------------------------------------------------------------
+
+@app.command()
+def mgmt(
+    config: str = typer.Argument(..., help="Cluster definition YAML (same format as deploy)"),
+    ssh_host: Optional[str] = typer.Option(
+        None,
+        "--ssh-host",
+        help="IP of the fresh Ubuntu node (overrides mgmt_cluster.host in config)",
+    ),
+    ssh_username: Optional[str] = typer.Option(
+        None,
+        "--ssh-username",
+        help="SSH username on the target node (overrides mgmt_cluster.ssh_username)",
+    ),
+    ssh_password: Optional[str] = typer.Option(
+        None,
+        "--ssh-password",
+        help="SSH password (overrides mgmt_cluster.ssh_password from secrets.yaml)",
+    ),
+    ssh_key: Optional[Path] = typer.Option(
+        None,
+        "--ssh-key",
+        help="Path to SSH private key (alternative to password)",
+    ),
+    kubeconfig_out: Optional[str] = typer.Option(
+        None,
+        "--kubeconfig-out",
+        help="Local path to save the generated kubeconfig (overrides mgmt_cluster.kubeconfig_output_path)",
+    ),
+    provisioning_interface: Optional[str] = typer.Option(
+        None,
+        "--provisioning-interface",
+        help="Network interface used for bare-metal provisioning (overrides mgmt_cluster.provisioning_interface, default: ens18)",
+    ),
+    skip_harbor: bool = typer.Option(
+        False,
+        "--skip-harbor",
+        help="Skip Harbor registry deployment even if install_harbor=true in config",
+    ),
+    debug: bool = typer.Option(False, "--debug"),
+):
+    """
+    Bootstrap a management Kubernetes cluster on a fresh Ubuntu node,
+    then install Metal3 / Ironic / CAPI on top of it.
+
+    Example:
+
+      daalu mgmt cluster-defs/cluster.yaml \\
+        --ssh-host 192.168.0.163 \\
+        --ssh-password admin10 \\
+        --provisioning-interface ens18 \\
+        --kubeconfig-out ~/.kube/daalu-mgmt-config
+    """
+    logger, run_id, log_path = init_logging(verbose=debug)
+
+    typer.echo("")
+    typer.secho("Daalu — Management Cluster Bootstrap", bold=True)
+    typer.echo(f"  Run ID : {run_id}")
+    typer.echo(f"  Logs   : {log_path}")
+    typer.echo("")
+
+    cfg: DaaluConfig = load_config(config)
+
+    # Apply CLI overrides onto mgmt_cluster config
+    if cfg.mgmt_cluster is None:
+        # Build a minimal config from CLI flags
+        if not ssh_host:
+            typer.secho(
+                "ERROR: --ssh-host is required when mgmt_cluster is not defined in cluster.yaml.",
+                fg=typer.colors.RED, err=True,
+            )
+            raise typer.Exit(1)
+        from daalu.bootstrap.mgmt.models import MgmtClusterConfig
+        cfg = cfg.model_copy(
+            update={"mgmt_cluster": MgmtClusterConfig(host=ssh_host)}
+        )
+
+    # Layer CLI flag overrides
+    overrides: dict = {}
+    if ssh_host:
+        overrides["host"] = ssh_host
+    if ssh_username:
+        overrides["ssh_username"] = ssh_username
+    if ssh_password:
+        overrides["ssh_password"] = ssh_password
+    if ssh_key:
+        overrides["ssh_key"] = str(ssh_key)
+    if kubeconfig_out:
+        overrides["kubeconfig_output_path"] = kubeconfig_out
+    if provisioning_interface:
+        overrides["provisioning_interface"] = provisioning_interface
+    if skip_harbor:
+        overrides["install_harbor"] = False
+
+    if overrides:
+        cfg = cfg.model_copy(
+            update={"mgmt_cluster": cfg.mgmt_cluster.model_copy(update=overrides)}
+        )
+
+    kubeconfig_path, harbor_url = MgmtClusterManager(cfg, WORKSPACE_ROOT).deploy()
+
+    config_arg = Path(config).name
+
+    typer.echo("")
+    typer.secho("Management cluster is ready!", bold=True, fg=typer.colors.GREEN)
+    typer.echo("")
+    typer.echo(f"  Kubeconfig  : {kubeconfig_path}")
+    if harbor_url:
+        typer.echo(f"  Harbor UI   : https://{harbor_url}")
+        typer.echo(f"  Harbor creds: admin / <registry.admin_password from secrets.yaml>")
+    typer.echo("")
+    typer.secho("Next steps:", bold=True)
+    typer.echo("")
+    typer.echo("  1. Verify the cluster:")
+    typer.echo(f"       export KUBECONFIG={kubeconfig_path}")
+    typer.echo("       kubectl get nodes")
+    typer.echo("")
+    typer.echo("  2. Deploy OpenStack components:")
+    typer.echo(f"       daalu deploy {config_arg} \\")
+    typer.echo( "         --managed-user builder \\")
+    typer.echo( "         --managed-user-password <password> \\")
+    typer.echo( "         --ssh-key ~/.ssh/openstack-key \\")
+    typer.echo( "         --local-registry \\")
+    typer.echo(f"         --mgmt-kubeconfig {kubeconfig_path}")
+    typer.echo("")
+    typer.echo("  3. To tear everything down:")
+    typer.echo(f"       daalu clean {config_arg} --mgmt-kubeconfig {kubeconfig_path}")
+
+
+@app.command("mirror-images")
+def mirror_images(
+    harbor_url: str = typer.Option(
+        ...,
+        "--harbor-url",
+        help="Harbor host:port to mirror images into (e.g. 192.168.0.163:30003)",
+    ),
+    config: Optional[str] = typer.Option(
+        None,
+        "--config",
+        help="Secrets YAML (defaults to cloud-config/secrets.yaml)",
+    ),
+) -> None:
+    """
+    Mirror all images from assets/ into Harbor.
+
+    Reads images from assets/*/values.yaml (images.tags.*) and
+    assets/*/extra_images.yaml, then uses skopeo to copy each one
+    into Harbor. Already-mirrored images are skipped.
+    """
+    import yaml as _yaml
+    from daalu.config.models import RegistryConfig
+    from daalu.bootstrap.registry.manager import RegistryManager
+    from daalu.logging.log import init_logging
+
+    init_logging(verbose=True)
+    secrets_path = Path(config) if config else WORKSPACE_ROOT / "cloud-config" / "secrets.yaml"
+    try:
+        raw = _yaml.safe_load(secrets_path.read_text()) or {}
+        registry_cfg = RegistryConfig.model_validate(raw.get("registry", {}))
+    except Exception as exc:
+        typer.secho(f"[registry] Could not load config: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1)
+
+    # Override harbor_hostname with the explicitly provided URL so mirroring
+    # goes to the right place (dev VM may only reach the mgmt NIC, not the provisioning NIC).
+    registry_cfg = registry_cfg.model_copy(update={"harbor_hostname": harbor_url})
+
+    mgr = RegistryManager(
+        registry_cfg=registry_cfg,
+        workspace_root=WORKSPACE_ROOT,
+        secrets_path=secrets_path,
+    )
+    # Point the access URL directly at the provided harbor_url
+    mgr._harbor_access_url = harbor_url
+
+    typer.echo(f"[registry] Mirroring images to https://{harbor_url} ...")
+    mgr.mirror_images()
+    typer.secho("\n[registry] Mirroring complete.", fg=typer.colors.GREEN)
+
+
+@app.command("configure-registry-trust")
+def configure_registry_trust(
+    cluster_kubeconfig: str = typer.Option(
+        ...,
+        "--cluster-kubeconfig",
+        help="Kubeconfig for the infra cluster whose nodes need to trust Harbor",
+    ),
+    mgmt_kubeconfig: Optional[str] = typer.Option(
+        None,
+        "--mgmt-kubeconfig",
+        help="Kubeconfig for the mgmt cluster (overrides registry.mgmt_kubeconfig in config)",
+    ),
+    config: Optional[str] = typer.Option(
+        None,
+        "--config",
+        help="Cluster/secrets YAML (defaults to cloud-config/secrets.yaml in workspace root)",
+    ),
+) -> None:
+    """
+    Configure containerd on every infra-cluster node to trust Harbor's
+    self-signed certificate (writes skip_verify hosts.toml on each node).
+
+    Run this after Harbor is deployed whenever:
+      - You have new nodes that haven't been configured yet
+      - You redeployed Harbor with a new IP / cert
+      - Image pulls are failing with 'x509: certificate signed by unknown authority'
+    """
+    import yaml as _yaml
+    from daalu.config.models import RegistryConfig
+    from daalu.bootstrap.registry.manager import RegistryManager
+
+    secrets_path = Path(config) if config else WORKSPACE_ROOT / "cloud-config" / "secrets.yaml"
+
+    try:
+        raw = _yaml.safe_load(secrets_path.read_text()) or {}
+        registry_raw = raw.get("registry", {})
+        registry_cfg = RegistryConfig.model_validate(registry_raw)
+    except Exception as exc:
+        typer.secho(
+            f"[registry] Could not load registry config from {secrets_path}: {exc}",
+            fg=typer.colors.RED, err=True,
+        )
+        raise typer.Exit(1)
+
+    if mgmt_kubeconfig:
+        registry_cfg = registry_cfg.model_copy(update={"mgmt_kubeconfig": mgmt_kubeconfig})
+
+    try:
+        mgr = RegistryManager(
+            registry_cfg=registry_cfg,
+            workspace_root=WORKSPACE_ROOT,
+            secrets_path=WORKSPACE_ROOT / "cloud-config" / "secrets.yaml",
+        )
+        mgr.configure_cluster_registry_trust(cluster_kubeconfig)
+        typer.secho(
+            "\n[registry] All infra cluster nodes configured to trust Harbor.",
+            fg=typer.colors.GREEN,
+        )
+    except Exception as exc:
+        typer.secho(f"[registry] ERROR: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1)
+
+
+# ------------------------------------------------------------------------------
+# clean command — tear down the mgmt cluster and all workloads
+# ------------------------------------------------------------------------------
+
+@app.command()
+def clean(
+    config: str = typer.Argument(..., help="Cluster definition YAML"),
+    mgmt_kubeconfig: Optional[str] = typer.Option(
+        None,
+        "--mgmt-kubeconfig",
+        help="Path to mgmt cluster kubeconfig (defaults to mgmt_cluster.kubeconfig_output_path)",
+    ),
+    ssh_key: Optional[Path] = typer.Option(
+        None,
+        "--ssh-key",
+        help="SSH private key for the mgmt node (overrides mgmt_cluster.ssh_key)",
+    ),
+    ssh_password: Optional[str] = typer.Option(
+        None,
+        "--ssh-password",
+        help="SSH password for the mgmt node (overrides mgmt_cluster.ssh_password)",
+    ),
+    skip_workload_cluster: bool = typer.Option(
+        False,
+        "--skip-workload-cluster",
+        help="Skip deleting the workload CAPI cluster (use if already gone)",
+    ),
+    no_wait: bool = typer.Option(
+        False,
+        "--no-wait",
+        help="Do not wait for BareMetalHosts to deprovision before resetting the mgmt node",
+    ),
+    yes: bool = typer.Option(
+        False,
+        "--yes", "-y",
+        help="Skip confirmation prompt",
+    ),
+    debug: bool = typer.Option(False, "--debug"),
+):
+    """
+    Tear down everything daalu created:
+
+      1. Delete the workload CAPI cluster so Metal3/Ironic can cleanly
+         deprovision (wipe) bare-metal hosts.
+      2. SSH to the mgmt node: kubeadm reset, flush CNI/iptables,
+         wipe Harbor disk, remove Metal3/Ironic state.
+      3. Remove local kubeconfigs and known_hosts entries.
+
+    Example:
+
+      daalu clean cluster-defs/cluster.yaml --mgmt-kubeconfig ~/.kube/daalu-mgmt-config
+
+      # Skip waiting for deprovisioning (faster, but BMHs may not be wiped):
+      daalu clean cluster-defs/cluster.yaml --no-wait
+
+      # Already deleted the workload cluster manually:
+      daalu clean cluster-defs/cluster.yaml --skip-workload-cluster
+    """
+    init_logging(verbose=debug)
+
+    cfg: DaaluConfig = load_config(config)
+
+    # Apply CLI SSH overrides
+    if cfg.mgmt_cluster and (ssh_key or ssh_password):
+        overrides: dict = {}
+        if ssh_key:
+            overrides["ssh_key"] = str(ssh_key)
+        if ssh_password:
+            overrides["ssh_password"] = ssh_password
+        cfg = cfg.model_copy(
+            update={"mgmt_cluster": cfg.mgmt_cluster.model_copy(update=overrides)}
+        )
+
+    mgmt_host = cfg.mgmt_cluster.host if cfg.mgmt_cluster else "unknown"
+    harbor_disk = (
+        cfg.registry.disk_device if cfg.registry and cfg.registry.disk_device else "none"
+    )
+
+    typer.echo("")
+    typer.secho("Daalu — Teardown", bold=True)
+    typer.echo("")
+    typer.echo("  This will:")
+    typer.echo("    1. Delete workload CAPI cluster (triggers bare-metal wipe via Ironic)")
+    typer.echo(f"    2. SSH to {mgmt_host} → kubeadm reset, CNI flush, Harbor disk wipe ({harbor_disk})")
+    typer.echo("    3. Remove local kubeconfigs and known_hosts entries")
+    typer.echo("")
+
+    if not yes:
+        typer.confirm("Proceed with teardown?", abort=True)
+
+    try:
+        MgmtClusterCleaner(cfg).clean(
+            mgmt_kubeconfig=mgmt_kubeconfig,
+            skip_workload_cluster=skip_workload_cluster,
+            wait_deprovision=not no_wait,
+        )
+    except Exception as exc:
+        typer.secho(f"\n[clean] ERROR: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1)
+
+    typer.echo("")
+    typer.secho("Teardown complete.", bold=True, fg=typer.colors.GREEN)
+    typer.echo("")
+    typer.echo("  To reinstall:")
+    typer.echo(f"    daalu mgmt {config}")
+    typer.echo("")
 
 
 if __name__ == "__main__":

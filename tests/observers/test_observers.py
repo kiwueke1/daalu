@@ -10,12 +10,12 @@ class Capture(Observer):
     def notify(self, event): self.events.append(event)
 
 class FakeHelm:
-    def add_repo(self, repo): pass
-    def update_repos(self): pass
-    def lint(self, rel): pass
-    def upgrade_install(self, rel): pass
+    def add_repo(self, repo, debug: bool = False): pass
+    def update_repos(self, debug: bool = False): pass
+    def lint(self, rel, debug: bool = False): pass
+    def upgrade_install(self, rel, debug: bool = False): pass
     def uninstall(self, name, ns): pass
-    def diff(self, rel): return ""
+    def diff(self, rel, debug: bool = False): return ""
 
 def test_observer_receives_events():
     cfg = ClusterConfig(environment="dev", repos=[], releases=[

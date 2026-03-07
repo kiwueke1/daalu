@@ -151,17 +151,34 @@ class HelmCliRunner(IHelm):
         self._run(argv, capture=False, stream=debug, sudo=True)
 
 
-    def release_is_deployed(self, release_name: str, namespace: str) -> bool:
-        """Check if a helm release exists and is in 'deployed' status."""
+    def release_is_deployed(self, release_name: str, namespace: str, kubeconfig: str | None = None) -> bool:
+        """Return True if a helm release exists in any status (deployed, failed, pending, etc).
+
+        A release in 'failed' status still has its resources in the cluster.
+        Re-running helm upgrade --install on a failed release would trigger
+        hook re-execution and pod churn. Callers should skip the install if
+        the release exists at all; use helm uninstall explicitly to force a reinstall.
+        """
         import json as _json
 
-        argv = self._base() + [
-            "status", release_name, "-n", namespace, "-o", "json",
-        ]
+        env_prefix = f"KUBECONFIG={kubeconfig} " if kubeconfig else ""
+        cmd = (
+            env_prefix
+            + " ".join(self._base() + ["status", release_name, "-n", namespace, "-o", "json"])
+        )
         try:
-            out = self._run(argv, allow_rc={0}, capture=True, sudo=True)
+            if self.ssh:
+                rc, out, err = self.ssh.run(cmd, sudo=True)
+                if rc != 0:
+                    return False
+            else:
+                import subprocess
+                cp = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+                if cp.returncode != 0:
+                    return False
+                out = cp.stdout
             data = _json.loads(out)
-            return data.get("info", {}).get("status") == "deployed"
+            return bool(data.get("info", {}).get("status"))
         except Exception:
             return False
 
@@ -210,8 +227,7 @@ class HelmCliRunner(IHelm):
             cp = self._run(argv, allow_rc={0, 2}, capture=False, stream=True, sudo=True)
             return ""  # streamed output already printed
         else:
-            cp = self._run(argv, allow_rc={0, 2}, capture=True, sudo=True)
-            return cp.stdout
+            return self._run(argv, allow_rc={0, 2}, capture=True, sudo=True)
 
     def lint(self, rel: ReleaseSpec, debug: bool = False) -> None:
         argv = self._base() + ["lint", rel.chart] + self._values_args(rel)

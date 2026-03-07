@@ -12,15 +12,42 @@ from daalu.bootstrap.engine.values import deep_merge
 from daalu.kube.kubectl import KubectlRunner
 from daalu.config.models import RepoSpec
 from daalu.bootstrap.engine.infra_logging import InfraJsonlLogger
+from daalu.bootstrap.registry.image_mirror import ImageMirror, _is_custom_registry
 
 log = logging.getLogger("daalu")
 
 
+def _rewrite_images(values: dict, registry_url: str, project: str) -> dict:
+    """
+    Walk values['images']['tags'] and rewrite each image to point at Harbor.
+    Custom/local images (IP:port style) are left unchanged.
+    """
+    tags = values.get("images", {}).get("tags", {})
+    if not isinstance(tags, dict):
+        return values
+
+    for key, image in tags.items():
+        if isinstance(image, str) and image and not _is_custom_registry(image):
+            tags[key] = ImageMirror.rewrite_image_static(image, registry_url, project)
+
+    return values
+
+
 class HelmInfraEngine:
-    def __init__(self, *, helm, ssh, logger: InfraJsonlLogger | None = None):
+    def __init__(
+        self,
+        *,
+        helm,
+        ssh,
+        logger: InfraJsonlLogger | None = None,
+        registry_url: str | None = None,
+        registry_project: str = "openstack",
+    ):
         self.helm = helm
         self.ssh = ssh
         self.logger = logger
+        self.registry_url = registry_url
+        self.registry_project = registry_project
 
     def base_values(self, component) -> dict:
         """
@@ -141,6 +168,9 @@ class HelmInfraEngine:
                     component.values(),
                 )
 
+                if self.registry_url:
+                    values = _rewrite_images(values, self.registry_url, self.registry_project)
+
                 # Dump merged values for debugging
                 #import json
                 #log.info(
@@ -153,15 +183,10 @@ class HelmInfraEngine:
                 if self.logger:
                     self.logger.set_stage("helm.install_or_upgrade")
 
-                if self.helm.release_is_deployed(
-                    component.release_name, component.namespace,
-                ):
-                    log.info(
-                        "[%s] Helm release '%s' already deployed in '%s' -- skipping",
-                        component.name, component.release_name, component.namespace,
-                    )
+                if self.helm.release_is_deployed(component.release_name, component.namespace, component.kubeconfig):
+                    log.info("[%s] Release already installed — skipping.", component.name)
                 else:
-                    log.info("[%s] Installing helm chart...", component.name)
+                    log.info("[%s] Installing/upgrading helm chart...", component.name)
                     self.helm.install_or_upgrade(
                         name=component.release_name,
                         chart=str(chart_path),
@@ -169,10 +194,9 @@ class HelmInfraEngine:
                         values=values,
                         kubeconfig=component.kubeconfig,
                         wait=False,
-                        atomic=False
-
+                        atomic=False,
                     )
-                    log.info("[%s] Helm install command completed", component.name)
+                    log.info("[%s] Helm install/upgrade command completed", component.name)
 
                 # ---------------- Wait ----------------
                 if component.wait_for_pods:
@@ -186,6 +210,7 @@ class HelmInfraEngine:
                     kubectl.wait_for_pods_running(
                         namespace=component.namespace,
                         min_running=component.min_running_pods,
+                        timeout_seconds=component.wait_timeout_seconds,
                     )
                     log.info("[%s] Pods are ready", component.name)
 

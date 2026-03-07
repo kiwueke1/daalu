@@ -1,0 +1,36 @@
+images:
+  tags:
+    bootstrap: docker.io/openstackhelm/ceilometer:2024.1-ubuntu_jammy
+    db_init: docker.io/openstackhelm/ceilometer:2024.1-ubuntu_jammy
+    db_drop: docker.io/openstackhelm/ceilometer:2024.1-ubuntu_jammy
+    ceilometer_db_sync: docker.io/openstackhelm/ceilometer:2024.1-ubuntu_jammy
+    rabbit_init: docker.io/rabbitmq:3.13-management
+    ks_user: docker.io/openstackhelm/ceilometer:2024.1-ubuntu_jammy
+    ks_service: docker.io/openstackhelm/ceilometer:2024.1-ubuntu_jammy
+    ks_endpoints: docker.io/openstackhelm/ceilometer:2024.1-ubuntu_jammy
+    ceilometer_central: docker.io/openstackhelm/ceilometer:2024.1-ubuntu_jammy
+    ceilometer_collector: docker.io/openstackhelm/ceilometer:2024.1-ubuntu_jammy
+    ceilometer_notification: docker.io/openstackhelm/ceilometer:2024.1-ubuntu_jammy
+    ceilometer_compute: docker.io/openstackhelm/ceilometer:2024.1-ubuntu_jammy
+pod:
+  replicas:
+    central: 1
+    collector: 1
+    notification: 1
+    compute: 1
+conf:
+  ceilometer:
+    DEFAULT:
+      log_config_append: null
+    oslo_messaging_notifications:
+      driver: messagingv2
+      topics: notifications
+    collector:
+      workers: 2
+    notification:
+      workers: 2
+  rabbitmq:
+    policies: []
+manifests:
+  ingress_api: false
+  service_ingress_api: false
