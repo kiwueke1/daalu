@@ -25,6 +25,8 @@ class RabbitMQClusterOperatorComponent(InfraComponent):
         assets_dir: Path,
         kubeconfig: str,
         github_token: Optional[str] = None,
+        registry_url: str | None = None,
+        registry_project: str = "openstack",
     ):
         super().__init__(
             name="rabbitmq-cluster-operator",
@@ -43,8 +45,10 @@ class RabbitMQClusterOperatorComponent(InfraComponent):
         self.assets_dir = assets_dir
         self.github_token = github_token
         self.wait_for_pods = True
+        self._registry_url = registry_url
+        self._registry_project = registry_project
 
-        self._values: Dict = {}
+        self._values: dict = {}
 
     # ------------------------------------------------------------------
     # CRDs must exist before Helm
@@ -75,6 +79,34 @@ class RabbitMQClusterOperatorComponent(InfraComponent):
     # ------------------------------------------------------------------
     def values_file(self) -> Path:
         return self.values_path
+
+    def values(self) -> dict:
+        data = self.load_values_file(self.values_path)
+        if self._registry_url:
+            # Override the operator's DEFAULT_RABBITMQ_IMAGE to point at Harbor.
+            # The chart sets this via rabbitmqImage.registry + .repository + .tag.
+            # We split on the last ':' to get tag, then rewrite the registry/repo.
+            rmq_img = data.get("rabbitmqImage", {})
+            registry = rmq_img.get("registry", "docker.io")
+            repository = rmq_img.get("repository", "library/rabbitmq")
+            tag = rmq_img.get("tag", "")
+            src_image = f"{registry}/{repository}:{tag}" if tag else f"{registry}/{repository}"
+            from daalu.bootstrap.registry.image_mirror import ImageMirror
+            rewritten = ImageMirror.rewrite_image_static(
+                src_image, self._registry_url, self._registry_project
+            )
+            # Split rewritten back into registry+repo and tag
+            if ":" in rewritten.split("/")[-1]:
+                repo_part, tag_part = rewritten.rsplit(":", 1)
+            else:
+                repo_part, tag_part = rewritten, ""
+            # registry is the first component (host:port or host)
+            parts = repo_part.split("/", 1)
+            data.setdefault("rabbitmqImage", {})["registry"] = parts[0]
+            data["rabbitmqImage"]["repository"] = parts[1] if len(parts) > 1 else ""
+            if tag_part:
+                data["rabbitmqImage"]["tag"] = tag_part
+        return data
 
     # ------------------------------------------------------------------
     # Argo CD onboarding

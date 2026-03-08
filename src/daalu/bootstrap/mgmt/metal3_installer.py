@@ -68,6 +68,7 @@ class Metal3Installer:
         self._install_capi()
         self._install_irso()
         self._deploy_ironic()
+        self._deploy_image_server()
         self._setup_bmo()
         self._install_capm3()
         log.info("[mgmt/metal3] Metal3 stack installed successfully")
@@ -198,6 +199,94 @@ class Metal3Installer:
             "--timeout=10m",
         )
         log.info("[mgmt/metal3] Ironic is Ready")
+
+    # ------------------------------------------------------------------
+    # Step 4b — nginx image server (serves node OS image on port 80)
+    # ------------------------------------------------------------------
+
+    def _deploy_image_server(self) -> None:
+        """
+        Deploy a hostNetwork nginx pod that serves /srv/images/ on port 80.
+
+        Ironic validates and downloads the node OS image (qcow2) via HTTP before
+        writing it to bare-metal disks.  The IrSO httpd runs on port 6180, so a
+        separate server is needed for the image URL (ironic_http_base port 80).
+
+        The image file is expected at /srv/images/<filename> on the mgmt node,
+        placed there during image download (daalu mgmt or manual copy).
+        """
+        ns = self._cfg.ironic_namespace
+        pod_name = "ironic-image-server"
+
+        # Idempotent: skip if already running
+        r = subprocess.run(
+            ["kubectl", "--kubeconfig", self._kc,
+             "get", "pod", pod_name, "-n", ns],
+            capture_output=True, check=False,
+        )
+        if r.returncode == 0:
+            log.info("[mgmt/metal3] Image server pod already exists — skipping")
+            return
+
+        log.info("[mgmt/metal3] Deploying nginx image server on port 80...")
+        pod = {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {"name": pod_name, "namespace": ns,
+                         "labels": {"app": pod_name}},
+            "spec": {
+                "hostNetwork": True,
+                "tolerations": [{"operator": "Exists"}],
+                "restartPolicy": "Always",
+                "containers": [{
+                    "name": "nginx",
+                    "image": "nginx:alpine",
+                    "ports": [{"containerPort": 80, "hostPort": 80}],
+                    "volumeMounts": [
+                        {"name": "images", "mountPath": "/usr/share/nginx/html",
+                         "readOnly": True},
+                    ],
+                }],
+                "volumes": [{
+                    "name": "images",
+                    "hostPath": {"path": "/srv/images", "type": "DirectoryOrCreate"},
+                }],
+            },
+        }
+        self._kubectl_stdin("apply", "-f", "-", input=yaml.dump(pod))
+        log.info("[mgmt/metal3] Image server pod deployed at http://<provisioning-ip>/")
+
+        provisioning_ip = self._cfg.provisioning_ip or self._cfg.host
+        log.warning(
+            "\n"
+            "============================================================\n"
+            "  ACTION REQUIRED: Place the node OS image on the mgmt node\n"
+            "============================================================\n"
+            "  The nginx image server is ready at http://%s/\n"
+            "  Ironic will download the OS image from this server during\n"
+            "  bare-metal node provisioning (when BareMetalHost objects\n"
+            "  are applied). You must place the image file BEFORE running\n"
+            "  'daalu deploy-infra'.\n"
+            "\n"
+            "  Steps:\n"
+            "    1. Download a CAPI-compatible node image (.qcow2), e.g.:\n"
+            "       https://image-builder.sigs.k8s.io/\n"
+            "    2. Copy it to the mgmt node:\n"
+            "       scp <image>.qcow2 %s@%s:/srv/images/\n"
+            "    3. Verify it is served:\n"
+            "       curl -I http://%s/<image>.qcow2  (expect HTTP 200)\n"
+            "    4. Set 'ironic_http_base' in cluster.yaml to:\n"
+            "       http://%s\n"
+            "    5. Set the image URL in your BareMetalHost spec to:\n"
+            "       http://%s/<image>.qcow2\n"
+            "============================================================",
+            provisioning_ip,
+            self._cfg.ssh_username,
+            self._cfg.host,
+            provisioning_ip,
+            provisioning_ip,
+            provisioning_ip,
+        )
 
     # ------------------------------------------------------------------
     # Step 5 — Baremetal Operator, wired to Ironic

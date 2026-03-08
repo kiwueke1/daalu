@@ -334,6 +334,18 @@ set -euo pipefail
 apt-get update -qq && apt-get install -yqq default-mysql-client > /dev/null 2>&1
 pip install -q bcrypt 2>/dev/null
 
+MYSQL_CMD="mysql -h percona-xtradb-haproxy.openstack.svc.cluster.local -P 3306 -u root -D keycloak -N -B"
+
+# On a fresh install Keycloak hasn't run yet and the DB schema doesn't exist.
+# KC_BOOTSTRAP_ADMIN_PASSWORD handles the initial admin password on first boot,
+# so there is nothing to do here — exit cleanly.
+TABLE_EXISTS=$($MYSQL_CMD -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='keycloak' AND table_name='USER_ENTITY'" 2>/dev/null | tail -1 || echo "0")
+if [ "$TABLE_EXISTS" = "0" ]; then
+  echo "Keycloak DB schema not yet initialized (fresh install) — skipping password reset."
+  echo "KC_BOOTSTRAP_ADMIN_PASSWORD will set the admin password on first Keycloak boot."
+  exit 0
+fi
+
 # Generate bcrypt hash
 BCRYPT_HASH=$(python3 -c "
 import bcrypt, os
@@ -343,8 +355,6 @@ print(hashed)
 ")
 
 echo "Generated bcrypt hash successfully"
-
-MYSQL_CMD="mysql -h percona-xtradb-haproxy.openstack.svc.cluster.local -P 3306 -u root -D keycloak -N -B"
 
 echo "=== Ensuring admin user in keycloak DB ==="
 

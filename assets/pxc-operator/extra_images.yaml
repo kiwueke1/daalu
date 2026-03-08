@@ -1,0 +1,11 @@
+# Percona XtraDB Cluster Operator and cluster images not in images.tags.* scanning.
+# These are mirrored to Harbor by `daalu mirror-images`.
+# Operator deployment image
+- percona/percona-xtradb-cluster-operator:1.19.0
+# Init container + haproxy sidecar images (crVersion: 1.14.0)
+- percona/percona-xtradb-cluster-operator:1.14.0
+- percona/percona-xtradb-cluster-operator:1.14.0-haproxy
+# PXC cluster node image
+- percona/percona-xtradb-cluster:8.0.36-28.1
+# mysqld-exporter sidecar
+- quay.io/prometheus/mysqld-exporter:v0.17.0

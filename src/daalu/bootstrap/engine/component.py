@@ -47,6 +47,9 @@ class InfraComponent(ABC):
     # uses_helm boolean differentiates components that dont require Helm actions.
     uses_helm: bool = True
     requires_public_ingress: bool = False
+    # Set to False for non-OpenStack-Helm charts (e.g. cert-manager, argocd)
+    # whose JSON schemas reject the OSH-style top-level `images.tags` block.
+    inject_base_images: bool = True
 
     # Optional hooks
     wait_for_pods: bool = True

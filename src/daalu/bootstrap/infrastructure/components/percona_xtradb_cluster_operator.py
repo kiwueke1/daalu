@@ -23,6 +23,8 @@ class PerconaXtraDBClusterOperatorComponent(InfraComponent):
         assets_dir: Path,
         kubeconfig: str,
         github_token: Optional[str] = None,
+        registry_url: Optional[str] = None,
+        registry_project: str = "openstack",
     ):
         super().__init__(
             name="pxc-operator",
@@ -41,8 +43,8 @@ class PerconaXtraDBClusterOperatorComponent(InfraComponent):
         self.assets_dir = assets_dir
         self.github_token = github_token
         self.wait_for_pods = True
-
-        self._values: Dict = {}
+        self._registry_url = registry_url
+        self._registry_project = registry_project
 
     # ------------------------------------------------------------------
     # Upload Helm chart (replaces vexxhost.kubernetes.upload_helm_chart)
@@ -54,9 +56,14 @@ class PerconaXtraDBClusterOperatorComponent(InfraComponent):
     #        release_name=self.release_name,
     #    )
 
-    # ------------------------------------------------------------------
-    def values_file(self) -> Path:
-        return self.values_path
+    def values(self) -> dict:
+        data = self.load_values_file(self.values_path)
+        if self._registry_url:
+            data["operatorImageRepository"] = (
+                f"{self._registry_url}/{self._registry_project}"
+                "/percona-xtradb-cluster-operator"
+            )
+        return data
 
     # ------------------------------------------------------------------
     # Argo CD onboarding

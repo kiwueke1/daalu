@@ -738,20 +738,21 @@ class HarborDeployer:
         )
         hosts_toml_b64 = base64.b64encode(hosts_toml.encode()).decode()
 
+        # CRI-O registries.conf block (same format as ssh_bootstrapper)
+        crio_conf = f'[[registry]]\nlocation = "{registry}"\ninsecure = true\n'
+        crio_conf_b64 = base64.b64encode(crio_conf.encode()).decode()
+
         # Shell script run inside each DaemonSet pod (host filesystem at /host).
-        # Two-pronged approach so it works on both containerd 1.x and 2.x:
-        #   1. hosts.toml (new-style, needs config_path)
-        #   2. insecure_skip_verify in config.toml (old-style, no config_path needed)
+        # Handles both containerd and CRI-O runtimes.
         configure_sh = "\n".join([
             "#!/bin/sh",
             "set -e",
             f'REGISTRY="{registry}"',
-            # --- new-style: certs.d/hosts.toml ---
+            # --- containerd: certs.d/hosts.toml (new-style) ---
             "CERTS_DIR=/host/etc/containerd/certs.d",
             'mkdir -p "$CERTS_DIR/$REGISTRY"',
             f'echo "{hosts_toml_b64}" | base64 -d > "$CERTS_DIR/$REGISTRY/hosts.toml"',
-            'echo "Wrote hosts.toml for $REGISTRY"',
-            # --- new-style: ensure config_path is set ---
+            # --- containerd: ensure config_path is set ---
             "CONFIG=/host/etc/containerd/config.toml",
             'if [ -f "$CONFIG" ]; then',
             '  if grep -q "config_path" "$CONFIG"; then',
@@ -759,13 +760,16 @@ class HarborDeployer:
             '  else',
             '    printf \'\\n[plugins."io.containerd.grpc.v1.cri".registry]\\n  config_path = "/etc/containerd/certs.d"\\n\' >> "$CONFIG"',
             '  fi',
-            # --- old-style fallback: insecure_skip_verify (works without config_path) ---
-            f'  if ! grep -q "insecure_skip_verify" "$CONFIG"; then',
+            '  if ! grep -q "insecure_skip_verify" "$CONFIG"; then',
             f'    printf \'\\n[plugins."io.containerd.grpc.v1.cri".registry.configs."%s".tls]\\n  insecure_skip_verify = true\\n\' "$REGISTRY" >> "$CONFIG"',
             '  fi',
             "fi",
-            # Restart containerd on the host via nsenter into the host mount namespace
-            "nsenter -m/proc/1/ns/mnt -- systemctl restart containerd",
+            # --- CRI-O: registries.conf.d ---
+            "mkdir -p /host/etc/containers/registries.conf.d",
+            f'echo "{crio_conf_b64}" | base64 -d > /host/etc/containers/registries.conf.d/00-local.conf',
+            # Restart whichever runtime is active
+            "nsenter -m/proc/1/ns/mnt -- sh -c 'systemctl is-active containerd && systemctl restart containerd || true'",
+            "nsenter -m/proc/1/ns/mnt -- sh -c 'systemctl is-active crio && systemctl restart crio || true'",
             f'echo "Node configured for $REGISTRY"',
             "sleep infinity",
         ])
@@ -854,7 +858,7 @@ class HarborDeployer:
         try:
             resp = requests.post(
                 url,
-                json={"project_name": self.harbor_project, "public": False},
+                json={"project_name": self.harbor_project, "public": True},
                 auth=("admin", self.admin_password),
                 verify=False,
                 timeout=30,
@@ -862,7 +866,14 @@ class HarborDeployer:
             if resp.status_code == 201:
                 log.info("[registry] Harbor project '%s' created", self.harbor_project)
             elif resp.status_code == 409:
-                log.info("[registry] Harbor project '%s' already exists", self.harbor_project)
+                log.info("[registry] Harbor project '%s' already exists — ensuring public", self.harbor_project)
+                requests.put(
+                    f"{url}/{self.harbor_project}",
+                    json={"metadata": {"public": "true"}},
+                    auth=("admin", self.admin_password),
+                    verify=False,
+                    timeout=30,
+                )
             elif resp.status_code == 401:
                 log.warning(
                     "[registry] Harbor API returned 401 Unauthorized at %s. "

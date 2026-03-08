@@ -224,6 +224,8 @@ class OctaviaComponent(InfraComponent):
         self._create_amphora_flavor(kubectl)
         log.info("[octavia] Creating amphora SSH key...")
         self._create_amphora_ssh_key(kubectl)
+        log.info("[octavia] Creating health-manager ports...")
+        self._create_health_manager_ports(kubectl)
         log.info("[octavia] Resource generation complete")
 
     def _resource_exists(self, kubectl, resource_type: str, name: str) -> bool:
@@ -280,6 +282,45 @@ class OctaviaComponent(InfraComponent):
             raise RuntimeError(
                 f"[octavia] Failed to create management subnet: {err or out}"
             )
+
+    def _create_health_manager_ports(self, kubectl):
+        """Create one octavia health-manager port per Kubernetes node on lb-mgmt-net.
+
+        The octavia-health-manager-get-port.sh init container looks for a port named
+        ``octavia-health-manager-port-<nodename>`` and fails if it doesn't exist.
+        """
+        rc, out, _ = kubectl._run(
+            "get nodes -o jsonpath={.items[*].metadata.name}"
+        )
+        if rc != 0:
+            log.warning("[octavia] Could not list nodes, skipping health-manager port creation")
+            return
+
+        node_names = out.strip().split()
+        if not node_names:
+            log.warning("[octavia] No nodes found, skipping health-manager port creation")
+            return
+
+        for node_name in node_names:
+            port_name = f"octavia-health-manager-port-{node_name}"
+            if self._resource_exists(kubectl, "port", port_name):
+                log.debug("[octavia] Port '%s' already exists, skipping", port_name)
+                continue
+            log.info("[octavia] Creating port '%s'...", port_name)
+            rc, out, err = self._run_openstack_cmd(
+                kubectl,
+                (
+                    f"port create {port_name} "
+                    f"--network {self.MANAGEMENT_NETWORK_NAME} "
+                    f"--security-group lb-health-mgr-sec-grp "
+                    f"-f json"
+                ),
+                retries=3,
+            )
+            if rc == 0:
+                log.debug("[octavia] Port '%s' created successfully", port_name)
+            else:
+                log.warning("[octavia] Failed to create port '%s': %s", port_name, err or out)
 
     def _ensure_security_group(self, kubectl, sg_name: str) -> None:
         """Create a security group if it doesn't already exist."""

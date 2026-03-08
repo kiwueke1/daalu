@@ -61,7 +61,7 @@ def build_openstack_components(
 
     # Derive per-service public FQDNs from the keystone FQDN once
     # e.g. identity.daalu.io -> base = daalu.io -> network.daalu.io etc.
-    _keystone_fqdn = _keystone_fqdn
+    _keystone_fqdn = cfg.keycloak.openstack.keystone_public_fqdn
     _base_domain = ".".join(_keystone_fqdn.split(".")[1:])
 
 

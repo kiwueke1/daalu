@@ -1,4 +1,5 @@
 10.10.0.9:30003/openstack/keystone:2024.2-oidc
+10.10.0.9:30003/openstack/vexxhost/staffeln:v2.2.3-fixed  # built from source — see assets/staffeln/build_image.yaml
 docker.io/bitnami/kubectl:latest
 docker.io/docker:17.07.0
 docker.io/istio/pilot:1.21.2
@@ -62,9 +63,14 @@ docker.io/timberio/vector:0.39.0-debian
 docker.io/xrally/xrally-openstack:2.0.0
 gcr.io/google_containers/hyperkube-amd64:v1.11.6
 ghcr.io/dex-idp/dex:v2.38.0
+ghcr.io/dex-idp/dex:v2.44.0
 ghcr.io/vexxhost/atmosphere/libvirt-tls-sidecar:latest
 ghcr.io/vexxhost/netoffload:v1.0.1
-ghcr.io/vexxhost/staffeln:v2.2.3
+# ghcr.io/vexxhost/staffeln:v2.2.3  # private — built from source, see assets/staffeln/build_image.yaml
+percona/percona-xtradb-cluster-operator:1.14.0
+percona/percona-xtradb-cluster-operator:1.14.0-haproxy
+percona/percona-xtradb-cluster-operator:1.19.0
+percona/percona-xtradb-cluster:8.0.36-28.1
 quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_focal
 quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_jammy
 quay.io/airshipit/kubernetes-entrypoint:v1.0.0
@@ -77,5 +83,9 @@ quay.io/k8scsi/csi-provisioner:v1.6.0
 quay.io/k8scsi/csi-resizer:v0.4.0
 quay.io/k8scsi/csi-snapshotter:v2.1.1
 quay.io/prometheus/memcached-exporter:v0.14.0
+quay.io/prometheus/mysqld-exporter:v0.17.0
 redis:7.0.15-alpine
+redis:8.2.2-alpine
+registry.k8s.io/ingress-nginx/controller:v1.14.1
+rook/ceph:v1.14.5
 vexxhost/libvirtd-exporter:latest

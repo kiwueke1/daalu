@@ -5,10 +5,14 @@
 
 from __future__ import annotations
 
+import logging
+import time
 from dataclasses import asdict
 from typing import Optional
 
 import requests
+
+log = logging.getLogger(__name__)
 
 from daalu.bootstrap.shared.keycloak.models import (
     KeycloakIAMConfig,
@@ -46,9 +50,12 @@ class KeycloakIAMManager:
             raise KeycloakIAMError("Not authenticated")
         return {"Authorization": f"Bearer {self._token}", "Content-Type": "application/json"}
 
-    def login(self) -> None:
+    def login(self, *, retries: int = 12, retry_delay: float = 10.0) -> None:
         """
         Get admin access token using the OpenID token endpoint.
+
+        Retries on connection errors and 5xx responses to tolerate Keycloak
+        starting up immediately after being deployed (typical startup ~60s).
         """
         base = str(self.config.admin.base_url).rstrip("/")
         realm = self.config.admin.admin_realm
@@ -61,11 +68,39 @@ class KeycloakIAMManager:
             "password": self.config.admin.password,
         }
 
-        r = requests.post(token_url, data=data, verify=self.config.admin.verify_tls, timeout=30)
-        if r.status_code != 200:
-            raise KeycloakIAMError(f"Keycloak login failed: {r.status_code} {r.text}")
+        last_exc: Exception | None = None
+        for attempt in range(1, retries + 1):
+            try:
+                r = requests.post(
+                    token_url,
+                    data=data,
+                    verify=self.config.admin.verify_tls,
+                    timeout=30,
+                )
+                if r.status_code == 200:
+                    self._token = r.json()["access_token"]
+                    return
+                if r.status_code < 500:
+                    # 4xx — bad credentials or config, no point retrying
+                    raise KeycloakIAMError(f"Keycloak login failed: {r.status_code} {r.text}")
+                last_exc = KeycloakIAMError(f"Keycloak login failed: {r.status_code} {r.text}")
+                log.warning(
+                    "Keycloak not ready yet (attempt %d/%d, HTTP %d) — retrying in %.0fs",
+                    attempt, retries, r.status_code, retry_delay,
+                )
+            except requests.exceptions.ConnectionError as exc:
+                last_exc = exc
+                log.warning(
+                    "Keycloak not reachable yet (attempt %d/%d: %s) — retrying in %.0fs",
+                    attempt, retries, exc, retry_delay,
+                )
 
-        self._token = r.json()["access_token"]
+            if attempt < retries:
+                time.sleep(retry_delay)
+
+        raise KeycloakIAMError(
+            f"Keycloak login failed after {retries} attempts: {last_exc}"
+        )
 
     # -----------------------
     # Realm

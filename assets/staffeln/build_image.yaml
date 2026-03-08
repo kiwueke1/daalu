@@ -1,0 +1,11 @@
+# Build spec for staffeln — image is private on ghcr.io so we build from source.
+#
+# oslo.db 12+ removed EngineFacade; SQLAlchemy 2.x breaks the legacy session
+# API used by staffeln v2.2.3.  Pin both until upstream updates staffeln.
+source_image: ghcr.io/vexxhost/staffeln:v2.2.3
+git_repo: https://github.com/vexxhost/staffeln
+git_ref: v2.2.3
+dest_tag: v2.2.3-fixed
+pip_constraints:
+  - "oslo.db<12.0.0"
+  - "SQLAlchemy>=1.4.0,<2.0.0"

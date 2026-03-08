@@ -142,7 +142,7 @@ class KubeCoreDNSPatchComponent(InfraComponent):
 
         self._patch_coredns(kubectl, gateway_ip=gateway_ip, hostnames=hostnames)
 
-        log.info("[kube-coredns-patch] Restarting CoreDNS to apply new config...")
+        log.info("[kube-coredns-patch] Waiting for CoreDNS reload plugin to apply new config...")
         self._restart_coredns(kubectl)
 
         log.info("[kube-coredns-patch] CoreDNS split-horizon DNS patch applied ✓")
@@ -298,24 +298,28 @@ class KubeCoreDNSPatchComponent(InfraComponent):
         return cleaned.rstrip().rstrip("}").rstrip() + f"\n{hosts_block}\n}}\n"
 
     # -----------------------------------------------------------------
-    # Step 4 — Rolling restart so pods pick up the new Corefile
+    # Step 4 — Wait for the reload plugin to pick up the new Corefile
     # -----------------------------------------------------------------
 
     def _restart_coredns(self, kubectl) -> None:
         """
-        CoreDNS watches its ConfigMap and reloads automatically (the `reload`
-        plugin), but the reload can take up to 30 seconds. A rolling restart
-        guarantees the new config is active immediately and lets us wait for
-        readiness before continuing with the rest of the bootstrap.
+        CoreDNS's `reload` plugin automatically detects ConfigMap changes and
+        reloads the Corefile within ~30 seconds — no pod restart required.
+
+        A `kubectl rollout restart` was used here previously, but it causes a
+        brief DNS outage during the rolling restart window.  This is dangerous:
+        any pod that starts or re-resolves a hostname during the outage (e.g.
+        Percona HAProxy resolving its PXC backend hostnames) will fail, and
+        those failures can persist long after DNS is restored (disabled backends,
+        crash loops, etc.).
+
+        We now simply sleep 35 seconds to let the reload plugin activate the
+        updated Corefile without any pod disruption.
         """
-        kubectl._run("rollout restart deployment/coredns -n kube-system")
-        rc, out, err = kubectl._run(
-            "rollout status deployment/coredns -n kube-system --timeout=120s"
-        )
-        if rc != 0:
-            raise RuntimeError(
-                f"[kube-coredns-patch] CoreDNS rollout did not complete: {err or out}"
-            )
+        import time
+        log.info("[kube-coredns-patch] Waiting 35s for CoreDNS reload plugin to pick up new config...")
+        time.sleep(35)
+        log.info("[kube-coredns-patch] CoreDNS reload window complete")
 
 
 # -----------------------------------------------------------------

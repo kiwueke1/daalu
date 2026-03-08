@@ -1,0 +1,4 @@
+# ingress-nginx (chart 4.14.1) images not captured by images.tags.* scanning.
+# Keep in sync with controller.image.tag and global.image.registry in chart values.
+# These are mirrored to Harbor by `daalu mirror-images`.
+- registry.k8s.io/ingress-nginx/controller:v1.14.1

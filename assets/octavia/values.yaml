@@ -3,57 +3,22 @@ images:
     bootstrap: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
     db_init: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
     db_drop: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
-    horizon_db_sync: docker.io/openstackhelm/horizon:2024.1-ubuntu_jammy
-    horizon: docker.io/openstackhelm/horizon:2024.1-ubuntu_jammy
+    octavia_db_sync: docker.io/loci/octavia:master-ubuntu
+    rabbit_init: docker.io/rabbitmq:3.13-management
     ks_user: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
     ks_service: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
     ks_endpoints: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
-
-pod:
-  security_context:
-    horizon:
-      pod:
-        fsGroup: 42424
-    db_sync:
-      pod:
-        fsGroup: 42424
-    tests:
-      pod:
-        fsGroup: 42424
-  replicas:
-    server: 3
-
-conf:
-  horizon:
-    local_settings:
-      config:
-        disallow_iframe_embed: "True"
-        secure_proxy_ssl_header: "True"
-        horizon_images_upload_mode: direct
-        openstack_enable_password_retrieve: "True"
-    extra_panels:
-      - designatedashboard
-      - heat_dashboard
-      - ironic_ui
-      - magnum_ui
-      - manila_ui
-      - monitoring
-      - neutron_vpnaas_dashboard
-      - octavia_dashboard
-
-endpoints:
-  dashboard:
-    host_fqdn_override:
-      public:
-        host: horizon.example.com   # <-- change if needed
-    port:
-      http:
-        public: 80
-    scheme:
-      public: http
-    service:
-      type:
-        public: LoadBalancer
+    octavia_api: docker.io/loci/octavia:master-ubuntu
+    octavia_worker: docker.io/loci/octavia:master-ubuntu
+    octavia_housekeeping: docker.io/loci/octavia:master-ubuntu
+    octavia_health_manager: docker.io/loci/octavia:master-ubuntu
+    # kolla/ubuntu-source-octavia-health-manager:rocky no longer publicly available;
+    # replaced with openstack-client which provides the openstack CLI needed by the
+    # octavia-health-manager-get-port.sh init script.
+    octavia_health_manager_init: quay.io/airshipit/openstack-client:2025.1-ubuntu_noble
+    # kolla/centos-source-openvswitch-vswitchd:rocky is obsolete;
+    # replaced with the openstack-helm OVS image which provides ovs-vsctl.
+    openvswitch_vswitchd: docker.io/openstackhelm/openvswitch:latest-ubuntu_jammy
 
 manifests:
   ingress_api: false

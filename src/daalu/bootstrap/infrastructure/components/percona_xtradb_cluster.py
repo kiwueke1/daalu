@@ -31,6 +31,8 @@ class PerconaXtraDBClusterComponent(InfraComponent):
         *,
         spec_path: Path,
         kubeconfig: str,
+        registry_url: str | None = None,
+        registry_project: str = "openstack",
     ):
         super().__init__(
             name="percona-xtradb-cluster",
@@ -48,8 +50,8 @@ class PerconaXtraDBClusterComponent(InfraComponent):
 
         self.spec_path = spec_path
         self.wait_for_pods = False
-
-        self._values: Dict = {}
+        self._registry_url = registry_url
+        self._registry_project = registry_project
 
         raw = yaml.safe_load(spec_path.read_text())
 
@@ -66,6 +68,16 @@ class PerconaXtraDBClusterComponent(InfraComponent):
             )
 
         self.cluster_spec = raw["_percona_xtradb_cluster_spec"]
+
+    def _resolved_spec(self) -> dict:
+        """Return cluster_spec with REGISTRY_URL placeholder substituted."""
+        if not self._registry_url:
+            return self.cluster_spec
+        # Re-serialise to string, substitute, then parse back — handles
+        # nested fields like initImage without hardcoding key names.
+        raw_str = yaml.dump(self.cluster_spec)
+        raw_str = raw_str.replace("REGISTRY_URL", self._registry_url)
+        return yaml.safe_load(raw_str)
 
 
     # ------------------------------------------------------------------
@@ -121,7 +133,7 @@ class PerconaXtraDBClusterComponent(InfraComponent):
                     "name": "percona-xtradb",
                     "namespace": self.namespace,
                 },
-                "spec": self.cluster_spec,
+                "spec": self._resolved_spec(),
             }
         ])
 

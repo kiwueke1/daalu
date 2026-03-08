@@ -3,4 +3,6 @@
 # These are mirrored to Harbor by `daalu mirror-images`.
 - quay.io/argoproj/argocd:latest
 - redis:7.0.15-alpine
+- redis:8.2.2-alpine
 - ghcr.io/dex-idp/dex:v2.38.0
+- ghcr.io/dex-idp/dex:v2.44.0

@@ -6,10 +6,13 @@ global:
 
 # -------------------------------------------------------------------
 # RabbitMQ server image (UPSTREAM, not Bitnami)
+# registry/repository/tag are overridden at deploy time by
+# RabbitmqClusterOperatorComponent.values() when registry_url is set.
 # -------------------------------------------------------------------
 rabbitmqImage:
-  repository: rabbitmq
-  tag: "3.13.1"   # pin this explicitly
+  registry: docker.io
+  repository: library/rabbitmq
+  tag: "4.1.6-management-alpine"
 
 # -------------------------------------------------------------------
 # Credential updater image

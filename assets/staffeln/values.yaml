@@ -1,8 +1,8 @@
 images:
   tags:
-    staffeln_api: ghcr.io/vexxhost/staffeln:v2.2.3
-    staffeln_conductor: ghcr.io/vexxhost/staffeln:v2.2.3
-    staffeln_db_sync: ghcr.io/vexxhost/staffeln:v2.2.3
+    staffeln_api: 10.10.0.9:30003/openstack/vexxhost/staffeln:v2.2.3-fixed
+    staffeln_conductor: 10.10.0.9:30003/openstack/vexxhost/staffeln:v2.2.3-fixed
+    staffeln_db_sync: 10.10.0.9:30003/openstack/vexxhost/staffeln:v2.2.3-fixed
     db_init: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
     db_drop: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
     bootstrap: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy

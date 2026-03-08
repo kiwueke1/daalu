@@ -25,6 +25,8 @@ class IngressNginxComponent(InfraComponent):
         assets_dir: Path,
         kubeconfig: str,
         github_token: Optional[str] = None,
+        registry_url: Optional[str] = None,
+        registry_project: str = "openstack",
     ):
         super().__init__(
             name="ingress-nginx",
@@ -43,9 +45,22 @@ class IngressNginxComponent(InfraComponent):
         self.assets_dir = assets_dir
         self.github_token = github_token
         self.wait_for_pods = True
+        self._registry_url = registry_url
+        self._registry_project = registry_project
 
     def values(self) -> dict:
-        return self.load_values_file(self.values_path)
+        data = self.load_values_file(self.values_path)
+        if self._registry_url:
+            # Override the registry host — chart constructs:
+            # {global.image.registry}/{controller.image.image}:{tag}@{digest}
+            data.setdefault("global", {}).setdefault("image", {})["registry"] = (
+                f"{self._registry_url}/{self._registry_project}"
+            )
+            # Clear the upstream digest so the chart pulls by tag only.
+            # Harbor stores a different digest than the upstream multi-arch manifest
+            # list, causing ImagePullBackOff when both tag and digest are specified.
+            data.setdefault("controller", {}).setdefault("image", {})["digest"] = ""
+        return data
 
     # ------------------------------------------------------------------
     # Argo CD onboarding (post Helm bootstrap)

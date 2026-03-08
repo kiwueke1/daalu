@@ -102,6 +102,24 @@ class K8sInstaller:
         )
         log.info("[mgmt/k8s] Cilium installed")
 
+        # Wait for the node to reach Ready after CNI initialisation.
+        # The Helm --wait above confirms the Cilium pod is Running, but
+        # containerd's CNI plugin detection can lag a few seconds behind,
+        # leaving the node NotReady with "cni plugin not initialized".
+        # Blocking here prevents downstream steps (Metal3, Harbor) from
+        # starting against a cluster whose node isn't schedulable yet.
+        log.info("[mgmt/k8s] Waiting for node to become Ready (timeout 5m)...")
+        subprocess.run(
+            [
+                "kubectl", "--kubeconfig", kubeconfig_path,
+                "wait", "node", "--all",
+                "--for=condition=Ready",
+                "--timeout=5m",
+            ],
+            check=True,
+        )
+        log.info("[mgmt/k8s] Node is Ready")
+
     # ------------------------------------------------------------------
     # Step 0 — grant passwordless sudo so all subsequent commands work
     # ------------------------------------------------------------------

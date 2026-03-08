@@ -126,6 +126,8 @@ def build_infrastructure_components(
             build_istio_components(
                 workspace_root=workspace_root,
                 kubeconfig_path=kubeconfig_path,
+                registry_url=registry_url,
+                registry_project=registry_project,
             )
         )
 
@@ -143,7 +145,8 @@ def build_infrastructure_components(
                     filename="",
                 ),
                 kubeconfig=kubeconfig_path,
-                #github_token=selection.github_token,
+                registry_url=registry_url,
+                registry_project=registry_project,
             )
         )
 
@@ -164,6 +167,8 @@ def build_infrastructure_components(
                     filename="",
                 ),
                 kubeconfig=kubeconfig_path,
+                registry_url=registry_url,
+                registry_project=registry_project,
                 #github_token=selection.github_token,
             )
         )
@@ -182,7 +187,8 @@ def build_infrastructure_components(
                     filename="",
                 ),
                 kubeconfig=kubeconfig_path,
-                #github_token=selection.github_token,
+                registry_url=registry_url,
+                registry_project=registry_project,
             )
         )
 
@@ -195,6 +201,8 @@ def build_infrastructure_components(
                     filename="spec.yaml",
                 ),
                 kubeconfig=kubeconfig_path,
+                registry_url=registry_url,
+                registry_project=registry_project,
             )
         )
 

@@ -52,8 +52,23 @@ class HelmInfraEngine:
     def base_values(self, component) -> dict:
         """
         Engine-wide defaults applied to all components.
+
+        When a registry_url is set, inject standard OpenStack-Helm init-container
+        images that are not listed in chart override values.yaml files (and
+        therefore would otherwise be missed by _rewrite_images()).
         """
-        return {}
+        if not self.registry_url or not getattr(component, "inject_base_images", True):
+            return {}
+        return {
+            "images": {
+                "tags": {
+                    # Dependency-check init container used by all OSH charts
+                    "dep_check": "quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_focal",
+                    # Image-repo-sync job used by some OSH charts
+                    "image_repo_sync": "docker.io/library/docker:17.07.0",
+                }
+            }
+        }
 
 
     # Valid phases for --phase filtering
@@ -183,20 +198,17 @@ class HelmInfraEngine:
                 if self.logger:
                     self.logger.set_stage("helm.install_or_upgrade")
 
-                if self.helm.release_is_deployed(component.release_name, component.namespace, component.kubeconfig):
-                    log.info("[%s] Release already installed — skipping.", component.name)
-                else:
-                    log.info("[%s] Installing/upgrading helm chart...", component.name)
-                    self.helm.install_or_upgrade(
-                        name=component.release_name,
-                        chart=str(chart_path),
-                        namespace=component.namespace,
-                        values=values,
-                        kubeconfig=component.kubeconfig,
-                        wait=False,
-                        atomic=False,
-                    )
-                    log.info("[%s] Helm install/upgrade command completed", component.name)
+                log.info("[%s] Installing/upgrading helm chart...", component.name)
+                self.helm.install_or_upgrade(
+                    name=component.release_name,
+                    chart=str(chart_path),
+                    namespace=component.namespace,
+                    values=values,
+                    kubeconfig=component.kubeconfig,
+                    wait=False,
+                    atomic=False,
+                )
+                log.info("[%s] Helm install/upgrade command completed", component.name)
 
                 # ---------------- Wait ----------------
                 if component.wait_for_pods:

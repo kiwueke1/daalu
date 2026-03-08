@@ -9,6 +9,7 @@ import logging
 from pathlib import Path
 
 from daalu.bootstrap.registry.harbor_deployer import HarborDeployer
+from daalu.bootstrap.registry.image_builder import ImageBuilder
 from daalu.bootstrap.registry.image_extractor import ImageExtractor
 from daalu.bootstrap.registry.image_mirror import ImageMirror
 
@@ -93,10 +94,30 @@ class RegistryManager:
             self._deployer.configure_cluster_registry_trust(cluster_kubeconfig)
 
     def mirror_images(self) -> None:
-        """Extract images from assets/ and mirror them into Harbor."""
+        """Build source images, then mirror the rest from upstream into Harbor."""
         assets_dir = self.workspace_root / "assets"
-        images = ImageExtractor(assets_dir).extract_all()
-        log.info("[registry] Extracted %d unique images from assets/", len(images))
+        harbor_url = getattr(self, "_harbor_access_url", None) or self.registry_cfg.harbor_hostname
+
+        # Step 1: build any images that require compilation from source
+        builder = ImageBuilder(
+            assets_dir=assets_dir,
+            harbor_hostname=harbor_url,
+            harbor_project=self.registry_cfg.project,
+            admin_password=self.admin_password,
+        )
+        build_report = builder.build_all(skip_existing=True)
+        if build_report.failed:
+            log.warning("[registry] %d image(s) failed to build: %s", len(build_report.failed), build_report.failed)
+
+        # Step 2: extract all image refs from values files, exclude source images
+        # that were just built (they're private upstream and don't need mirroring)
+        build_source_images = builder.source_images()
+        images = [
+            img for img in ImageExtractor(assets_dir).extract_all()
+            if img not in build_source_images
+        ]
+        log.info("[registry] Extracted %d unique images from assets/ (%d excluded as build-from-source)",
+                 len(images), len(build_source_images))
 
         images_file = self.workspace_root / "images.txt"
         images_file.write_text("\n".join(images) + "\n")
@@ -141,7 +162,14 @@ class RegistryManager:
         deployer.configure_cluster_registry_trust(cluster_kubeconfig)
 
     def harbor_registry_url(self) -> str:
-        return getattr(self, "_harbor_access_url", None) or self.registry_cfg.harbor_hostname
+        if getattr(self, "_harbor_access_url", None):
+            return self._harbor_access_url
+        # If harbor_node_ip is set, the NodePort URL is the canonical access URL
+        # for cluster nodes (provisioning NIC, reachable from 10.10.0.x nodes).
+        node_ip = getattr(self.registry_cfg, "harbor_node_ip", None)
+        if node_ip:
+            return f"{node_ip}:30003"
+        return self.registry_cfg.harbor_hostname
 
     def harbor_project(self) -> str:
         return self.registry_cfg.project

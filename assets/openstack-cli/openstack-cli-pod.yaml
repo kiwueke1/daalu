@@ -21,7 +21,7 @@ spec:
           export OS_REGION_NAME=RegionOne
           export OS_USER_DOMAIN_NAME=Default
           export OS_USERNAME=admin-RegionOne
-          export OS_PASSWORD=VmnnRGnSVEqGevSMBixzx1vddqMVvc1l
+          export OS_PASSWORD=xxxxxx
           export OS_PROJECT_DOMAIN_NAME=Default
           export OS_PROJECT_NAME=admin
           EOF

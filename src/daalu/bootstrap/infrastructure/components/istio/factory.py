@@ -21,6 +21,8 @@ def build_istio_components(
     *,
     workspace_root: Path,
     kubeconfig_path: str,
+    registry_url: str | None = None,
+    registry_project: str = "openstack",
 ) -> List[InfraComponent]:
     """
     Build all Istio-related infrastructure components.
@@ -53,6 +55,8 @@ def build_istio_components(
         IstiodComponent(
             assets_dir=istio_assets_dir,
             kubeconfig=kubeconfig_path,
+            registry_url=registry_url,
+            registry_project=registry_project,
         )
     )
 
@@ -65,6 +69,8 @@ def build_istio_components(
             namespace="istio-ingress",
             assets_dir=istio_assets_dir,
             kubeconfig=kubeconfig_path,
+            registry_url=registry_url,
+            registry_project=registry_project,
         )
     )
 

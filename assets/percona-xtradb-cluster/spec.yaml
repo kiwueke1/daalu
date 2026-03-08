@@ -2,12 +2,18 @@ _percona_xtradb_cluster_spec:
   crVersion: "1.14.0"
   allowUnsafeConfigurations: true
 
+  # initImage must be set explicitly — pxc-operator derives this by splitting the
+  # operator image on ':', which breaks when the registry has a port (e.g.
+  # 10.10.0.9:30003/openstack/...) and produces a malformed ref like "10.10.0.9:1.14.0".
+  # REGISTRY_URL is substituted at deploy time by PerconaXtraDBClusterComponent.
+  initImage: REGISTRY_URL/openstack/percona-xtradb-cluster-operator:1.14.0
+
   # Secret created by PerconaXtraDBClusterComponent (or pre-existing)
   secretsName: percona-xtradb
 
   pxc:
     # REQUIRED — operator will not reconcile without this
-    image: docker.io/percona/percona-xtradb-cluster:8.0.36-28.1
+    image: REGISTRY_URL/openstack/percona-xtradb-cluster:8.0.36-28.1
 
     size: 1
     autoRecovery: true
@@ -28,7 +34,7 @@ _percona_xtradb_cluster_spec:
 
     sidecars:
       - name: exporter
-        image: quay.io/prometheus/mysqld-exporter:v0.17.0
+        image: REGISTRY_URL/openstack/prometheus/mysqld-exporter:v0.17.0
         args:
           - --mysqld.username=monitor
           - --collect.info_schema.processlist
@@ -53,10 +59,10 @@ _percona_xtradb_cluster_spec:
 
   haproxy:
     enabled: true
-    size: 2
+    size: 1
 
     # REQUIRED when haproxy.enabled=true
-    image: docker.io/percona/percona-xtradb-cluster-operator:1.14.0-haproxy
+    image: REGISTRY_URL/openstack/percona-xtradb-cluster-operator:1.14.0-haproxy
 
     # allow scheduling on control-plane nodes
     tolerations:

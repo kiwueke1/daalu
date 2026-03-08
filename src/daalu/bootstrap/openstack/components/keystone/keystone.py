@@ -13,6 +13,7 @@ import base64
 
 from daalu.bootstrap.engine.component import InfraComponent
 from daalu.bootstrap.iam.keycloak import KeycloakIAMManager
+from daalu.bootstrap.infrastructure.components.kube_coredns import KubeCoreDNSPatchComponent
 from daalu.utils.serialize import to_jsonable
 from daalu.bootstrap.shared.keycloak.models import (
     KeycloakRealmSpec,
@@ -892,7 +893,23 @@ class KeystoneComponent(InfraComponent):
         log.debug("[keystone] Starting pre-install...")
 
         # -------------------------------------------------
-        # 0) Clean up stale Helm hook jobs from previous runs
+        # 0) Re-apply CoreDNS split-horizon patch (idempotent)
+        # -------------------------------------------------
+        # The keystone-api pod's Apache mod_auth_openidc module makes outbound
+        # HTTPS calls to https://auth.daalu.io/realms/daalu/.well-known/openid-configuration.
+        # Without this patch, pods resolve auth.daalu.io to the pfSense WAN IP (hairpin NAT),
+        # get its self-signed cert, and return HTTP 500 ("Internal Server Error") on the
+        # WebSSO login page.  The CoreDNS patch is also applied at the end of infrastructure
+        # bootstrap, but it must be re-applied here because the ConfigMap can be reset by
+        # Kubernetes upgrades or CoreDNS updates, causing the same failure to recur.
+        log.info("[keystone] Re-applying CoreDNS split-horizon patch...")
+        try:
+            KubeCoreDNSPatchComponent(kubeconfig=self.kubeconfig).post_install(kubectl)
+        except Exception as e:
+            log.warning("[keystone] CoreDNS patch failed (will continue): %s", e)
+
+        # -------------------------------------------------
+        # 0b) Clean up stale Helm hook jobs from previous runs
         # -------------------------------------------------
         self._cleanup_stale_jobs(kubectl)
 

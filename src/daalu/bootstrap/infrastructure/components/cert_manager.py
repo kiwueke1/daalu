@@ -92,6 +92,10 @@ class CertManagerComponent(InfraComponent):
         self.config_path = config_path
         self.assets_dir = assets_dir
 
+        # cert-manager is a Jetstack chart, not OpenStack-Helm.
+        # Its JSON schema rejects the OSH-style top-level `images.tags` block.
+        self.inject_base_images = False
+
         # cert-manager typically runs multiple pods
         self.min_running_pods = 2
 
