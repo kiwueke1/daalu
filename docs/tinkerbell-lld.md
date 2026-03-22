@@ -97,6 +97,139 @@ Provisioning LAN (10.10.0.0/16)
 
 ---
 
+### Component Interaction Diagram
+
+```
+  ┌──────────────────────────────────────────────────────────────────────────────┐
+  │  Operator / Local Machine                                                    │
+  │                                                                              │
+  │  daalu mgmt cluster-defs/cluster.yaml --provider tinkerbell                 │
+  │  daalu deploy cluster-defs/cluster.yaml --install cluster-api               │
+  │                                                                              │
+  │  app.py → MgmtClusterManager → K8sInstaller                                 │
+  │                              → TinkerbellInstaller                           │
+  │             (subprocess: helm · kubectl · clusterctl)                        │
+  └───────────────────────────┬──────────────────────────────────────────────────┘
+                              │
+              SSH (paramiko)  │  helm · kubectl · clusterctl
+              ────────────────┼────────────────────────────────────
+                              │
+                              ▼
+  ┌──────────────────────────────────────────────────────────────────────────────┐
+  │  Management Node  192.168.0.171  (Ubuntu 24.04, single-node kubeadm)        │
+  │  ens18 → 192.168.0.171  (home LAN, DHCP)                                    │
+  │  ens19 → 10.10.0.9/16   (provisioning LAN, static)                          │
+  │                                                                              │
+  │  ┌─────────────────────────────────────────────────────────────────────┐    │
+  │  │  Kubernetes Cluster (v1.30 · Cilium CNI)                            │    │
+  │  │                                                                     │    │
+  │  │  ┌──────────────────────────────────┐  ┌────────────────────────┐  │    │
+  │  │  │  ns: tinkerbell                  │  │  ns: capi-system       │  │    │
+  │  │  │                                  │  │  capi-controller-mgr   │  │    │
+  │  │  │  smee  (hostNetwork → ens19)     │  │                        │  │    │
+  │  │  │   ├─ DHCP server  :67            │  │  ns: capt-system       │  │    │
+  │  │  │   ├─ TFTP server  :69            │  │  capt-controller-mgr   │  │    │
+  │  │  │   └─ HTTP/iPXE    :8080          │  │   (bundles Rufio)      │  │    │
+  │  │  │                                  │  │                        │  │    │
+  │  │  │  hegel             :50061        │  │  CRs (user-space):     │  │    │
+  │  │  │   └─ metadata HTTP (NOT used)    │  │  ● Cluster             │  │    │
+  │  │  │                                  │  │  ● TinkerbellCluster   │  │    │
+  │  │  │  tink-server       :42113        │  │  ● KubeadmControlPlane │  │    │
+  │  │  │   └─ workflow gRPC engine        │  │  ● MachineDeployment   │  │    │
+  │  │  │                                  │  │  ● TinkerbellMachine   │  │    │
+  │  │  │  tink-controller                 │  │  ● TinkerbellMachine   │  │    │
+  │  │  │   └─ renders Workflow.status     │  │    Template            │  │    │
+  │  │  │                                  │  └────────────┬───────────┘  │    │
+  │  │  │  rufio                           │               │              │    │
+  │  │  │   └─ BMC controller (Redfish)    │      CAPT claims Hardware,   │    │
+  │  │  │                                  │      creates Workflow CR      │    │
+  │  │  │  image-server (hostNetwork nginx)│               │              │    │
+  │  │  │   └─ http://10.10.0.9/          │               ▼              │    │
+  │  │  │      /var/www/images/            │  ┌────────────────────────┐  │    │
+  │  │  │      UBUNTU_24.04_...raw.gz      │  │  ns: cert-manager      │  │    │
+  │  │  │                                  │  │  cert-manager-webhook  │  │    │
+  │  │  │  CRDs:                           │  │  (required by CAPT)    │  │    │
+  │  │  │  ● Hardware (cp01, cp02) ────────┼─▶│                        │  │    │
+  │  │  │  ● Template (ubuntu-kubeadm)     │  └────────────────────────┘  │    │
+  │  │  │  ● Workflow (cp01/cp02-prov.)    │                              │    │
+  │  │  │  ● Machine  (Rufio BMC handle)   │                              │    │
+  │  │  │  ● Secret   (BMC credentials)    │                              │    │
+  │  │  └──────────┬───────────────────────┘                              │    │
+  │  │             │  hostNetwork: binds directly to ens19 (10.10.0.9)    │    │
+  │  └─────────────┼───────────────────────────────────────────────────────┘    │
+  │                │                                                             │
+  │   Management LAN (192.168.0.0/24)                                           │
+  │   dhcrelay: ens18 → 10.10.0.9:67 (forwards DHCP from mgmt LAN to SMEE)     │
+  └────────────────┼────────────────────────────────────────────────────────────┘
+                   │
+      ┌────────────┴──────────────────────────────────────────────────────┐
+      │                                                                   │
+      │   Provisioning LAN  10.10.0.0/16                                 │
+      │                                                                   │
+      │   ① DHCP DISCOVER (UDP :67)                                       │
+      │   ② DHCP OFFER  → IP 10.10.0.170 / .171  (from Hardware CR)      │
+      │      next-server=10.10.0.9  filename=ipxe.efi  (uefi=true)       │
+      │                  or filename=undionly.kpxe  (uefi=false / cp02)  │
+      │   ③ TFTP → ipxe.efi or undionly.kpxe                             │
+      │   ④ HTTP GET  10.10.0.9:8080/auto.ipxe?mac=<mac>  (iPXE script)  │
+      │   ⑤ HTTP GET  10.10.0.9:8080/vmlinuz-x86_64                      │
+      │      HTTP GET  10.10.0.9:8080/initramfs-x86_64  (HookOS)         │
+      │   ⑥ gRPC  10.10.0.9:42113  tink-worker → tink-server             │
+      │      GetWorkflowActions(workerID=<mac>)                           │
+      │   ⑦ docker run busybox: wget|gunzip|dd  → /dev/sda  (image2disk) │
+      │   ⑧ docker run busybox: mount,write files (configure-node)       │
+      │   ⑨ docker run busybox: nsenter sysrq reboot  (5s delayed)       │
+      │      Workflow → STATE_SUCCESS                                      │
+      │  ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ──  │
+      │                                                                   │
+      │   ┌─────────────────────────────────────────────────────────┐    │
+      │   │  cp01  (eno2: 10.10.0.170/16)                           │    │
+      │   │                                                         │    │
+      │   │  PXE NIC:  eno2  ac:1f:6b:01:b7:21  (provisioning)     │    │
+      │   │  Mgmt NIC: eno1  ac:1f:6b:01:b7:20  (192.168.0.173)    │    │
+      │   │  Disk:     /dev/sda   (Ubuntu 24.04 + K8s v1.35.0)     │    │
+      │   │  State:    ✓ STATE_SUCCESS  →  SSH-accessible           │    │
+      │   └───────────────────────────┬─────────────────────────────┘    │
+      │                               │ BMC Redfish                       │
+      │                               │ https://192.168.0.70             │
+      │                               │ (Rufio Machine CR → cp01)        │
+      │                               │                                   │
+      │   ┌─────────────────────────────────────────────────────────┐    │
+      │   │  cp02  (eno2: 10.10.0.171/16)                           │    │
+      │   │                                                         │    │
+      │   │  PXE NIC:  eno2  ac:1f:6b:01:b5:eb  (provisioning)     │    │
+      │   │  Mgmt NIC: eno1  ac:1f:6b:01:b5:ea  (192.168.0.172)    │    │
+      │   │  Disk:     /dev/sda   (Ubuntu 24.04 + K8s v1.35.0)     │    │
+      │   │  UEFI:     false  →  undionly.kpxe                      │    │
+      │   │  State:    ✓ STATE_SUCCESS  →  SSH-accessible           │    │
+      │   └───────────────────────────┬─────────────────────────────┘    │
+      │                               │ BMC Redfish                       │
+      │                               │ https://192.168.0.69             │
+      │                               │ (Rufio Machine CR → cp02)        │
+      │                               │                                   │
+      │   Post-provision (allowPXE=false, Ubuntu running from /dev/sda): │
+      │   ┌─────────────────────────────────────────────────────────┐    │
+      │   │  Future: Workload Kubernetes Cluster  (CAPI phase)      │    │
+      │   │                                                         │    │
+      │   │  Control plane VIP: 10.10.0.249  (kube-vip ARP)        │    │
+      │   │  cp01 → kubeadm init  (KubeadmControlPlane)            │    │
+      │   │  cp02 → kubeadm join  (MachineDeployment worker)       │    │
+      │   │  CAPT claims Hardware CRs, creates Workflow per node    │    │
+      │   │  [NOT YET EXECUTED — templateOverride needs updating]   │    │
+      │   └─────────────────────────────────────────────────────────┘    │
+      └───────────────────────────────────────────────────────────────────┘
+
+  Key:
+    ──►  subprocess call (helm / kubectl / clusterctl)
+    ──►  SSH command via paramiko (K8sInstaller)
+    ──►  Kubernetes API (CRD create/patch/apply)
+    ──►  Network traffic (DHCP · TFTP · HTTP · gRPC)
+    ──►  BMC out-of-band (Redfish via Rufio)
+    ✓    Completed / STATE_SUCCESS
+```
+
+---
+
 ## 2. Codebase Entry Points
 
 ### CLI Definition
