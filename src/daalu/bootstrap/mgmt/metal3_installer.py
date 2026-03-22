@@ -11,6 +11,7 @@ import json
 import logging
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 import yaml
@@ -67,8 +68,21 @@ class Metal3Installer:
         self._install_cert_manager()
         self._install_capi()
         self._install_irso()
-        self._deploy_ironic()
+        # Nginx image server must be running before Ironic starts — the
+        # ramdisk-downloader init container fetches the IPA tarball from it.
         self._deploy_image_server()
+        # Create the IPA tarball at /srv/images/ from the host kernel/initrd
+        # (or from a user-configured mirror).  Nginx serves it on port 80.
+        self._ensure_ipa_available()
+        # Deploy a MutatingAdmissionWebhook that injects IPA_BASEURI into the
+        # ramdisk-downloader init container at pod-create time.  IrSO's
+        # reconciliation loop continuously reverts any manual Deployment patches,
+        # so the webhook is the only reliable injection point.
+        self._deploy_ipa_webhook()
+        self._deploy_ironic()
+        # Ironic is Ready — ramdisk-downloader has already completed.
+        # The webhook is no longer needed.
+        self._teardown_ipa_webhook()
         self._setup_bmo()
         self._install_capm3()
         log.info("[mgmt/metal3] Metal3 stack installed successfully")
@@ -186,7 +200,9 @@ class Metal3Installer:
             "apiVersion": "ironic.metal3.io/v1alpha1",
             "kind": "Ironic",
             "metadata": {"name": name, "namespace": ns},
-            "spec": {"networking": networking},
+            "spec": {
+                "networking": networking,
+            },
         }
 
         self._kubectl_stdin("apply", "-f", "-", input=yaml.dump(ironic_cr))
@@ -217,6 +233,9 @@ class Metal3Installer:
         """
         ns = self._cfg.ironic_namespace
         pod_name = "ironic-image-server"
+
+        # Namespace may not exist yet if called before _deploy_ironic
+        self._kubectl("create", "namespace", ns, check=False)
 
         # Idempotent: skip if already running
         r = subprocess.run(
@@ -340,8 +359,8 @@ class Metal3Installer:
             "--type=merge",
             "-p", (
                 f'{{"data":{{'
-                f'"DEPLOY_KERNEL_URL":"http://{host}:6180/images/ironic-python-agent.kernel",'
-                f'"DEPLOY_RAMDISK_URL":"http://{host}:6180/images/ironic-python-agent.initramfs",'
+                f'"DEPLOY_KERNEL_URL":"http://{host}/ironic-python-agent.kernel",'
+                f'"DEPLOY_RAMDISK_URL":"http://{host}/ironic-python-agent.initramfs",'
                 f'"CACHEURL":"http://{host}/images"'
                 f'}}}}'
             ),
@@ -402,6 +421,518 @@ class Metal3Installer:
             check=True,
         )
         log.info("[mgmt/metal3] CAPM3 + IPAM installed")
+
+    # ------------------------------------------------------------------
+    # IPA download via ironic-ipa-downloader
+    # ------------------------------------------------------------------
+
+    _IPA_JOB_NAME = "daalu-ipa-downloader"
+    _IPA_TARBALL = "ipa-centos9-master.tar.gz"
+
+    def _get_ramdisk_downloader_image(self) -> str:
+        """
+        Read the ramdisk-downloader image from IrSO's operator deployment
+        (RELATED_IMAGE_RAMDISK_DOWNLOADER env var) so we use the exact same
+        version IrSO will use.  Falls back to the well-known latest tag.
+        """
+        r = subprocess.run(
+            [
+                "kubectl", "--kubeconfig", self._kc,
+                "get", "deploy", "ironic-standalone-operator-controller-manager",
+                "-n", "ironic-standalone-operator-system",
+                "-o",
+                "jsonpath={.spec.template.spec.containers[0].env"
+                "[?(@.name=='RELATED_IMAGE_RAMDISK_DOWNLOADER')].value}",
+            ],
+            capture_output=True, text=True,
+        )
+        image = r.stdout.strip() if r.returncode == 0 else ""
+        if image:
+            log.info("[mgmt/metal3] IrSO ramdisk-downloader image: %s", image)
+            return image
+        fallback = "quay.io/metal3-io/ironic-ipa-downloader:latest"
+        log.info(
+            "[mgmt/metal3] Could not read ramdisk-downloader image from IrSO — using %s",
+            fallback,
+        )
+        return fallback
+
+    def _ensure_ipa_available(self) -> None:
+        """
+        Place the IPA tarball at /srv/images/ on the mgmt node so that the
+        ramdisk-downloader init container (patched in _patch_ipa_baseuri) can
+        fetch it from the local nginx rather than tarballs.opendev.org.
+
+        Download strategy (in order):
+          1. User-configured ipa_baseuri (cluster.yaml mgmt_cluster.ipa_baseuri)
+          2. HTTP fallback: http://tarballs.opendev.org/... (port 80 may work
+             even when port 443 is refused)
+          3. Placeholder: copy host kernel + initrd into a tarball so Ironic
+             can start.  Bare-metal provisioning will need real IPA files
+             before any BareMetalHost is created; Ironic itself does not
+             validate the IPA at startup.
+        """
+        ns = "kube-system"
+        tarball = self._IPA_TARBALL
+        filename_no_ext = tarball.replace(".tar.gz", "")
+
+        if self._cfg.ipa_baseuri:
+            # User supplied a working mirror — try it first, then fall through
+            # to the placeholder if it also fails.
+            download_clause = (
+                f'try_download "{self._cfg.ipa_baseuri.rstrip("/")}/{tarball}" && exit 0\n'
+                f'echo "Custom ipa_baseuri download failed — falling back to placeholder"\n'
+            )
+        else:
+            # tarballs.opendev.org is known to be unreachable on some networks
+            # (both port 80 and 443 refuse connections).  Skip the attempt and
+            # go straight to the placeholder so the job completes quickly.
+            download_clause = (
+                f'echo "No ipa_baseuri configured — using placeholder IPA from host kernel"\n'
+            )
+
+        script = f"""\
+#!/bin/sh
+DEST=/srv/images/{tarball}
+test -f "$DEST" && echo "IPA tarball already present" && exit 0
+
+try_download() {{
+  URL="$1"
+  echo "Trying $URL ..."
+  curl -fsSL --retry 1 --retry-delay 2 --connect-timeout 10 "$URL" -o "$DEST" && return 0
+  echo "Failed: $URL"
+  rm -f "$DEST"
+  return 1
+}}
+
+{download_clause}
+echo "Creating placeholder IPA from host kernel/initrd."
+echo "Ironic will start normally. Replace with real IPA before provisioning bare-metal nodes:"
+echo "  scp ipa-centos9-master.tar.gz {self._cfg.ssh_username}@{self._cfg.host}:/srv/images/"
+echo ""
+
+KERNEL=$(ls /boot/vmlinuz-* 2>/dev/null | sort -V | tail -1)
+INITRD=$(ls /boot/initrd.img-* /boot/initramfs-* 2>/dev/null | sort -V | tail -1)
+if [ -z "$KERNEL" ]; then echo "ERROR: no kernel found in /boot"; exit 1; fi
+if [ -z "$INITRD" ];  then echo "ERROR: no initrd found in /boot";  exit 1; fi
+echo "kernel: $KERNEL"
+echo "initrd:  $INITRD"
+
+TMP=$(mktemp -d)
+cp "$KERNEL" "$TMP/{filename_no_ext}.kernel"
+cp "$INITRD"  "$TMP/{filename_no_ext}.initramfs"
+tar -czf "$DEST" -C "$TMP" {filename_no_ext}.kernel {filename_no_ext}.initramfs
+rm -rf "$TMP"
+echo "Placeholder IPA created at $DEST"
+
+# Extract individual kernel/initramfs files so nginx can serve them directly.
+# BMO's DEPLOY_KERNEL_URL and DEPLOY_RAMDISK_URL point to these files.
+tar -xzf "$DEST" -C /srv/images/ 2>/dev/null || true
+mv /srv/images/{filename_no_ext}.kernel    /srv/images/ironic-python-agent.kernel    2>/dev/null || true
+mv /srv/images/{filename_no_ext}.initramfs /srv/images/ironic-python-agent.initramfs 2>/dev/null || true
+echo "Extracted ironic-python-agent.kernel and ironic-python-agent.initramfs to /srv/images/"
+"""
+
+        downloader_image = self._get_ramdisk_downloader_image()
+
+        # Delete any stale job from a previous run
+        self._kubectl("delete", "job", self._IPA_JOB_NAME, "-n", ns, check=False)
+
+        job = {
+            "apiVersion": "batch/v1",
+            "kind": "Job",
+            "metadata": {"name": self._IPA_JOB_NAME, "namespace": ns},
+            "spec": {
+                "backoffLimit": 0,
+                "ttlSecondsAfterFinished": 300,
+                "template": {
+                    "spec": {
+                        "hostNetwork": True,
+                        "dnsPolicy": "Default",
+                        "tolerations": [{"operator": "Exists"}],
+                        "restartPolicy": "Never",
+                        "containers": [{
+                            "name": "downloader",
+                            "image": downloader_image,
+                            "command": ["sh", "-c", script],
+                            "volumeMounts": [
+                                {"name": "srv",  "mountPath": "/srv/images"},
+                                {"name": "boot", "mountPath": "/boot", "readOnly": True},
+                            ],
+                        }],
+                        "volumes": [
+                            {
+                                "name": "srv",
+                                "hostPath": {"path": "/srv/images", "type": "DirectoryOrCreate"},
+                            },
+                            {
+                                "name": "boot",
+                                "hostPath": {"path": "/boot", "type": "Directory"},
+                            },
+                        ],
+                    },
+                },
+            },
+        }
+
+        log.info("[mgmt/metal3] Ensuring IPA ramdisk is available...")
+        self._kubectl_stdin("apply", "-f", "-", input=yaml.dump(job))
+
+        r = subprocess.run(
+            [
+                "kubectl", "--kubeconfig", self._kc,
+                "wait", "job", self._IPA_JOB_NAME, "-n", ns,
+                "--for=condition=Complete",
+                "--timeout=10m",
+            ],
+            capture_output=True,
+        )
+        if r.returncode != 0:
+            logs = subprocess.run(
+                ["kubectl", "--kubeconfig", self._kc,
+                 "logs", "-n", ns, f"job/{self._IPA_JOB_NAME}"],
+                capture_output=True, text=True,
+            )
+            raise RuntimeError(
+                f"IPA job failed — no kernel/initrd found in /boot on the mgmt node?\n"
+                f"Job logs:\n{logs.stdout}"
+            )
+        log.info("[mgmt/metal3] IPA tarball ready at /srv/images/%s", tarball)
+
+    # ------------------------------------------------------------------
+    # IPA MutatingAdmissionWebhook
+    # ------------------------------------------------------------------
+
+    _WEBHOOK_NAME = "daalu-ipa-webhook"
+    _WEBHOOK_NS   = "kube-system"
+
+    # Minimal Python stdlib webhook server stored in a ConfigMap and run
+    # inside a python:3-alpine container.  IPA_BASEURI is injected as an
+    # env var so the script works without modification for any mirror URL.
+    _WEBHOOK_SCRIPT = """\
+#!/usr/bin/env python3
+import base64, json, os, ssl, http.server
+
+IPA_BASEURI = os.environ["IPA_BASEURI"]
+
+class _H(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        n = int(self.headers.get("Content-Length", 0))
+        review = json.loads(self.rfile.read(n))
+        uid = review["request"]["uid"]
+        pod = review["request"].get("object", {})
+        patch = []
+        for i, c in enumerate(pod.get("spec", {}).get("initContainers", [])):
+            if c.get("name") == "ramdisk-downloader":
+                if not any(e.get("name") == "IPA_BASEURI" for e in c.get("env", [])):
+                    if c.get("env"):
+                        patch.append({
+                            "op": "add",
+                            "path": "/spec/initContainers/%d/env/-" % i,
+                            "value": {"name": "IPA_BASEURI", "value": IPA_BASEURI},
+                        })
+                    else:
+                        patch.append({
+                            "op": "add",
+                            "path": "/spec/initContainers/%d/env" % i,
+                            "value": [{"name": "IPA_BASEURI", "value": IPA_BASEURI}],
+                        })
+        resp = {
+            "apiVersion": "admission.k8s.io/v1",
+            "kind": "AdmissionReview",
+            "response": {"uid": uid, "allowed": True},
+        }
+        if patch:
+            resp["response"]["patchType"] = "JSONPatch"
+            resp["response"]["patch"] = base64.b64encode(
+                json.dumps(patch).encode()
+            ).decode()
+        body = json.dumps(resp).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, fmt, *args):
+        print(fmt % args, flush=True)
+
+ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+ctx.load_cert_chain("/tls/tls.crt", "/tls/tls.key")
+server = http.server.HTTPServer(("0.0.0.0", 8443), _H)
+server.socket = ctx.wrap_socket(server.socket, server_side=True)
+print("IPA webhook :8443", flush=True)
+server.serve_forever()
+"""
+
+    def _generate_webhook_certs(self) -> tuple[bytes, bytes, bytes]:
+        """
+        Generate a self-signed CA and a server TLS cert for the webhook service.
+        Returns (ca_cert_pem, server_cert_pem, server_key_pem).
+        """
+        svc = f"{self._WEBHOOK_NAME}.{self._WEBHOOK_NS}.svc"
+        with tempfile.TemporaryDirectory() as d:
+            # CA key + self-signed cert
+            subprocess.run(
+                ["openssl", "genrsa", "-out", f"{d}/ca.key", "2048"],
+                check=True, capture_output=True,
+            )
+            subprocess.run(
+                [
+                    "openssl", "req", "-x509", "-new", "-nodes",
+                    "-key", f"{d}/ca.key", "-sha256", "-days", "1",
+                    "-subj", "/CN=daalu-ipa-webhook-ca",
+                    "-out", f"{d}/ca.crt",
+                ],
+                check=True, capture_output=True,
+            )
+            # Server key
+            subprocess.run(
+                ["openssl", "genrsa", "-out", f"{d}/srv.key", "2048"],
+                check=True, capture_output=True,
+            )
+            # SAN config for CSR + signing
+            ext_cfg = (
+                "[req]\nreq_extensions = v3_req\ndistinguished_name = dn\n"
+                "[dn]\n"
+                "[v3_req]\n"
+                "basicConstraints = CA:FALSE\n"
+                "keyUsage = digitalSignature, keyEncipherment\n"
+                "extendedKeyUsage = serverAuth\n"
+                f"subjectAltName = DNS:{svc},DNS:{svc}.cluster.local\n"
+            )
+            Path(f"{d}/ext.cnf").write_text(ext_cfg)
+            subprocess.run(
+                [
+                    "openssl", "req", "-new",
+                    "-key", f"{d}/srv.key",
+                    "-subj", f"/CN={svc}",
+                    "-config", f"{d}/ext.cnf",
+                    "-out", f"{d}/srv.csr",
+                ],
+                check=True, capture_output=True,
+            )
+            subprocess.run(
+                [
+                    "openssl", "x509", "-req",
+                    "-in", f"{d}/srv.csr",
+                    "-CA", f"{d}/ca.crt",
+                    "-CAkey", f"{d}/ca.key",
+                    "-CAcreateserial",
+                    "-out", f"{d}/srv.crt",
+                    "-days", "1", "-sha256",
+                    "-extensions", "v3_req",
+                    "-extfile", f"{d}/ext.cnf",
+                ],
+                check=True, capture_output=True,
+            )
+            return (
+                Path(f"{d}/ca.crt").read_bytes(),
+                Path(f"{d}/srv.crt").read_bytes(),
+                Path(f"{d}/srv.key").read_bytes(),
+            )
+
+    def _deploy_ipa_webhook(self) -> None:
+        """
+        Deploy a MutatingAdmissionWebhook that injects IPA_BASEURI into the
+        ramdisk-downloader init container so it fetches the IPA tarball from
+        the local nginx image server instead of tarballs.opendev.org.
+
+        Resources deployed in kube-system:
+          - Secret  daalu-ipa-webhook-tls  (TLS cert + key)
+          - ConfigMap  daalu-ipa-webhook   (Python webhook server script)
+          - Deployment daalu-ipa-webhook   (python:3-alpine running the script)
+          - Service    daalu-ipa-webhook   (port 443 → 8443)
+          - MutatingWebhookConfiguration  daalu-ipa-webhook
+        """
+        ns    = self._WEBHOOK_NS
+        name  = self._WEBHOOK_NAME
+        ironic_ns = self._cfg.ironic_namespace
+
+        ipa_baseuri = (
+            self._cfg.ipa_baseuri.rstrip("/")
+            if self._cfg.ipa_baseuri
+            else f"http://{self._cfg.provisioning_ip or self._cfg.host}"
+        )
+
+        # Idempotent: skip if webhook deployment already exists
+        r = subprocess.run(
+            ["kubectl", "--kubeconfig", self._kc, "get", "deploy", name, "-n", ns],
+            capture_output=True,
+        )
+        if r.returncode == 0:
+            log.info("[mgmt/metal3] IPA webhook already deployed — skipping")
+            return
+
+        log.info("[mgmt/metal3] Generating webhook TLS certificates...")
+        ca_cert, srv_cert, srv_key = self._generate_webhook_certs()
+        ca_b64  = base64.b64encode(ca_cert).decode()
+        crt_b64 = base64.b64encode(srv_cert).decode()
+        key_b64 = base64.b64encode(srv_key).decode()
+
+        secret = {
+            "apiVersion": "v1", "kind": "Secret",
+            "metadata": {"name": name + "-tls", "namespace": ns},
+            "type": "kubernetes.io/tls",
+            "data": {"tls.crt": crt_b64, "tls.key": key_b64},
+        }
+        cm = {
+            "apiVersion": "v1", "kind": "ConfigMap",
+            "metadata": {"name": name, "namespace": ns},
+            "data": {"webhook.py": self._WEBHOOK_SCRIPT},
+        }
+        deploy = {
+            "apiVersion": "apps/v1", "kind": "Deployment",
+            "metadata": {"name": name, "namespace": ns},
+            "spec": {
+                "replicas": 1,
+                "selector": {"matchLabels": {"app": name}},
+                "template": {
+                    "metadata": {"labels": {"app": name}},
+                    "spec": {
+                        "containers": [{
+                            "name": "webhook",
+                            "image": "python:3-alpine",
+                            "command": ["python3", "/webhook/webhook.py"],
+                            "env": [{"name": "IPA_BASEURI", "value": ipa_baseuri}],
+                            "ports": [{"containerPort": 8443}],
+                            "volumeMounts": [
+                                {"name": "tls",    "mountPath": "/tls",     "readOnly": True},
+                                {"name": "script", "mountPath": "/webhook", "readOnly": True},
+                            ],
+                        }],
+                        "volumes": [
+                            {"name": "tls",    "secret":    {"secretName": name + "-tls"}},
+                            {"name": "script", "configMap": {"name": name}},
+                        ],
+                    },
+                },
+            },
+        }
+        svc = {
+            "apiVersion": "v1", "kind": "Service",
+            "metadata": {"name": name, "namespace": ns},
+            "spec": {
+                "selector": {"app": name},
+                "ports": [{"port": 443, "targetPort": 8443}],
+            },
+        }
+        mwc = {
+            "apiVersion": "admissionregistration.k8s.io/v1",
+            "kind": "MutatingWebhookConfiguration",
+            "metadata": {"name": name},
+            "webhooks": [{
+                "name": "ipa-baseuri.daalu.io",
+                "admissionReviewVersions": ["v1"],
+                "sideEffects": "None",
+                # Ignore failures — if the webhook pod is unhealthy, pods
+                # still get created (without the env var injection).
+                "failurePolicy": "Ignore",
+                "namespaceSelector": {
+                    "matchLabels": {
+                        # kubernetes.io/metadata.name is auto-applied to every
+                        # namespace since K8s 1.21 — ensures we only intercept
+                        # pods in the Ironic namespace.
+                        "kubernetes.io/metadata.name": ironic_ns,
+                    },
+                },
+                "rules": [{
+                    "operations": ["CREATE"],
+                    "apiGroups": [""],
+                    "apiVersions": ["v1"],
+                    "resources": ["pods"],
+                }],
+                "clientConfig": {
+                    "service": {
+                        "name": name, "namespace": ns,
+                        "path": "/mutate", "port": 443,
+                    },
+                    "caBundle": ca_b64,
+                },
+            }],
+        }
+
+        log.info(
+            "[mgmt/metal3] Deploying IPA webhook (IPA_BASEURI=%s)...", ipa_baseuri
+        )
+        for obj in [secret, cm, deploy, svc, mwc]:
+            self._kubectl_stdin("apply", "-f", "-", input=yaml.dump(obj))
+
+        log.info("[mgmt/metal3] Waiting for IPA webhook pod to be ready (timeout 3m)...")
+        self._kubectl(
+            "-n", ns, "rollout", "status", f"deploy/{name}", "--timeout=3m",
+        )
+        log.info("[mgmt/metal3] IPA webhook ready")
+
+    def _teardown_ipa_webhook(self) -> None:
+        """Remove the IPA webhook and all associated resources (idempotent)."""
+        ns   = self._WEBHOOK_NS
+        name = self._WEBHOOK_NAME
+        log.info("[mgmt/metal3] Removing IPA webhook resources...")
+        self._kubectl("delete", "mutatingwebhookconfiguration", name, check=False)
+        self._kubectl("delete", "svc",       name,            "-n", ns, check=False)
+        self._kubectl("delete", "deploy",    name,            "-n", ns, check=False)
+        self._kubectl("delete", "configmap", name,            "-n", ns, check=False)
+        self._kubectl("delete", "secret",    name + "-tls",   "-n", ns, check=False)
+        log.info("[mgmt/metal3] IPA webhook removed")
+
+    # ------------------------------------------------------------------
+    # IPA local-mirror helpers
+    # ------------------------------------------------------------------
+
+    def _wait_for_deploy(self, ns: str, deploy: str, timeout: int = 60) -> bool:
+        """Poll until a Deployment exists in the cluster or timeout is reached."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            r = subprocess.run(
+                ["kubectl", "--kubeconfig", self._kc,
+                 "get", "deploy", deploy, "-n", ns],
+                capture_output=True,
+            )
+            if r.returncode == 0:
+                return True
+            time.sleep(3)
+        return False
+
+    def _patch_ipa_baseuri(self, ns: str, deploy_name: str, base_uri: str) -> None:
+        """
+        Set IPA_BASEURI on the ramdisk-downloader init container so it fetches
+        the IPA tarball from the local nginx image server rather than from
+        tarballs.opendev.org.  Called immediately after the Ironic CR is applied
+        so the patch lands before the pod is scheduled.
+        """
+        log.info(
+            "[mgmt/metal3] Waiting for IrSO to create deployment %s/%s...",
+            ns, deploy_name,
+        )
+        if not self._wait_for_deploy(ns, deploy_name):
+            log.warning(
+                "[mgmt/metal3] Deployment %s not found after 60s — "
+                "skipping IPA_BASEURI patch; ramdisk-downloader may fail",
+                deploy_name,
+            )
+            return
+
+        log.info(
+            "[mgmt/metal3] Patching ramdisk-downloader IPA_BASEURI → %s", base_uri
+        )
+        patch = json.dumps({
+            "spec": {
+                "template": {
+                    "spec": {
+                        "initContainers": [{
+                            "name": "ramdisk-downloader",
+                            "env": [{"name": "IPA_BASEURI", "value": base_uri}],
+                        }],
+                    },
+                },
+            },
+        })
+        self._kubectl(
+            "patch", "deploy", deploy_name, "-n", ns,
+            "--type=strategic", "-p", patch,
+        )
+        log.info("[mgmt/metal3] IPA_BASEURI patch applied to %s", deploy_name)
 
     # ------------------------------------------------------------------
     # Ironic credential helpers

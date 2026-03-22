@@ -26,6 +26,8 @@ class ValkeyComponent(InfraComponent):
         kubeconfig: str,
         namespace: str = "openstack",
         chart_dir: Optional[Path] = None,
+        registry_url: Optional[str] = None,
+        registry_project: str = "openstack",
     ):
         super().__init__(
             name="valkey",
@@ -46,6 +48,8 @@ class ValkeyComponent(InfraComponent):
         self.wait_for_pods = True
         self.min_running_pods = 1
         self.enable_argocd = False
+        self._registry_url = registry_url
+        self._registry_project = registry_project
 
         self._values: Dict = yaml.safe_load(values_path.read_text()) or {}
 
@@ -117,4 +121,38 @@ class ValkeyComponent(InfraComponent):
         """
         Helm values for Valkey.
         """
-        return self._values
+        data = dict(self._values)
+        if self._registry_url:
+            from daalu.bootstrap.registry.image_mirror import ImageMirror
+
+            # Bitnami charts use global.imageRegistry as the authoritative
+            # registry override — it takes precedence over per-image .registry.
+            data.setdefault("global", {})["imageRegistry"] = self._registry_url
+
+            def _rewrite_repo(src_registry: str, src_repo: str, src_tag: str) -> str:
+                src_image = f"{src_registry}/{src_repo}:{src_tag}"
+                rewritten = ImageMirror.rewrite_image_static(
+                    src_image, self._registry_url, self._registry_project
+                )
+                parts = rewritten.split("/", 1)
+                return parts[1].rsplit(":", 1)[0] if len(parts) > 1 else rewritten.rsplit(":", 1)[0]
+
+            # Rewrite main image
+            img = data.get("image", {})
+            if img.get("registry") and img.get("repository"):
+                img["repository"] = _rewrite_repo(img["registry"], img["repository"], img.get("tag", "latest"))
+                img.pop("registry", None)
+
+            # Rewrite sentinel image
+            sentinel_img = data.get("sentinel", {}).get("image", {})
+            if sentinel_img.get("registry") and sentinel_img.get("repository"):
+                sentinel_img["repository"] = _rewrite_repo(sentinel_img["registry"], sentinel_img["repository"], sentinel_img.get("tag", "latest"))
+                sentinel_img.pop("registry", None)
+
+            # Rewrite metrics/exporter image
+            metrics_img = data.get("metrics", {}).get("image", {})
+            if metrics_img.get("registry") and metrics_img.get("repository"):
+                metrics_img["repository"] = _rewrite_repo(metrics_img["registry"], metrics_img["repository"], metrics_img.get("tag", "latest"))
+                metrics_img.pop("registry", None)
+
+        return data

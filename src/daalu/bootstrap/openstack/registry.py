@@ -44,6 +44,7 @@ from daalu.bootstrap.openstack.components.horizon.horizon import HorizonComponen
 from daalu.bootstrap.openstack.components.openstack_exporter.openstack_exporter import OpenStackExporterComponent
 from daalu.bootstrap.openstack.components.openstack_cli.openstack_cli import OpenStackCliComponent
 from daalu.bootstrap.infrastructure.components.kube_coredns import KubeCoreDNSPatchComponent
+from daalu.bootstrap.openstack.components.cloud_setup.cloud_setup import CloudSetupComponent
 
 
 def build_openstack_components(
@@ -431,6 +432,7 @@ def build_openstack_components(
                 ),
                 secrets_path=workspace_root / "cloud-config" / "secrets.yaml",
                 keystone_public_host=_keystone_fqdn,
+                nova_public_host=f"compute.{_base_domain}",
                 network_backend=network_backend,
                 nova_flavors=[
                     {"name": "m1.tiny", "vcpus": 1, "ram": 512, "disk": 1},
@@ -594,6 +596,19 @@ def build_openstack_components(
                 kubeconfig=kubeconfig_path,
                 istio_gateway_namespace="istio-ingress",
                 istio_gateway_service="istio-ingressgateway",
+            )
+        )
+
+    # ----------------------------
+    # Cloud smoke test — MUST run last (after all services are up + DNS patched)
+    # ----------------------------
+    if selection.components is None or "cloud-setup" in selection.components:
+        components.append(
+            CloudSetupComponent(
+                kubeconfig=kubeconfig_path,
+                namespace="openstack",
+                secrets_path=secrets_path,
+                keystone_public_host=_keystone_fqdn,
             )
         )
 

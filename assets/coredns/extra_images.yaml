@@ -1,0 +1,3 @@
+# CoreDNS image used by neutron-coredns chart.
+# Mirrored to Harbor by `daalu mirror-images`.
+- docker.io/coredns/coredns:1.11.1

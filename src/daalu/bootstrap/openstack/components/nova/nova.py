@@ -55,6 +55,7 @@ class NovaComponent(InfraComponent):
         release_name: str = "nova",
         secrets_path: Path,
         keystone_public_host: str,
+        nova_public_host: str | None = None,
         network_backend: str = "ovn",
         enable_argocd: bool = False,
         nova_flavors: list[dict] | None = None,
@@ -90,6 +91,7 @@ class NovaComponent(InfraComponent):
         self._assets_dir = assets_dir
         self.secrets_path = secrets_path
         self.keystone_public_host = keystone_public_host
+        self.nova_public_host = nova_public_host or f"compute.{base_domain}"
         self.network_backend = network_backend
         self.nova_flavors = nova_flavors or []
         self.base_domain = base_domain
@@ -200,6 +202,30 @@ class NovaComponent(InfraComponent):
             "path": "/nova_cell0",
             "scheme": db_scheme,
             "port": db_port,
+        }
+
+        # Override the Nova public endpoint so ks-endpoints registers the
+        # correct public URL (https://compute.daalu.io/) instead of the
+        # chart default (http://nova.openstack.svc.cluster.local/).
+        endpoints["compute"] = {
+            "host_fqdn_override": {
+                "public": {"host": self.nova_public_host},
+            },
+            "scheme": {
+                "default": "http",
+                "service": "http",
+                "public": "https",
+            },
+            "port": {
+                "api": {
+                    "default": 8774,
+                    "public": 443,
+                },
+                "novnc_proxy": {
+                    "default": 6080,
+                    "public": 443,
+                },
+            },
         }
 
         base["endpoints"] = endpoints

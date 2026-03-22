@@ -48,8 +48,8 @@ keycloak:
     adminPasswordKey: "admin-password"
 
 image:
-  registry: docker.io
-  repository: keycloak/keycloak
+  registry: 10.10.0.9:30003
+  repository: openstack/keycloak/keycloak
   tag: "26.5.1"
 
 postgresql:

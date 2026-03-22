@@ -1,0 +1,4 @@
+# Keepalived images. Not in images.tags convention so listed here explicitly.
+# Mirrored to Harbor by `daalu mirror-images`.
+- ghcr.io/vexxhost/keepalived:latest
+- docker.io/library/ubuntu:24.04

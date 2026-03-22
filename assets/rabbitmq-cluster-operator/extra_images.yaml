@@ -1,0 +1,7 @@
+# RabbitMQ cluster operator, messaging topology operator, and server images.
+# Mirrored to Harbor by `daalu mirror-images`.
+# Use explicit docker.io/ prefix so the full org path (rabbitmqoperator/) is
+# preserved in Harbor (e.g. openstack/rabbitmqoperator/cluster-operator:2.8.0).
+- docker.io/rabbitmqoperator/cluster-operator:2.8.0
+- docker.io/rabbitmqoperator/messaging-topology-operator:1.14.0
+- docker.io/library/rabbitmq:4.1.6-management-alpine

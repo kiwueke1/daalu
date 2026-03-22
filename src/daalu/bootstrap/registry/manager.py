@@ -97,51 +97,87 @@ class RegistryManager:
         """Build source images, then mirror the rest from upstream into Harbor."""
         assets_dir = self.workspace_root / "assets"
         harbor_url = getattr(self, "_harbor_access_url", None) or self.registry_cfg.harbor_hostname
+        default_project = self.registry_cfg.project
 
         # Step 1: build any images that require compilation from source
         builder = ImageBuilder(
             assets_dir=assets_dir,
             harbor_hostname=harbor_url,
-            harbor_project=self.registry_cfg.project,
+            harbor_project=default_project,
             admin_password=self.admin_password,
         )
         build_report = builder.build_all(skip_existing=True)
         if build_report.failed:
             log.warning("[registry] %d image(s) failed to build: %s", len(build_report.failed), build_report.failed)
 
-        # Step 2: extract all image refs from values files, exclude source images
-        # that were just built (they're private upstream and don't need mirroring)
-        build_source_images = builder.source_images()
-        images = [
-            img for img in ImageExtractor(assets_dir).extract_all()
+        build_source_images = set(builder.source_images())
+
+        # Step 2: extract images grouped by project
+        extractor = ImageExtractor(assets_dir)
+        by_project = extractor.extract_by_project()
+
+        # Collect all images for images.txt (flat list)
+        all_images = sorted({
+            img
+            for imgs in by_project.values()
+            for img in imgs
             if img not in build_source_images
-        ]
-        log.info("[registry] Extracted %d unique images from assets/ (%d excluded as build-from-source)",
-                 len(images), len(build_source_images))
-
+        })
         images_file = self.workspace_root / "images.txt"
-        images_file.write_text("\n".join(images) + "\n")
-        log.info("[registry] Image list written to %s", images_file)
+        images_file.write_text("\n".join(all_images) + "\n")
+        log.info("[registry] Image list written to %s (%d images across %d projects)",
+                 images_file, len(all_images), len(by_project))
 
-        mirror = ImageMirror(
-            harbor_hostname=getattr(self, "_harbor_access_url", None) or self.registry_cfg.harbor_hostname,
-            harbor_project=self.registry_cfg.project,
-            admin_password=self.admin_password,
-            insecure=True,
-            skip_existing=True,
-            docker_username=getattr(self.registry_cfg, "docker_username", None) or None,
-            docker_token=getattr(self.registry_cfg, "docker_token", None) or None,
-        )
-        log.info("[registry] Images to mirror:")
-        for img in images:
-            log.info("[registry]   %s", img)
-        report = mirror.mirror_all(images)
+        # Step 3: mirror per project, creating each Harbor project as needed
+        deployer = getattr(self, "_deployer", None)
+        docker_username = getattr(self.registry_cfg, "docker_username", None) or None
+        docker_token = getattr(self.registry_cfg, "docker_token", None) or None
 
-        if report.failed:
-            log.warning(
-                "[registry] %d image(s) failed to mirror: %s",
-                report.failed, report.failed_images,
+        for project_key, images in by_project.items():
+            # Resolve __default__ sentinel to the configured default project name
+            project = default_project if project_key == ImageExtractor._DEFAULT_PROJECT else project_key
+
+            # Filter build-from-source images
+            images = [img for img in images if img not in build_source_images]
+            if not images:
+                continue
+
+            # Ensure the Harbor project exists
+            if deployer is not None:
+                deployer.ensure_project(project)
+            else:
+                self._ensure_harbor_project_standalone(harbor_url, project)
+
+            mirror = ImageMirror(
+                harbor_hostname=harbor_url,
+                harbor_project=project,
+                admin_password=self.admin_password,
+                insecure=True,
+                skip_existing=True,
+                docker_username=docker_username,
+                docker_token=docker_token,
             )
+            log.info("[registry] Mirroring %d image(s) into project '%s':", len(images), project)
+            for img in images:
+                log.info("[registry]   %s", img)
+            report = mirror.mirror_all(images)
+
+            if report.failed:
+                log.warning(
+                    "[registry] project '%s': %d image(s) failed to mirror: %s",
+                    project, report.failed, report.failed_images,
+                )
+
+    def _ensure_harbor_project_standalone(self, harbor_url: str, project_name: str) -> None:
+        """Create a Harbor project without a full HarborDeployer instance."""
+        from daalu.bootstrap.registry.harbor_deployer import HarborDeployer
+        deployer = HarborDeployer(
+            mgmt_kubeconfig="",
+            harbor_hostname=harbor_url,
+            admin_password=self.admin_password,
+        )
+        deployer._access_url = harbor_url
+        deployer.ensure_project(project_name)
 
     def configure_cluster_registry_trust(self, cluster_kubeconfig: str) -> None:
         """Configure containerd on infra cluster nodes to trust Harbor's cert."""

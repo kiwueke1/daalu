@@ -47,6 +47,7 @@ class MgmtClusterCleaner:
         skip_workload_cluster: bool = False,
         wait_deprovision: bool = True,
         deprovision_timeout: int = 300,
+        wipe_mgmt: bool = False,
     ) -> None:
         mgmt_cfg = self._cfg.mgmt_cluster
         registry_cfg = self._cfg.registry
@@ -75,24 +76,42 @@ class MgmtClusterCleaner:
                 log.info("[clean] No mgmt kubeconfig found — skipping workload cluster deletion")
 
         # ------------------------------------------------------------------
-        # 2. Reset mgmt node (k8s + Harbor disk + Metal3)
+        # 2. Reset mgmt node (k8s + Harbor disk + provider stack)
         # ------------------------------------------------------------------
-        if mgmt_cfg:
-            client = self._ssh_connect(mgmt_cfg)
-            try:
-                ssh = SSHRunner(client)
-                self._reset_kubernetes(ssh)
-                self._clean_harbor_disk(ssh, registry_cfg)
-                self._clean_metal3(ssh)
-            finally:
-                client.close()
+        if wipe_mgmt:
+            if mgmt_cfg:
+                from daalu.bootstrap.mgmt.models import BaremetalProvider
+                provider = mgmt_cfg.provider
+
+                # Provider-specific teardown runs against the mgmt cluster
+                # before we wipe k8s, while the API server is still up.
+                if kc and Path(kc).exists():
+                    if provider == BaremetalProvider.tinkerbell:
+                        self._clean_tinkerbell(kc)
+                    elif provider == BaremetalProvider.metal3:
+                        pass  # Metal3 is cleaned as part of _clean_metal3 below
+
+                client = self._ssh_connect(mgmt_cfg)
+                try:
+                    ssh = SSHRunner(client)
+                    self._reset_kubernetes(ssh)
+                    self._clean_harbor_disk(ssh, registry_cfg)
+                    if provider == BaremetalProvider.metal3:
+                        self._clean_metal3(ssh)
+                finally:
+                    client.close()
+            else:
+                log.warning("[clean] No mgmt_cluster config — skipping remote cleanup")
         else:
-            log.warning("[clean] No mgmt_cluster config — skipping remote cleanup")
+            log.info(
+                "[clean] Skipping mgmt node reset. "
+                "Use --wipe-mgmt to also destroy the management cluster."
+            )
 
         # ------------------------------------------------------------------
         # 3. Clean up local state
         # ------------------------------------------------------------------
-        self._clean_local(kc, mgmt_cfg)
+        self._clean_local(kc, mgmt_cfg, wipe_mgmt=wipe_mgmt)
 
         log.info("[clean] Teardown complete")
 
@@ -160,6 +179,60 @@ class MgmtClusterCleaner:
             "[clean] Timed out waiting for BMH deprovisioning. "
             "Proceeding with mgmt cluster teardown anyway."
         )
+
+    # ------------------------------------------------------------------
+    # Tinkerbell teardown (runs before kubeadm reset, API server still up)
+    # ------------------------------------------------------------------
+
+    def _clean_tinkerbell(self, kubeconfig: str) -> None:
+        """
+        Tear down the Tinkerbell stack from the mgmt cluster.
+
+        Steps:
+          1. Wait for Hardware CRs to reach 'provisioned' → 'available'
+          2. helm uninstall tinkerbell -n tinkerbell
+          3. kubectl delete namespace tinkerbell
+          4. clusterctl delete --infrastructure tinkerbell
+        """
+        log.info("[clean] Waiting for Tinkerbell Hardware objects to deprovision...")
+        deadline = time.time() + 300
+        while time.time() < deadline:
+            r = subprocess.run(
+                [
+                    "kubectl", "--kubeconfig", kubeconfig,
+                    "get", "hardware", "-A",
+                    "-o", "jsonpath={.items[*].metadata.name}",
+                ],
+                capture_output=True, text=True,
+            )
+            if r.returncode != 0 or not r.stdout.strip():
+                log.info("[clean] No Hardware objects found — continuing")
+                break
+            log.info("[clean] Hardware objects still present: %s — waiting...", r.stdout.strip())
+            time.sleep(10)
+
+        log.info("[clean] Uninstalling Tinkerbell Helm release...")
+        subprocess.run(
+            ["helm", "--kubeconfig", kubeconfig,
+             "uninstall", "tinkerbell", "-n", "tinkerbell"],
+            capture_output=True,
+        )
+
+        log.info("[clean] Deleting tinkerbell namespace...")
+        subprocess.run(
+            ["kubectl", "--kubeconfig", kubeconfig,
+             "delete", "namespace", "tinkerbell", "--ignore-not-found"],
+            capture_output=True,
+        )
+
+        log.info("[clean] Removing CAPT infrastructure provider...")
+        subprocess.run(
+            ["clusterctl", "--kubeconfig", kubeconfig,
+             "delete", "--infrastructure", "tinkerbell"],
+            capture_output=True,
+        )
+
+        log.info("[clean] Tinkerbell teardown complete")
 
     # ------------------------------------------------------------------
     # Step 2a — kubeadm reset + k8s cleanup
@@ -234,22 +307,25 @@ class MgmtClusterCleaner:
         self,
         kubeconfig: Optional[str],
         mgmt_cfg: Optional[MgmtClusterConfig],
+        wipe_mgmt: bool = False,
     ) -> None:
         log.info("[clean] Cleaning up local state...")
 
-        if kubeconfig:
+        # Only remove the mgmt kubeconfig if we're also wiping the mgmt cluster —
+        # if the mgmt cluster is still running the kubeconfig is still needed.
+        if wipe_mgmt and kubeconfig:
             kc_path = Path(kubeconfig).expanduser()
             if kc_path.exists():
                 kc_path.unlink()
                 log.info("[clean] Removed kubeconfig: %s", kc_path)
 
-        # Remove workload kubeconfig written to /tmp by deploy
+        # Remove workload kubeconfig written to /tmp by deploy (always safe to remove)
         for tmp_kc in Path("/tmp").glob("kubeconfig-*.yaml"):
             tmp_kc.unlink(missing_ok=True)
             log.info("[clean] Removed %s", tmp_kc)
 
-        # Remove mgmt node from known_hosts
-        if mgmt_cfg:
+        # Remove mgmt node from known_hosts only if wiping mgmt
+        if wipe_mgmt and mgmt_cfg:
             for host in (mgmt_cfg.host, mgmt_cfg.provisioning_ip):
                 if host:
                     subprocess.run(

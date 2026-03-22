@@ -1,0 +1,20 @@
+# Tinkerbell Workflow for cp02
+---
+apiVersion: tinkerbell.org/v1alpha1
+kind: Workflow
+metadata:
+  name: cp02-provision
+  namespace: tinkerbell
+spec:
+  templateRef: ubuntu-kubeadm
+  hardwareRef: cp02
+  hardwareMap:
+    device_1: "ac:1f:6b:01:b5:eb"
+    disk: "/dev/sda"
+    hostname: "cp02"
+    image_url: "http://10.10.0.9/UBUNTU_24.04_NODE_IMAGE_K8S_v1.35.0.raw.gz"
+    image_username: "builder"
+    ssh_pub_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGdk/DV6U01MtdXrIoSlKhEoNT2QND0lsKdfWmH3to7C kez@kez-dev-vm-1"
+    prov_mac: "ac:1f:6b:01:b5:eb"
+    prov_ip: "10.10.0.171"
+    prov_prefix: "16"

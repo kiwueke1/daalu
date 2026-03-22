@@ -1,0 +1,164 @@
+apiVersion: tinkerbell.org/v1alpha1
+kind: Template
+metadata:
+  name: ubuntu-kubeadm
+  namespace: tinkerbell
+spec:
+  data: |
+    version: "0.1"
+    name: ubuntu-kubeadm
+    global_timeout: 1800
+    tasks:
+      - name: "stream-ubuntu-image"
+        worker: "{{.device_1}}"
+        volumes:
+          - /dev:/dev
+          - /dev/console:/dev/console
+          - /lib/firmware:/lib/firmware:ro
+          - /proc:/proc
+        actions:
+          - name: "image2disk"
+            image: busybox:stable
+            timeout: 1200
+            command:
+              - sh
+              - -c
+              - |
+                set -e
+                echo "Downloading and writing image to {{.disk}}..."
+                wget -O - "{{.image_url}}" | gunzip | dd of="{{.disk}}" bs=16M
+                sync
+                echo "Image written successfully"
+            environment:
+              IMG_URL: "{{.image_url}}"
+              DEST_DISK: "{{.disk}}"
+
+          - name: "configure-node"
+            image: busybox:stable
+            timeout: 120
+            command:
+              - sh
+              - -c
+              - |
+                set -e
+                echo "Rereading partition table..."
+                blockdev --rereadpt {{.disk}} 2>/dev/null || true
+                sleep 3
+                echo "Detecting root partition on {{.disk}}..."
+                ROOT_PART=""
+                for part in {{.disk}}1 {{.disk}}2 {{.disk}}3 {{.disk}}4; do
+                  [ -b "$part" ] || continue
+                  INFO=$(blkid "$part" 2>/dev/null || true)
+                  echo "  $part: $INFO"
+                  if echo "$INFO" | grep -q 'TYPE="ext4"' || echo "$INFO" | grep -q 'TYPE="xfs"'; then
+                    ROOT_PART="$part"
+                    break
+                  fi
+                done
+                [ -n "$ROOT_PART" ] || { echo "ERROR: no ext4/xfs partition found"; exit 1; }
+                echo "Mounting $ROOT_PART..."
+                mkdir -p /mnt/target
+                mount "$ROOT_PART" /mnt/target
+                [ -d /mnt/target/etc ] || { echo "ERROR: /mnt/target/etc missing"; umount /mnt/target; exit 1; }
+
+                echo "=== Setting hostname ==="
+                echo "{{.hostname}}" > /mnt/target/etc/hostname
+                printf "127.0.0.1\tlocalhost\n127.0.1.1\t{{.hostname}}\n" > /mnt/target/etc/hosts
+
+                echo "=== Configuring networking via netplan ==="
+                mkdir -p /mnt/target/etc/netplan
+                cat > /mnt/target/etc/netplan/99-daalu-all-dhcp.yaml << NETEOF
+                network:
+                  version: 2
+                  renderer: networkd
+                  ethernets:
+                    all-en-dhcp:
+                      match:
+                        name: "en*"
+                        macaddress: "{{.prov_mac}}"
+                      addresses:
+                        - {{.prov_ip}}/{{.prov_prefix}}
+                      dhcp4: false
+                      dhcp6: false
+                    all-en-mgmt:
+                      match:
+                        name: "en*"
+                      dhcp4: true
+                      dhcp6: false
+                    all-eth:
+                      match:
+                        name: "eth*"
+                      dhcp4: true
+                      dhcp6: false
+                NETEOF
+                echo "Netplan config written."
+
+                echo "=== Injecting SSH key for root ==="
+                mkdir -p /mnt/target/root/.ssh
+                chmod 700 /mnt/target/root/.ssh
+                echo "{{.ssh_pub_key}}" > /mnt/target/root/.ssh/authorized_keys
+                chmod 600 /mnt/target/root/.ssh/authorized_keys
+
+                echo "=== Injecting SSH key for ubuntu user ==="
+                if [ -d /mnt/target/home/ubuntu ]; then
+                  mkdir -p /mnt/target/home/ubuntu/.ssh
+                  chmod 700 /mnt/target/home/ubuntu/.ssh
+                  echo "{{.ssh_pub_key}}" > /mnt/target/home/ubuntu/.ssh/authorized_keys
+                  chmod 600 /mnt/target/home/ubuntu/.ssh/authorized_keys
+                fi
+
+                echo "=== Writing NoCloud user-data ==="
+                mkdir -p /mnt/target/var/lib/cloud/seed/nocloud
+                cat > /mnt/target/var/lib/cloud/seed/nocloud/meta-data << 'MDEOF'
+                instance-id: {{.hostname}}
+                local-hostname: {{.hostname}}
+                MDEOF
+                cat > /mnt/target/var/lib/cloud/seed/nocloud/user-data << UDEOF
+                #cloud-config
+                hostname: {{.hostname}}
+                manage_etc_hosts: true
+                users:
+                  - name: {{.image_username}}
+                    groups: [adm, sudo]
+                    sudo: ALL=(ALL) NOPASSWD:ALL
+                    shell: /bin/bash
+                    lock_passwd: false
+                    ssh_authorized_keys:
+                      - {{.ssh_pub_key}}
+                disable_root: false
+                package_update: false
+                package_upgrade: false
+                UDEOF
+
+                echo "=== Allowing root SSH login ==="
+                if [ -f /mnt/target/etc/ssh/sshd_config ]; then
+                  sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /mnt/target/etc/ssh/sshd_config || true
+                fi
+
+                echo "=== Disabling cloud-init datasource wait ==="
+                mkdir -p /mnt/target/etc/cloud/cloud.cfg.d
+                echo 'datasource_list: [NoCloud, None]' > /mnt/target/etc/cloud/cloud.cfg.d/90-datasource.cfg
+
+                echo "=== Summary ==="
+                echo "Hostname: $(cat /mnt/target/etc/hostname)"
+                echo "Root SSH key: $(cat /mnt/target/root/.ssh/authorized_keys)"
+                echo "NoCloud user-data:"
+                cat /mnt/target/var/lib/cloud/seed/nocloud/user-data
+                echo "Netplan:"
+                cat /mnt/target/etc/netplan/99-daalu-all-dhcp.yaml
+
+                umount /mnt/target
+                echo "Configuration complete on $ROOT_PART"
+            environment:
+              BLOCK_DEVICE: "{{.disk}}"
+
+          - name: "reboot"
+            image: busybox:stable
+            timeout: 90
+            command:
+              - sh
+              - -c
+              - |
+                echo "Scheduling reboot via host PID namespace..."
+                nsenter --target 1 --pid -- sh -c 'sleep 5 && echo b > /proc/sysrq-trigger' &
+                echo "Reboot scheduled. Exiting action cleanly."

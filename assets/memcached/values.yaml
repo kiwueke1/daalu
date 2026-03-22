@@ -9,7 +9,7 @@ endpoints:
 images:
   tags:
     memcached: docker.io/library/memcached:1.5.5
-    exporter: quay.io/prometheus/memcached-exporter:v0.14.0
+    prometheus_memcached_exporter: quay.io/prometheus/memcached-exporter:v0.14.0
 
 monitoring:
   prometheus:

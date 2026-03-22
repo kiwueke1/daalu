@@ -43,6 +43,7 @@ class KeycloakClientSpec:
 
     public: bool = False
     protocol: str = "openid-connect"
+    service_accounts_enabled: bool = False  # enables client_credentials grant
 
     root_url: Optional[str] = None
     base_url: Optional[str] = None

@@ -83,29 +83,56 @@ class RabbitMQClusterOperatorComponent(InfraComponent):
     def values(self) -> dict:
         data = self.load_values_file(self.values_path)
         if self._registry_url:
-            # Override the operator's DEFAULT_RABBITMQ_IMAGE to point at Harbor.
-            # The chart sets this via rabbitmqImage.registry + .repository + .tag.
-            # We split on the last ':' to get tag, then rewrite the registry/repo.
-            rmq_img = data.get("rabbitmqImage", {})
-            registry = rmq_img.get("registry", "docker.io")
-            repository = rmq_img.get("repository", "library/rabbitmq")
-            tag = rmq_img.get("tag", "")
-            src_image = f"{registry}/{repository}:{tag}" if tag else f"{registry}/{repository}"
             from daalu.bootstrap.registry.image_mirror import ImageMirror
-            rewritten = ImageMirror.rewrite_image_static(
-                src_image, self._registry_url, self._registry_project
+
+            # Bitnami charts use global.imageRegistry as the authoritative registry
+            # override — it takes precedence over per-image .registry fields.
+            # Set it to the Harbor host:port so all images in this chart resolve to Harbor.
+            data.setdefault("global", {})["imageRegistry"] = self._registry_url
+
+            # Rewrite each image's repository to include the Harbor project prefix.
+            # global.imageRegistry + repository:tag → full image URL.
+            def _rewrite_repo(src_registry: str, src_repo: str, src_tag: str) -> str:
+                src_image = f"{src_registry}/{src_repo}:{src_tag}"
+                rewritten = ImageMirror.rewrite_image_static(
+                    src_image, self._registry_url, self._registry_project
+                )
+                # Strip the leading registry host (global.imageRegistry) — keep only repo:tag
+                parts = rewritten.split("/", 1)
+                return parts[1] if len(parts) > 1 else rewritten
+
+            rmq = data.get("rabbitmqImage", {})
+            data.setdefault("rabbitmqImage", {})["repository"] = _rewrite_repo(
+                rmq.get("registry", "docker.io"),
+                rmq.get("repository", "library/rabbitmq"),
+                rmq.get("tag", ""),
+            ).rsplit(":", 1)[0]  # strip tag — tag field is kept separately
+
+            cred = data.get("credentialUpdaterImage", {})
+            data.setdefault("credentialUpdaterImage", {})["repository"] = _rewrite_repo(
+                "docker.io",
+                cred.get("repository", "rabbitmqoperator/credential-updater"),
+                cred.get("tag", ""),
+            ).rsplit(":", 1)[0]
+
+            cop = data.get("clusterOperator", {}).get("image", {})
+            data.setdefault("clusterOperator", {}).setdefault("image", {})["repository"] = (
+                _rewrite_repo(
+                    "docker.io",
+                    cop.get("repository", "rabbitmqoperator/cluster-operator"),
+                    cop.get("tag", ""),
+                ).rsplit(":", 1)[0]
             )
-            # Split rewritten back into registry+repo and tag
-            if ":" in rewritten.split("/")[-1]:
-                repo_part, tag_part = rewritten.rsplit(":", 1)
-            else:
-                repo_part, tag_part = rewritten, ""
-            # registry is the first component (host:port or host)
-            parts = repo_part.split("/", 1)
-            data.setdefault("rabbitmqImage", {})["registry"] = parts[0]
-            data["rabbitmqImage"]["repository"] = parts[1] if len(parts) > 1 else ""
-            if tag_part:
-                data["rabbitmqImage"]["tag"] = tag_part
+
+            mto = data.get("msgTopologyOperator", {}).get("image", {})
+            data.setdefault("msgTopologyOperator", {}).setdefault("image", {})["repository"] = (
+                _rewrite_repo(
+                    "docker.io",
+                    mto.get("repository", "rabbitmqoperator/messaging-topology-operator"),
+                    mto.get("tag", ""),
+                ).rsplit(":", 1)[0]
+            )
+
         return data
 
     # ------------------------------------------------------------------

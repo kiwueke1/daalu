@@ -27,7 +27,10 @@ class MgmtClusterManager:
       1. SSH into a fresh Ubuntu node
       2. Install Kubernetes (kubeadm) + Cilium CNI
       3. Save kubeconfig locally
-      4. Install Metal3 stack (cert-manager → CAPI → IrSO → Ironic → BMO → CAPM3)
+      4. Install the bare-metal provisioning stack, chosen by mgmt_cluster.provider:
+           tinkerbell  (default) — Tinkerbell stack + CAPT
+           metal3                — Ironic + Baremetal Operator + CAPM3
+           proxmox               — Cluster API Provider for Proxmox (CAPO)
       5. Deploy Harbor registry (optional, reuses RegistryManager)
 
     Returns the local kubeconfig path so the user can point their tools at
@@ -95,10 +98,26 @@ class MgmtClusterManager:
             k8s.install_cilium(kubeconfig_path)
 
             # ------------------------------------------------------------------
-            # 5. Install Metal3 stack
+            # 5. Install bare-metal provisioning stack
             # ------------------------------------------------------------------
-            log.info("[mgmt] Installing Metal3 stack...")
-            Metal3Installer(kubeconfig_path, mgmt_cfg).install()
+            from daalu.bootstrap.mgmt.models import BaremetalProvider
+
+            provider = mgmt_cfg.provider
+            log.info("[mgmt] Installing bare-metal provisioning stack (provider: %s)...", provider.value)
+
+            if provider == BaremetalProvider.metal3:
+                Metal3Installer(kubeconfig_path, mgmt_cfg).install()
+
+            elif provider == BaremetalProvider.tinkerbell:
+                from daalu.bootstrap.mgmt.tinkerbell_installer import TinkerbellInstaller
+                TinkerbellInstaller(kubeconfig_path, mgmt_cfg, self._workspace_root).install()
+
+            elif provider == BaremetalProvider.proxmox:
+                from daalu.bootstrap.mgmt.proxmox_installer import ProxmoxInstaller
+                ProxmoxInstaller(kubeconfig_path, mgmt_cfg).install()
+
+            else:
+                raise ValueError(f"Unknown bare-metal provider: {provider!r}")
 
             # ------------------------------------------------------------------
             # 6. Deploy Harbor (optional)

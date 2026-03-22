@@ -1,0 +1,28 @@
+# Tinkerbell provisioning images — mirrored to the 'tinkerbell' Harbor project.
+# Versions must stay in sync with the action images referenced in
+# assets/tinkerbell/templates/ubuntu-kubeadm.yaml and the cluster-api manifests.
+#
+# Format: project + images list (parsed by ImageExtractor._extract_from_list_file)
+
+project: tinkerbell
+images:
+  # Action: stream OS image to disk (used in ubuntu-kubeadm template)
+  - ghcr.io/tinkerbell/actions/image2disk:v0.1.0
+
+  # Action: chroot-exec for cloud-init configuration
+  - ghcr.io/tinkerbell/actions/cexec:v0.1.0
+
+  # Action: reboot node after provisioning
+  - ghcr.io/tinkerbell/actions/reboot:v0.1.0
+
+  # Tink worker — runs on bare-metal nodes during PXE boot to execute workflows
+  - ghcr.io/tinkerbell/tink-worker:v0.10.0
+
+  # SMEE — DHCP/TFTP/iPXE server
+  - quay.io/tinkerbell/smee:v0.9.0
+
+  # Hegel — instance metadata server (cloud-init datasource)
+  - ghcr.io/tinkerbell/hegel:v0.12.0
+
+  # Tink server — workflow/template/hardware API
+  - ghcr.io/tinkerbell/tink-server:v0.10.0

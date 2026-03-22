@@ -223,6 +223,8 @@ def build_infrastructure_components(
                     filename="values.yaml",
                 ),
                 kubeconfig=kubeconfig_path,
+                registry_url=registry_url,
+                registry_project=registry_project,
             )
         )
 

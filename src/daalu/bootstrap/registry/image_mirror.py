@@ -22,6 +22,9 @@ class MirrorReport:
 
 def _is_custom_registry(image: str) -> bool:
     """True for images like '10.10.0.5:5000/...' that should not be rewritten."""
+    if "/" not in image:
+        # Bare image name like 'redis:8.2.2-alpine' — Docker Hub library image, not custom.
+        return False
     host = image.split("/")[0]
     return ":" in host and not host.startswith("docker.io")
 
@@ -100,10 +103,15 @@ class ImageMirror:
 
         cmd = ["skopeo", "copy"]
 
-        # Authenticate to Docker Hub if credentials are provided and source is docker.io
-        if self.docker_username and self.docker_token:
-            if self._src_registry(source) == "docker.io":
-                cmd += ["--src-creds", f"{self.docker_username}:{self.docker_token}"]
+        src_registry = self._src_registry(source)
+        if self.docker_username and self.docker_token and src_registry == "docker.io":
+            # Authenticate to Docker Hub to avoid pull rate limits
+            cmd += ["--src-creds", f"{self.docker_username}:{self.docker_token}"]
+        elif src_registry != "docker.io":
+            # For non-Docker Hub registries (ghcr.io, quay.io, etc.) where we have
+            # no credentials, pass --src-no-creds so skopeo does not attempt a
+            # bearer-token exchange that some registries (e.g. ghcr.io) reject with 403.
+            cmd += ["--src-no-creds"]
 
         cmd += ["--dest-creds", f"admin:{self.admin_password}"]
 

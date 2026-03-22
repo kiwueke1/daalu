@@ -276,6 +276,62 @@ daalu deploy cluster-defs/cluster.yaml \
 | `monitoring`     | Prometheus, Grafana, Loki, OpenSearch, Thanos     |
 | `openstack`      | Full OpenStack control plane                      |
 
+### Cloud smoke test (cloud-setup)
+
+After the OpenStack control plane is deployed, the `cloud-setup` component runs automatically as the final step. It verifies the cloud is functional by creating:
+
+- **Glance image** — Ubuntu 22.04 (downloaded from Ubuntu cloud-images and uploaded to Glance)
+- **Private network + subnet** — `private-net` / `10.0.2.0/24`
+- **Public (external) network + subnet** — `public-net` flat provider network with a floating-IP pool
+- **Router** — connects private subnet to the public network (provides outbound internet access to VMs)
+- **Security group** — `vm-secgroup` with ICMP (ping) and TCP 22 (SSH) rules
+- **Test VM** — (optional) if `vm_key_name` is configured in `cluster.yaml`
+
+All steps are idempotent: if a resource already exists it is silently skipped.
+
+#### Running the smoke test standalone
+
+To re-run only the cloud smoke test (e.g. after a partial failure):
+
+```bash
+daalu deploy cluster-defs/cluster.yaml \
+  --install openstack \
+  --infra cloud-setup \
+  --managed-user builder \
+  --managed-user-password <password> \
+  --ssh-key ~/.ssh/openstack-key \
+  --local-registry \
+  --mgmt-kubeconfig ~/.kube/daalu-mgmt-config
+```
+
+#### Skipping the smoke test
+
+To deploy OpenStack without running the smoke test, use `--infra` to list only the components you want:
+
+```bash
+# Deploy all OpenStack components except cloud-setup
+daalu deploy cluster-defs/cluster.yaml \
+  --install openstack \
+  --infra keystone,glance,neutron,nova \
+  --managed-user builder \
+  --managed-user-password <password> \
+  --ssh-key ~/.ssh/openstack-key
+```
+
+#### Configuring cloud-setup defaults
+
+The smoke test uses sensible defaults but the key parameters can be overridden in `cluster.yaml` (support coming soon). Current defaults:
+
+| Parameter | Default |
+|---|---|
+| Image | Ubuntu 22.04 (jammy cloud image) |
+| Private network | `private-net` / `10.0.2.0/24` gateway `10.0.2.1` |
+| Public network | `public-net` flat provider on `provider` physical net |
+| Public subnet | `192.168.0.0/24`, allocation pool `192.168.0.200–250` |
+| Router | `router1` |
+| Security group | `vm-secgroup` (ICMP + TCP 22) |
+| VM | `test-vm1`, flavor `m1.large` (only if `vm_key_name` set) |
+
 ---
 
 ## CLI Reference

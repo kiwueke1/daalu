@@ -256,7 +256,7 @@ class HelmInfraEngine:
                 )
 
         except Exception as e:
-            log.error("[%s] Deployment failed: %s", component.name, e)
+            log.exception("[%s] Deployment failed: %s: %s", component.name, type(e).__name__, e)
             if self.logger:
                 self.logger.log_event(
                     "infra.component.deploy.failed",

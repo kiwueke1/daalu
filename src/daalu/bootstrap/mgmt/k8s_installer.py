@@ -14,7 +14,6 @@ from daalu.utils.ssh_runner import SSHRunner
 
 log = logging.getLogger("daalu")
 
-
 class K8sInstaller:
     """
     Installs Kubernetes (kubeadm) on a fresh Ubuntu machine via SSH,
@@ -95,12 +94,31 @@ class K8sInstaller:
                 # pod-level traffic by default.
                 "--set", "socketLB.enabled=true",
                 "--set", "socketLB.hostNamespaceOnly=false",
+                # Disable the operator's Prometheus hostPort (9963).
+                # On a single-node mgmt cluster the operator and agent share the
+                # same host; if any container from a previous install is still
+                # holding port 9963 in containerd the operator pod will be stuck
+                # Pending with "didn't have free ports".  The mgmt cluster has
+                # no external Prometheus scraping the operator, so this is safe.
+                "--set", "operator.prometheus.enabled=false",
+                # Single-node mgmt cluster — only 1 operator replica needed.
+                # Cilium defaults to replicas=2 for HA; on a 1-node cluster the
+                # second replica can never schedule (hostPort conflict with the
+                # first) and stays Pending indefinitely.
+                "--set", "operator.replicas=1",
                 "--wait",
                 "--timeout", "5m",
             ],
             check=True,
         )
         log.info("[mgmt/k8s] Cilium installed")
+
+        # Restart containerd so it re-reads /etc/cni/net.d/05-cilium.conflist.
+        # containerd does not hot-reload CNI configs; without a restart kubelet
+        # keeps reporting "cni plugin not initialized" and the node stays
+        # NotReady indefinitely even though the Cilium pod is Running.
+        log.info("[mgmt/k8s] Restarting containerd to initialise CNI plugin...")
+        self._run("systemctl restart containerd")
 
         # Wait for the node to reach Ready after CNI initialisation.
         # The Helm --wait above confirms the Cilium pod is Running, but

@@ -1108,8 +1108,100 @@ class KeystoneComponent(InfraComponent):
         self._deploy_shadow_user_sync_cronjob(kubectl)
         log.info("[keystone] Shadow-user sync CronJob deployed")
 
+        # Permanent hairpin-NAT fix: inject hostAliases into the keystone-api
+        # Deployment so auth.daalu.io always resolves to the Istio gateway IP
+        # directly from /etc/hosts, independent of CoreDNS state.
+        log.info("[keystone] Injecting hostAliases for permanent Keycloak DNS resolution...")
+        self._inject_host_aliases(kubectl)
+        log.info("[keystone] hostAliases injection complete")
+
         log.info("[keystone] Post-install complete")
 
+    def _inject_host_aliases(self, kubectl) -> None:
+        """
+        Patch the keystone-api Deployment to add hostAliases that map the
+        Keycloak hostname (e.g. auth.daalu.io) to the Istio ingress gateway's
+        internal LoadBalancer IP.
+
+        WHY THIS IS NEEDED
+        ------------------
+        mod_auth_openidc in Apache fetches the Keycloak OIDC discovery document
+        at WebSSO request time:
+            https://auth.daalu.io/realms/daalu/.well-known/openid-configuration
+
+        Without this fix, `auth.daalu.io` resolves (via CoreDNS → public DNS) to
+        the pfSense WAN IP. pfSense serves its own management UI on port 443 with
+        a self-signed certificate. mod_auth_openidc rejects it and returns HTTP 500.
+
+        PERMANENT NATURE OF THIS FIX
+        -----------------------------
+        hostAliases are part of the pod spec in the Deployment object (stored in
+        etcd). They are:
+        - Never reset by CoreDNS ConfigMap changes or Kubernetes upgrades
+        - Written into every pod's /etc/hosts at container start
+        - Reapplied on every `daalu openstack` run via this post_install method
+        - Completely independent of CoreDNS (bypasses DNS lookup entirely)
+
+        The CoreDNS split-horizon patch (kube_coredns.py) remains for other pods
+        that also need to resolve cluster-hosted FQDNs internally, but Keystone
+        no longer depends on it.
+        """
+        from urllib.parse import urlparse
+
+        base_url = self.keycloak_config.admin.base_url  # e.g. "https://auth.daalu.io"
+        keycloak_host = urlparse(base_url).hostname
+        if not keycloak_host:
+            log.warning(
+                "[keystone] Could not parse Keycloak hostname from %s; "
+                "skipping hostAliases patch",
+                base_url,
+            )
+            return
+
+        rc, out, _ = kubectl._run(
+            "get svc istio-ingressgateway -n istio-ingress"
+            " -o jsonpath='{.status.loadBalancer.ingress[0].ip}'"
+        )
+        gateway_ip = out.strip().strip("'\"")
+        if rc != 0 or not gateway_ip:
+            log.warning(
+                "[keystone] Could not determine Istio gateway IP; "
+                "skipping hostAliases patch"
+            )
+            return
+
+        log.info(
+            "[keystone] Patching keystone-api Deployment: %s → %s",
+            keycloak_host, gateway_ip,
+        )
+        kubectl.patch(
+            api_version="apps/v1",
+            kind="Deployment",
+            name="keystone-api",
+            namespace=self.namespace,
+            patch={
+                "spec": {
+                    "template": {
+                        "spec": {
+                            "hostAliases": [
+                                {"ip": gateway_ip, "hostnames": [keycloak_host]},
+                            ]
+                        }
+                    }
+                }
+            },
+        )
+
+        log.info("[keystone] Waiting for keystone-api rollout with new hostAliases...")
+        kubectl.wait_for_deployment_ready(
+            name="keystone-api",
+            namespace=self.namespace,
+            timeout=300,
+        )
+        log.info(
+            "[keystone] keystone-api pods now resolve %s → %s via /etc/hosts ✓",
+            keycloak_host, gateway_ip,
+        )
 
     # ----------------------------
     # Helper methods

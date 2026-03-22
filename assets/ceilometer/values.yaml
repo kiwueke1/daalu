@@ -12,6 +12,7 @@ images:
     ceilometer_collector: docker.io/openstackhelm/ceilometer:2024.1-ubuntu_jammy
     ceilometer_notification: docker.io/openstackhelm/ceilometer:2024.1-ubuntu_jammy
     ceilometer_compute: docker.io/openstackhelm/ceilometer:2024.1-ubuntu_jammy
+    ceilometer_ipmi: docker.io/openstackhelm/ceilometer:2024.1-ubuntu_jammy
 pod:
   replicas:
     central: 1

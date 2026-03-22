@@ -1,0 +1,3 @@
+# Ceph daemon image used by the rook-ceph operator for external cluster tooling.
+# Mirrored to Harbor by `daalu mirror-images`.
+- quay.io/ceph/ceph:v18.2.0

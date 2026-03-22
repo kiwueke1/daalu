@@ -1,0 +1,7 @@
+# Valkey (Redis-compatible) cluster images.
+# Mirrored to Harbor by `daalu mirror-images`.
+# Use explicit docker.io/ prefix so bitnami/ org is preserved in Harbor
+# (e.g. openstack/bitnami/valkey:latest).
+- docker.io/bitnami/valkey:latest
+- docker.io/bitnami/valkey-sentinel:latest
+- docker.io/bitnami/redis-exporter:latest

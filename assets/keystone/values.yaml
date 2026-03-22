@@ -27,6 +27,10 @@ images:
     keystone_fernet_rotate: 10.10.0.9:30003/openstack/keystone:2024.2-oidc
     keystone_db_sync: 10.10.0.9:30003/openstack/keystone:2024.2-oidc
     bootstrap: 10.10.0.9:30003/openstack/keystone:2024.2-oidc
+    db_init: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    db_drop: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    domain_manage: docker.io/openstackhelm/keystone:2024.1-ubuntu_jammy
+    rabbit_init: docker.io/rabbitmq:3.13-management
   pull_policy: IfNotPresent
 
 pod:

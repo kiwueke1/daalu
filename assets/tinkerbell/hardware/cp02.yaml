@@ -1,0 +1,55 @@
+# Tinkerbell Hardware + Rufio Machine + BMC Secret for cp02
+# MAC:  ac:1f:6b:01:b5:eb
+# BMC:  https://192.168.0.69  (Redfish, TLS disabled)
+# Disk: /dev/sda
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cp02-bmc-secret
+  namespace: tinkerbell
+type: Opaque
+stringData:
+  username: ADMIN
+  password: ADMIN
+---
+apiVersion: bmc.tinkerbell.org/v1alpha1
+kind: Machine
+metadata:
+  name: cp02
+  namespace: tinkerbell
+spec:
+  connection:
+    host: https://192.168.0.69
+    authSecretRef:
+      name: cp02-bmc-secret
+      namespace: tinkerbell
+    insecureTLS: true
+---
+---
+apiVersion: tinkerbell.org/v1alpha1
+kind: Hardware
+metadata:
+  name: cp02
+  namespace: tinkerbell
+spec:
+  bmcRef:
+    apiGroup: bmc.tinkerbell.org
+    kind: Machine
+    name: cp02
+  disks:
+    - device: /dev/sda
+  interfaces:
+    - dhcp:
+        arch: x86_64
+        hostname: cp02
+        ip:
+          address: 10.10.0.171
+          family: 4
+          gateway: 10.10.0.9
+          netmask: 255.255.0.0
+        mac: "ac:1f:6b:01:b5:eb"
+        uefi: false
+      netboot:
+        allowPXE: true
+        allowWorkflow: true

@@ -329,7 +329,15 @@ class CephManager:
             # 4. Placements + OSDs
             log.debug("[ceph] step 6/6: applying placements and OSDs")
             self._apply_placements(cli, cfg, hosts)
+
+            # Remove conflicting osd.default spec BEFORE adding OSDs, then
+            # wait for all hosts (including newly-added external ones) to be
+            # reachable by the orchestrator before attempting OSD deployment.
+            self._remove_osd_default_spec(cli)
+            if others:
+                self._wait_for_hosts_ready(cli, [h.hostname for h in others])
             self._apply_osds(cli, cfg, hosts)
+            self._wait_for_osds(cli, hosts)
 
             # 5. Post-OSD cleanup
             self._post_osd_cleanup(cli)
@@ -553,6 +561,108 @@ class CephManager:
         self._run(cli, f'cephadm shell -- ceph orch apply mgr --placement="{mgr_names}"', sudo=True)
 
     # ----------------------------------------------------------------------
+    def _remove_osd_default_spec(self, cli) -> None:
+        """Remove the osd.default spec before OSD provisioning.
+
+        cephadm auto-creates this spec when ``--all-available-devices`` is
+        used during bootstrap.  It conflicts with our per-device ``daemon add``
+        approach and causes ``Failed to apply 1 service(s): osd.default``
+        warnings.  Removing the spec does NOT affect running OSD daemons.
+        """
+        import json as _json
+
+        rc, out, _ = self._run(
+            cli,
+            "cephadm shell -- ceph orch ls --service-type osd --format json",
+            sudo=True, timeout=30,
+        )
+        if rc != 0:
+            return
+        try:
+            specs = _json.loads(out.strip())
+        except _json.JSONDecodeError:
+            return
+        for spec in specs:
+            if spec.get("service_name", "") == "osd.default":
+                log.debug("[ceph] Removing conflicting osd.default spec before OSD provisioning")
+                # --force is required when the spec has any managed daemons
+                self._run(cli, "cephadm shell -- ceph orch rm osd.default --force", sudo=True, timeout=30)
+
+    # ----------------------------------------------------------------------
+    def _wait_for_hosts_ready(self, cli, hostnames: List[str], timeout: float = 180.0) -> None:
+        """Poll until all named hosts appear as non-offline in ceph orch host ls.
+
+        The orchestrator needs to SSH to each newly-added host and deploy a
+        cephadm agent before OSD operations can succeed.  Without this wait,
+        ``ceph orch daemon add osd`` returns rc=0 (the request is accepted)
+        but the OSD never starts because the remote host is not yet reachable
+        by the orchestrator.
+        """
+        import time
+        import json as _json
+
+        pending = set(hostnames)
+        log.debug("[ceph] Waiting up to %ds for hosts to be ready: %s", int(timeout), sorted(pending))
+        deadline = time.monotonic() + timeout
+
+        while pending and time.monotonic() < deadline:
+            rc, out, _ = self._run(
+                cli,
+                "cephadm shell -- ceph orch host ls --format json",
+                sudo=True, timeout=30,
+            )
+            if rc == 0:
+                try:
+                    for h in _json.loads(out.strip()):
+                        hn = h.get("hostname", "")
+                        status = h.get("status", "").lower()
+                        if hn in pending and "offline" not in status:
+                            log.debug("[ceph] Host %s is ready (status=%r)", hn, status)
+                            pending.discard(hn)
+                except _json.JSONDecodeError:
+                    pass
+            if pending:
+                log.debug("[ceph] Still waiting for hosts: %s", sorted(pending))
+                time.sleep(15)
+
+        if pending:
+            log.warning("[ceph] Host(s) still not ready after %ds: %s — proceeding anyway", int(timeout), sorted(pending))
+        else:
+            log.debug("[ceph] All hosts ready for OSD provisioning")
+
+    # ----------------------------------------------------------------------
+    def _wait_for_osds(self, cli, hosts: List["CephHost"], timeout: float = 60.0) -> None:
+        """Final sanity check: log running OSD count after _apply_osds completes.
+
+        _apply_osds now waits per-device, so this is just a short summary poll.
+        """
+        import time
+        import json as _json
+
+        expected = sum(len(h.osd_devices) for h in hosts if h.osd_devices)
+        if expected == 0:
+            return
+
+        time.sleep(5)
+        rc, out, _ = self._run(
+            cli,
+            "cephadm shell -- ceph orch ps --daemon-type osd --format json",
+            sudo=True, timeout=30,
+        )
+        count = 0
+        if rc == 0:
+            try:
+                daemons = _json.loads(out.strip())
+                count = sum(1 for d in daemons if d.get("status_desc", "").lower() == "running")
+            except _json.JSONDecodeError:
+                pass
+
+        if count >= expected:
+            log.debug("[ceph] OSD summary: %d/%d daemons running", count, expected)
+        else:
+            log.warning("[ceph] OSD summary: only %d/%d daemons running — cluster may still be converging", count, expected)
+
+    # ----------------------------------------------------------------------
 
     def _discover_available_devices(self, cli, hostname: str) -> List[str]:
         """Query ceph orch device ls for available (unused) block devices on a host.
@@ -611,17 +721,106 @@ class CephManager:
 
         return devices
 
+    def _classify_device(self, cli, hostname: str, device: str) -> str:
+        """Classify a block device for OSD provisioning.
+
+        Returns one of:
+          ``'ceph_osd'``  — device already hosts a running Ceph OSD (skip)
+          ``'available'`` — Ceph reports the device as available (add directly)
+          ``'needs_zap'`` — device has residual LVM / filesystem data (zap first)
+          ``'unknown'``   — could not determine state (attempt add anyway)
+        """
+        import json as _json
+
+        rc, out, _ = self._run(
+            cli,
+            f"cephadm shell -- ceph orch device ls --hostname {hostname} --format json",
+            sudo=True, timeout=60,
+        )
+        if rc != 0:
+            return "unknown"
+        try:
+            data = _json.loads(out.strip())
+        except _json.JSONDecodeError:
+            return "unknown"
+
+        for entry in data:
+            host_key = entry.get("hostname") or entry.get("name") or entry.get("addr") or ""
+            if host_key != hostname:
+                continue
+            for dev in entry.get("devices", []):
+                if dev.get("path") != device:
+                    continue
+                if dev.get("available", False):
+                    return "available"
+                reasons_str = " ".join(str(r) for r in dev.get("rejected_reasons", [])).lower()
+                # Device is managed by an existing Ceph OSD daemon
+                if any(kw in reasons_str for kw in ("ceph", "osd", "bluestore", "locking")):
+                    return "ceph_osd"
+                # Has LVM signatures, filesystems, or other non-Ceph data
+                return "needs_zap"
+
+        return "unknown"
+
+    def _zap_device(self, cli, hostname: str, device: str, wait_available: float = 90.0) -> bool:
+        """Zap a block device and wait for Ceph to report it as available.
+
+        Returns True if the device becomes available within *wait_available* seconds.
+        """
+        import time as _time
+
+        log.debug("[ceph] Zapping %s on %s to clear residual data", device, hostname)
+        rc, out, err = self._run(
+            cli,
+            f"cephadm shell -- ceph orch device zap {hostname} {device} --force",
+            sudo=True, timeout=120,
+        )
+        if rc != 0:
+            log.warning("[ceph] Device zap failed for %s:%s (rc=%d): %s", hostname, device, rc, err or out)
+            return False
+
+        # Wait until ceph reports the device as available
+        deadline = _time.monotonic() + wait_available
+        while _time.monotonic() < deadline:
+            state = self._classify_device(cli, hostname, device)
+            if state == "available":
+                log.debug("[ceph] Device %s:%s is now available after zap", hostname, device)
+                return True
+            _time.sleep(10)
+
+        log.warning("[ceph] Device %s:%s not available after zap+%ds wait", hostname, device, int(wait_available))
+        return False
+
+    def _daemon_add_osd(self, cli, hostname: str, device: str) -> bool:
+        """Run ``ceph orch daemon add osd hostname:device`` and return True on success."""
+        rc, out, err = self._run(
+            cli,
+            f"cephadm shell -- ceph orch daemon add osd {hostname}:{device}",
+            sudo=True,
+        )
+        if rc == 0:
+            return True
+        msg = (err or out or "").lower()
+        if "already" in msg or "exists" in msg:
+            log.debug("[ceph] OSD already exists on %s:%s", hostname, device)
+            return True
+        log.debug("[ceph] daemon add osd %s:%s rc=%d: %s", hostname, device, rc, (err or out or "").strip()[:200])
+        return False
+
     def _apply_osds(self, cli, cfg: CephConfig, hosts: list[CephHost]) -> None:
         """Apply OSDs on all Ceph hosts.
 
-        Hosts with an explicit osd_devices list use those devices directly.
-        Hosts with no configured devices are auto-discovered via
-        ``ceph orch device ls`` — only devices Ceph reports as available are
-        added.  Hosts with neither configured nor discoverable devices are
-        skipped.
-        Each device add is checked for success; failures emit a warning
-        rather than aborting the deployment.
+        For each device the method:
+          1. Checks device state (available / already Ceph OSD / needs zap).
+          2. Skips devices that already host a running OSD.
+          3. Zaps devices that have residual LVM / filesystem data before adding.
+          4. Submits ``ceph orch daemon add osd`` and waits for the daemon to
+             appear as *running* in ``ceph orch ps``.
+          5. Falls back to zap+retry for devices whose OSD daemon never starts.
         """
+        import time as _time
+        import json as _json
+
         if not cfg.apply_osds_all_devices:
             return
 
@@ -652,31 +851,120 @@ class CephManager:
                 **self.run_ctx,
             ))
 
+            # Count OSD daemons on this host before we start so we can detect
+            # whether a new daemon appeared after each daemon add.
+            def _running_osd_count(hostname: str) -> int:
+                rc2, out2, _ = self._run(
+                    cli,
+                    f"cephadm shell -- ceph orch ps {hostname} --daemon-type osd --format json",
+                    sudo=True, timeout=30,
+                )
+                if rc2 != 0:
+                    return 0
+                try:
+                    return sum(
+                        1 for d in _json.loads(out2.strip())
+                        if d.get("status_desc", "").lower() == "running"
+                    )
+                except _json.JSONDecodeError:
+                    return 0
+
             for device in host.osd_devices:
                 total_attempted += 1
-                log.debug("[ceph] Adding OSD %s on %s", device, host.hostname)
-                rc, out, err = self._run(
-                    cli,
-                    f"cephadm shell -- ceph orch daemon add osd {host.hostname}:{device}",
-                    sudo=True,
-                )
-                if rc == 0:
+                log.debug("[ceph] Processing OSD device %s on %s", device, host.hostname)
+
+                # ── Step 1: check device state ──────────────────────────────
+                state = self._classify_device(cli, host.hostname, device)
+                log.debug("[ceph] Device %s:%s state=%s", host.hostname, device, state)
+
+                if state == "ceph_osd":
+                    log.debug("[ceph] OSD already running on %s:%s — counting as success", host.hostname, device)
                     total_ok += 1
                     self.bus.emit(CephProgress(
                         stage="osd_add",
-                        message=f"OSD added: {host.hostname}:{device}",
+                        message=f"OSD already present: {host.hostname}:{device}",
+                        **self.run_ctx,
+                    ))
+                    continue
+
+                if state == "needs_zap":
+                    log.debug("[ceph] Device %s:%s has residual data — zapping before add", host.hostname, device)
+                    self.bus.emit(CephProgress(
+                        stage="osd_add",
+                        message=f"Zapping {host.hostname}:{device} (residual data)",
+                        **self.run_ctx,
+                    ))
+                    if not self._zap_device(cli, host.hostname, device):
+                        log.warning("[ceph] Zap failed for %s:%s — skipping", host.hostname, device)
+                        self.bus.emit(CephProgress(
+                            stage="osd_add_warn",
+                            message=f"Zap failed for {host.hostname}:{device} — skipping",
+                            **self.run_ctx,
+                        ))
+                        continue
+
+                # ── Step 2: submit daemon add ───────────────────────────────
+                before_count = _running_osd_count(host.hostname)
+                accepted = self._daemon_add_osd(cli, host.hostname, device)
+                if not accepted:
+                    # Not accepted → try a zap then retry once
+                    log.warning("[ceph] daemon add not accepted for %s:%s — zapping and retrying", host.hostname, device)
+                    if self._zap_device(cli, host.hostname, device):
+                        accepted = self._daemon_add_osd(cli, host.hostname, device)
+                    if not accepted:
+                        log.warning("[ceph] Giving up on OSD %s:%s after zap+retry", host.hostname, device)
+                        self.bus.emit(CephProgress(
+                            stage="osd_add_warn",
+                            message=f"OSD {host.hostname}:{device} failed to be accepted",
+                            **self.run_ctx,
+                        ))
+                        continue
+
+                # ── Step 3: wait for daemon to go running (up to 90s) ───────
+                _osd_up = False
+                for _ in range(9):
+                    _time.sleep(10)
+                    if _running_osd_count(host.hostname) > before_count:
+                        _osd_up = True
+                        break
+
+                if not _osd_up:
+                    # Daemon was accepted but never started — likely the device
+                    # still has invisible residual data.  Zap and retry once more.
+                    log.warning(
+                        "[ceph] OSD on %s:%s accepted but daemon never started — zapping and re-submitting",
+                        host.hostname, device,
+                    )
+                    self.bus.emit(CephProgress(
+                        stage="osd_add",
+                        message=f"OSD {host.hostname}:{device} accepted but not running — zap+retry",
+                        **self.run_ctx,
+                    ))
+                    if self._zap_device(cli, host.hostname, device):
+                        before_count2 = _running_osd_count(host.hostname)
+                        if self._daemon_add_osd(cli, host.hostname, device):
+                            for _ in range(9):
+                                _time.sleep(10)
+                                if _running_osd_count(host.hostname) > before_count2:
+                                    _osd_up = True
+                                    break
+
+                if _osd_up:
+                    total_ok += 1
+                    self.bus.emit(CephProgress(
+                        stage="osd_add",
+                        message=f"OSD running: {host.hostname}:{device}",
                         **self.run_ctx,
                     ))
                 else:
-                    msg = (err or out or "").strip()
-                    log.warning("[ceph] OSD add failed for %s:%s (rc=%d): %s", host.hostname, device, rc, msg)
+                    log.warning("[ceph] OSD daemon never reached running state for %s:%s", host.hostname, device)
                     self.bus.emit(CephProgress(
                         stage="osd_add_warn",
-                        message=f"OSD {host.hostname}:{device} failed (rc={rc}): {msg[:200]}",
+                        message=f"OSD {host.hostname}:{device} did not reach running state",
                         **self.run_ctx,
                     ))
 
-        summary = f"OSD provisioning: {total_ok}/{total_attempted} device(s) added successfully"
+        summary = f"OSD provisioning: {total_ok}/{total_attempted} device(s) confirmed running"
         log.debug("[ceph] %s", summary)
         self.bus.emit(CephProgress(stage="osd_summary", message=summary, **self.run_ctx))
 
@@ -709,16 +997,13 @@ class CephManager:
 
             for spec in specs:
                 name = spec.get("service_name", "")
-                # Remove the auto-created osd.default spec unconditionally.
-                # This spec is created by cephadm when using --all-available-devices
-                # and conflicts with our per-device daemon add approach.
-                # Removing the spec does NOT remove running OSD daemons — they
-                # continue operating but are no longer managed by the spec.
+                # osd.default is removed pre-OSD by _remove_osd_default_spec;
+                # guard here in case a subsequent run left another one behind.
                 if name == "osd.default":
-                    log.debug("[ceph] Removing auto-created OSD spec '%s'", name)
+                    log.debug("[ceph] post-cleanup: removing stale osd.default spec")
                     self._run(
                         cli,
-                        f"cephadm shell -- ceph orch rm {name}",
+                        f"cephadm shell -- ceph orch rm {name} --force",
                         sudo=True, timeout=30,
                     )
 

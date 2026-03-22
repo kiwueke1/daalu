@@ -67,7 +67,7 @@ class HarborDeployer:
         ssh_password: str | None = None,
         harbor_node_ip: str | None = None,
     ):
-        self.mgmt_kubeconfig = mgmt_kubeconfig
+        self.mgmt_kubeconfig = str(Path(mgmt_kubeconfig).expanduser())
         self.harbor_hostname = harbor_hostname
         self.admin_password = admin_password
         self.namespace = namespace
@@ -279,7 +279,27 @@ class HarborDeployer:
             if rc == 0:
                 log.info("[registry] %s already mounted at %s", self.disk_device, self.storage_mount_path)
             else:
-                self._format_and_mount(client)
+                try:
+                    self._format_and_mount(client)
+                except RuntimeError as exc:
+                    if "exit -1" not in str(exc):
+                        raise
+                    # SSH connection was reset mid-command — common during
+                    # mkfs.ext4 on large disks where heavy I/O disrupts the
+                    # keepalive.  The format almost certainly completed (the
+                    # stdout shows all stages "done").  Reconnect and call
+                    # _format_and_mount again: blkid will now see ext4 so it
+                    # skips the format and proceeds straight to mount.
+                    log.warning(
+                        "[registry] SSH connection was reset during disk setup "
+                        "(exit -1 from mkfs.ext4) — reconnecting to verify and continue..."
+                    )
+                    try:
+                        client.close()
+                    except Exception:
+                        pass
+                    client = self._ssh_connect(node_ip)
+                    self._format_and_mount(client)
 
             # Ensure permissions are open for the kubelet to write
             self._ssh_run(client, f"chmod 777 {self.storage_mount_path}", check=True)
@@ -297,8 +317,38 @@ class HarborDeployer:
         else:
             log.info("[registry] Existing filesystem detected on %s — skipping format", self.disk_device)
 
-        self._ssh_run(client, f"mkdir -p {self.storage_mount_path}", check=True)
-        self._ssh_run(client, f"mount {self.disk_device} {self.storage_mount_path}", check=True)
+        # Run the entire clean-up + mount sequence as a single atomic script so
+        # that systemd cannot race between our umount and the remount triggered
+        # by a stale fstab entry written by a previous (partial) run.
+        dev  = shlex.quote(self.disk_device)
+        path = shlex.quote(self.storage_mount_path)
+        # grep -qF needs no inner shell quoting, safe through shlex.quote + sudo bash -c.
+        # We search for "<dev> <path> " (with trailing space) so a prefix like
+        # /dev/sdb1 does not match /dev/sdb.
+        dev_path_prefix = f"{self.disk_device} {self.storage_mount_path} "
+        mount_script = (
+            # If device is already mounted at exactly the right path, nothing to do.
+            f"if grep -qF {shlex.quote(dev_path_prefix)} /proc/mounts 2>/dev/null; then\n"
+            f"  echo {shlex.quote(self.disk_device + ' already mounted at ' + self.storage_mount_path + ' — skipping')}\n"
+            f"  exit 0\n"
+            f"fi\n"
+            # Stop any systemd .mount unit managing this path so it cannot
+            # remount between our umount and the final mount call.
+            f"UNIT=$(systemctl list-units --type=mount --all --no-legend 2>/dev/null"
+            f" | grep -i harbor | grep -o '^[^ ]*' || true)\n"
+            f"[ -n \"$UNIT\" ] && systemctl stop \"$UNIT\" 2>/dev/null || true\n"
+            # Lazy-force-unmount the device from wherever it is currently
+            # mounted.  grep -F is safe through sudo bash -c (no inner quotes).
+            # -l detaches the filesystem immediately without needing to kill
+            # any processes, including the current SSH session.
+            f"CURRENT=$(grep -F {shlex.quote(self.disk_device + ' ')} /proc/mounts"
+            f" | cut -d' ' -f2 | head -1 || true)\n"
+            f"[ -n \"$CURRENT\" ] && umount -lf \"$CURRENT\" 2>/dev/null || true\n"
+            f"umount -lf {path} 2>/dev/null || true\n"
+            f"mkdir -p {path}\n"
+            f"mount {dev} {path}\n"
+        )
+        self._ssh_run(client, mount_script, check=True)
         log.info("[registry] Mounted %s at %s", self.disk_device, self.storage_mount_path)
 
         self._add_fstab_entry(client)
@@ -852,23 +902,27 @@ class HarborDeployer:
         log.info("[registry] Containerd configured on all infra cluster nodes for %s", registry)
 
     def _ensure_harbor_project(self) -> None:
+        self.ensure_project(self.harbor_project)
+
+    def ensure_project(self, project_name: str) -> None:
+        """Create a Harbor project if it doesn't exist. Safe to call repeatedly."""
         access = self._access_url or self.harbor_hostname
-        log.info("[registry] Ensuring Harbor project '%s' exists...", self.harbor_project)
+        log.info("[registry] Ensuring Harbor project '%s' exists...", project_name)
         url = f"https://{access}/api/v2.0/projects"
         try:
             resp = requests.post(
                 url,
-                json={"project_name": self.harbor_project, "public": True},
+                json={"project_name": project_name, "public": True},
                 auth=("admin", self.admin_password),
                 verify=False,
                 timeout=30,
             )
             if resp.status_code == 201:
-                log.info("[registry] Harbor project '%s' created", self.harbor_project)
+                log.info("[registry] Harbor project '%s' created", project_name)
             elif resp.status_code == 409:
-                log.info("[registry] Harbor project '%s' already exists — ensuring public", self.harbor_project)
+                log.info("[registry] Harbor project '%s' already exists — ensuring public", project_name)
                 requests.put(
-                    f"{url}/{self.harbor_project}",
+                    f"{url}/{project_name}",
                     json={"metadata": {"public": "true"}},
                     auth=("admin", self.admin_password),
                     verify=False,
@@ -879,18 +933,18 @@ class HarborDeployer:
                     "[registry] Harbor API returned 401 Unauthorized at %s. "
                     "The admin_password in config may not match Harbor's stored password "
                     "(Harbor retains the password from its first install). "
-                    "Project may need to be created manually.",
-                    url,
+                    "Project '%s' may need to be created manually.",
+                    url, project_name,
                 )
             else:
                 log.warning(
                     "[registry] Harbor API returned HTTP %d at %s. "
                     "Project '%s' may need to be created manually via the Harbor UI.",
-                    resp.status_code, url, self.harbor_project,
+                    resp.status_code, url, project_name,
                 )
         except requests.exceptions.RequestException as exc:
             log.warning(
                 "[registry] Could not reach Harbor API at %s: %s. "
-                "Project may need to be created manually.",
-                url, exc,
+                "Project '%s' may need to be created manually.",
+                url, exc, project_name,
             )

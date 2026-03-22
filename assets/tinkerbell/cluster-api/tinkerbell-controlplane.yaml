@@ -1,0 +1,60 @@
+apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+kind: KubeadmControlPlane
+metadata:
+  name: ${ CLUSTER_NAME }
+  namespace: ${ NAMESPACE }
+spec:
+  replicas: ${ CONTROL_PLANE_MACHINE_COUNT }
+  version: ${ KUBERNETES_VERSION }
+  machineTemplate:
+    infrastructureRef:
+      apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+      kind: TinkerbellMachineTemplate
+      name: ${ CLUSTER_NAME }-controlplane
+  kubeadmConfigSpec:
+    initConfiguration:
+      nodeRegistration:
+        kubeletExtraArgs:
+          cloud-provider: external
+    joinConfiguration:
+      nodeRegistration:
+        kubeletExtraArgs:
+          cloud-provider: external
+    users:
+      - name: ${ IMAGE_USERNAME }
+        sudo: "ALL=(ALL) NOPASSWD:ALL"
+        sshAuthorizedKeys:
+          - ${ SSH_PUB_KEY_CONTENT }
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: TinkerbellMachineTemplate
+metadata:
+  name: ${ CLUSTER_NAME }-controlplane
+  namespace: ${ NAMESPACE }
+spec:
+  template:
+    spec:
+      templateOverride: |
+        version: "0.1"
+        name: ubuntu-kubeadm-controlplane
+        global_timeout: 1800
+        tasks:
+          - name: "stream-image"
+            worker: "{{.device_1}}"
+            volumes:
+              - /dev:/dev
+              - /dev/console:/dev/console
+              - /lib/firmware:/lib/firmware:ro
+            actions:
+              - name: image2disk
+                image: ghcr.io/tinkerbell/actions/image2disk:v0.1.0
+                timeout: 600
+                environment:
+                  IMG_URL: "${ IMAGE_URL }"
+                  DEST_DISK: "/dev/sda"
+                  COMPRESSED: "true"
+              - name: reboot
+                image: ghcr.io/tinkerbell/actions/reboot:v0.1.0
+                timeout: 90
+                volumes:
+                  - /worker:/worker

@@ -277,6 +277,12 @@ class OpenvSwitchComponent(InfraComponent):
                     f"{pod_err or 'no pod matching application=openvswitch,component=server'}"
                 )
 
+            # Wait for the vswitchd container to be ready before exec-ing.
+            kubectl._run(
+                f"wait pod -n {self.namespace} {pod_name}"
+                f" --for=condition=Ready --timeout=120s"
+            )
+
             def _ovs(cmd: str) -> None:
                 """Execute an OVS command inside the vswitchd container."""
                 rc_x, out_x, err_x = kubectl._run(

@@ -60,6 +60,9 @@ from daalu.bootstrap.openstack.manager import OpenStackManager
 from daalu.bootstrap.registry.manager import RegistryManager
 from daalu.bootstrap.mgmt.manager import MgmtClusterManager
 from daalu.bootstrap.mgmt.cleaner import MgmtClusterCleaner
+from daalu.bootstrap.ai.manager import AIManager
+from daalu.bootstrap.ai.registry import build_ai_components
+from daalu.bootstrap.ai.models import parse_ai_flag
 
 
 
@@ -71,8 +74,9 @@ from daalu.bootstrap.mgmt.cleaner import MgmtClusterCleaner
 
 app = typer.Typer(help="Daalu Deployment CLI")
 
-WORKSPACE_ROOT = Path(__file__).resolve().parents[3]
-os.environ.setdefault("WORKSPACE_ROOT", str(WORKSPACE_ROOT))
+_ws_env = os.environ.get("WORKSPACE_ROOT")
+WORKSPACE_ROOT = Path(_ws_env).resolve() if _ws_env else Path(__file__).resolve().parents[3]
+os.environ["WORKSPACE_ROOT"] = str(WORKSPACE_ROOT)
 
 
 # ------------------------------------------------------------------------------
@@ -213,6 +217,41 @@ def deploy_cluster_api_generic(
         mgmt_context=mgmt_context,
         observers=observers,
     ).deploy_dynamic(cfg)
+
+
+def deploy_cluster_api_tinkerbell(
+    *,
+    cfg,
+    workspace_root: Path,
+    mgmt_context: Optional[str],
+) -> None:
+    """
+    Deploy a CAPT-backed workload cluster by applying the Tinkerbell
+    cluster-api manifests from assets/tinkerbell/cluster-api/.
+
+    The manifests use the same ${ VAR } substitution style as the Metal3
+    templates and are applied via kubectl against the mgmt cluster context.
+    """
+    import subprocess as _sp
+
+    manifests_dir = workspace_root / "assets" / "tinkerbell" / "cluster-api"
+    kubeconfig = (
+        str(Path(cfg.mgmt_cluster.kubeconfig_output_path).expanduser())
+        if cfg.mgmt_cluster
+        else None
+    )
+
+    kc_args = ["--kubeconfig", kubeconfig] if kubeconfig else []
+    ctx_args = ["--context", mgmt_context] if mgmt_context else []
+
+    for manifest in sorted(manifests_dir.glob("*.yaml")):
+        typer.echo(f"  [tinkerbell] Applying {manifest.name}...")
+        _sp.run(
+            ["kubectl", *kc_args, *ctx_args, "apply", "-f", str(manifest)],
+            check=True,
+        )
+
+    typer.secho("  [tinkerbell] Cluster API manifests applied.", fg=typer.colors.GREEN)
 
 
 def deploy_nodes(
@@ -440,6 +479,8 @@ def _verify_and_get_registry_url(cfg, mgmt_kubeconfig: Optional[str]) -> str:
 
     registry_cfg = cfg.registry or RegistryConfig()
     effective_kubeconfig = mgmt_kubeconfig or getattr(registry_cfg, "mgmt_kubeconfig", None)
+    if effective_kubeconfig:
+        effective_kubeconfig = str(Path(effective_kubeconfig).expanduser())
 
     if not effective_kubeconfig:
         typer.secho(
@@ -512,8 +553,9 @@ def deploy_registry(
     cfg,
     workspace_root: Path,
     mgmt_kubeconfig: Optional[str],
-    ssh_key: Optional[Path] = "~/.ssh/openstack-key",
-    ssh_username: str = "kez",
+    ssh_key: Optional[Path] = None,
+    ssh_username: Optional[str] = None,
+    ssh_password: Optional[str] = None,
     cluster_kubeconfig: Optional[str] = None,
 ) -> str:
     """
@@ -538,10 +580,18 @@ def deploy_registry(
     )
 
     effective_kubeconfig = mgmt_kubeconfig or registry_cfg.mgmt_kubeconfig
+
+    # Resolve SSH creds: explicit args > mgmt_cluster config > model defaults
+    _mc = getattr(cfg, "mgmt_cluster", None)
+    effective_ssh_key = ssh_key or (getattr(_mc, "ssh_key", None) if _mc else None)
+    effective_ssh_username = ssh_username or (getattr(_mc, "ssh_username", None) if _mc else None) or "ubuntu"
+    effective_ssh_password = ssh_password or (getattr(_mc, "ssh_password", None) if _mc else None)
+
     mgr.deploy_harbor(
         mgmt_kubeconfig=effective_kubeconfig,
-        ssh_key=str(Path(ssh_key).expanduser()) if ssh_key else None,
-        ssh_username=ssh_username,
+        ssh_key=str(Path(effective_ssh_key).expanduser()) if effective_ssh_key else None,
+        ssh_username=effective_ssh_username,
+        ssh_password=effective_ssh_password,
         cluster_kubeconfig=cluster_kubeconfig,
     )
     mgr.mirror_images()
@@ -695,6 +745,130 @@ def deploy_openstack(
         if ceph_ssh is not None:
             ceph_client.close()
 
+def deploy_ai(
+    *,
+    helm: HelmCliRunner,
+    ssh: SSHRunner,
+    workspace_root: Path,
+    ai_flag: Optional[str],
+    kubeconfig_path: str,
+    cfg: Optional[DaaluConfig] = None,
+) -> None:
+    """
+    Deploy AI platform components (Phase 1 and beyond).
+
+    Phase 1 components:
+      gpu-operator   — NVIDIA GPU Operator (driver, toolkit, device-plugin, DCGM)
+      gpu-node-setup — Apply GPU pool labels and NoSchedule taint to GPU nodes
+    """
+    typer.echo("\n[ai] Installing AI platform components...")
+
+    selection = parse_ai_flag(ai_flag)
+
+    components = build_ai_components(
+        selection=selection,
+        workspace_root=workspace_root,
+        kubeconfig_path=kubeconfig_path,
+        cfg=cfg,
+    )
+
+    AIManager(
+        helm=helm,
+        ssh=ssh,
+    ).deploy(components)
+
+
+# ------------------------------------------------------------------------------
+# AI command — deploy AI platform after cloud install
+# ------------------------------------------------------------------------------
+
+@app.command()
+def ai(
+    config: str = typer.Argument("cluster-defs/cluster.yaml", help="Path to cluster definition YAML (e.g. cluster-defs/cluster.yaml)"),
+    components: Optional[str] = typer.Option(
+        None,
+        "--components",
+        help="AI components to install (e.g. gpu-operator,gpu-node-setup or all). Defaults to all.",
+    ),
+    managed_user: Optional[str] = typer.Option(None, "--managed-user", help="SSH user on controller nodes (default: from mgmt_cluster.managed_user in config)"),
+    ssh_key: Optional[Path] = typer.Option(None, "--ssh-key", help="Path to SSH private key (default: from mgmt_cluster.ssh_key in config)"),
+    ssh_password: Optional[str] = typer.Option(None, "--ssh-password", help="SSH password (default: from mgmt_cluster.ssh_password in secrets.yaml)"),
+    context: Optional[str] = typer.Option(None, "--context", help="Kubernetes context"),
+    debug: bool = typer.Option(False, "--debug"),
+) -> None:
+    """
+    Deploy the AI platform onto an existing Daalu OpenStack cloud.
+
+    Run this command after 'daalu deploy' has completed successfully.
+
+    Phase 1 components:
+      gpu-operator   — NVIDIA GPU Operator (driver, toolkit, device-plugin, DCGM)
+      gpu-node-setup — Apply GPU pool labels and NoSchedule taint to GPU nodes
+
+    Phase 2 components:
+      vllm           — OpenAI-compatible model server (Qwen2.5-Coder-7B by default)
+    """
+    logger, _, _ = init_logging(verbose=debug)
+
+    cfg: DaaluConfig = load_config(config)
+    workspace_root = Path.cwd()
+
+    # Resolve SSH / managed-user values: CLI flag > config > built-in default
+    _mc = cfg.mgmt_cluster
+    managed_user = managed_user or (getattr(_mc, "managed_user", None) if _mc else None) or "builder"
+    ssh_key = ssh_key or (Path(_mc.ssh_key).expanduser() if _mc and _mc.ssh_key else None)
+    ssh_password = ssh_password or (getattr(_mc, "ssh_password", None) if _mc else None)
+
+    client: Optional[paramiko.SSHClient] = None
+    try:
+        client, _ = connect_controller_ssh(
+            workspace_root=workspace_root,
+            managed_user=managed_user,
+            ssh_key=ssh_key,
+            ssh_password=ssh_password,
+        )
+
+        ssh = SSHRunner(client)
+
+        rc, out, err = ssh.run("which helm", sudo=False)
+        if rc != 0:
+            typer.echo("[ai] Helm not found on controller, installing...")
+            rc, out, err = ssh.run(
+                "curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash",
+                sudo=True,
+            )
+            if rc != 0:
+                raise RuntimeError(f"Failed to install helm on controller: {err}")
+
+        helm = HelmCliRunner(ssh=ssh, kube_context=context or cfg.context)
+
+        kubeconfig_path = f"/tmp/kubeconfig-{cfg.cluster_api.cluster_name}.yaml"
+        if os.path.isfile(kubeconfig_path):
+            ssh.put_file(local_path=kubeconfig_path, remote_path=kubeconfig_path)
+
+        deploy_ai(
+            helm=helm,
+            ssh=ssh,
+            workspace_root=workspace_root,
+            ai_flag=components,
+            kubeconfig_path=kubeconfig_path,
+            cfg=cfg,
+        )
+
+    except Exception as exc:
+        logger.exception("[ai] Deployment failed: %s: %s", type(exc).__name__, exc)
+        typer.secho(
+            f"\n[ai] Deployment failed: {type(exc).__name__}: {exc}"
+            f"\nSee log for full traceback.",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(1)
+    finally:
+        if client is not None:
+            client.close()
+
+
 # ------------------------------------------------------------------------------
 # Deploy command
 # ------------------------------------------------------------------------------
@@ -705,7 +879,7 @@ def deploy(
     install: Optional[str] = typer.Option(
         None,
         "--install",
-        help="Components to install: cluster-api,nodes,ceph,csi,infrastructure or all",
+        help="Components to install: cluster-api,nodes,ceph,csi,infrastructure,monitoring,openstack or all",
     ),
     infra: Optional[str] = typer.Option(
         None,
@@ -742,11 +916,11 @@ def deploy(
     cluster_name: str = typer.Option("openstack-infra", "--cluster-name"),
     cluster_namespace: str = typer.Option("default", "--cluster-namespace"),
     node_tags: Optional[str] = typer.Option(None, "--node-tags"),
-    ssh_username: str = typer.Option("ubuntu", "--ssh-username"),
-    ssh_password: Optional[str] = typer.Option(None, "--ssh-password"),
-    ssh_key: Optional[Path] = typer.Option(None, "--ssh-key"),
-    managed_user: str = typer.Option(..., "--managed-user", help="SSH user to create on nodes"),
-    managed_user_password: str = typer.Option(..., "--managed-user-password", help="Password for managed user"),
+    ssh_username: Optional[str] = typer.Option(None, "--ssh-username", help="Initial SSH user on nodes (default: from config or 'ubuntu')"),
+    ssh_password: Optional[str] = typer.Option(None, "--ssh-password", help="SSH password (default: from mgmt_cluster.ssh_password in secrets.yaml)"),
+    ssh_key: Optional[Path] = typer.Option(None, "--ssh-key", help="SSH private key path (default: from mgmt_cluster.ssh_key in config)"),
+    managed_user: Optional[str] = typer.Option(None, "--managed-user", help="Linux user to create on nodes (default: from mgmt_cluster.managed_user in config)"),
+    managed_user_password: Optional[str] = typer.Option(None, "--managed-user-password", help="Password for managed user (default: from mgmt_cluster.managed_user_password in secrets.yaml)"),
     domain_suffix: str = typer.Option("net.daalu.io", "--domain-suffix"),
     ceph_version: str = typer.Option("20.2.0", "--ceph-version"),
     ceph_image: Optional[str] = typer.Option(None, "--ceph-image"),
@@ -773,6 +947,19 @@ def deploy(
     cfg: DaaluConfig = load_config(config)
     install_plan = resolve_install_plan(install)
 
+    # Resolve SSH / managed-user values: CLI flag > config > built-in default
+    _mc = cfg.mgmt_cluster
+    ssh_username = ssh_username or (getattr(_mc, "ssh_username", None) if _mc else None) or "ubuntu"
+    ssh_password = ssh_password or (getattr(_mc, "ssh_password", None) if _mc else None)
+    ssh_key = ssh_key or (Path(_mc.ssh_key).expanduser() if _mc and _mc.ssh_key else None)
+    managed_user = managed_user or (getattr(_mc, "managed_user", None) if _mc else None) or "builder"
+    managed_user_password = managed_user_password or (getattr(_mc, "managed_user_password", None) if _mc else None)
+    if not managed_user_password:
+        raise typer.BadParameter(
+            "managed_user_password is required. Set it via --managed-user-password or "
+            "mgmt_cluster.managed_user_password in cloud-config/secrets.yaml."
+        )
+
     # ------------------------------------------------------------------------------
     # 0) Harbor registry (runs before any --install stages)
     # ------------------------------------------------------------------------------
@@ -790,6 +977,9 @@ def deploy(
             cfg=cfg,
             workspace_root=WORKSPACE_ROOT,
             mgmt_kubeconfig=mgmt_kubeconfig,
+            ssh_key=ssh_key,
+            ssh_username=ssh_username,
+            ssh_password=ssh_password,
             cluster_kubeconfig=cluster_kubeconfig,
         )
         registry_project = (cfg.registry.project if cfg.registry else None) or "openstack"
@@ -812,7 +1002,7 @@ def deploy(
             if pub_key_path.expanduser().is_file():
                 cfg.cluster_api.ssh_public_key_path = pub_key_path
 
-        provider = getattr(cfg.cluster_api, "provider", "proxmox")
+        provider = getattr(cfg.cluster_api, "provider", "metal3")
 
         if provider == "metal3":
             deploy_cluster_api_metal3(
@@ -820,6 +1010,12 @@ def deploy(
                 workspace_root=WORKSPACE_ROOT,
                 mgmt_context=mgmt_context,
                 dry_run=dry_run,
+            )
+        elif provider == "tinkerbell":
+            deploy_cluster_api_tinkerbell(
+                cfg=cfg,
+                workspace_root=WORKSPACE_ROOT,
+                mgmt_context=mgmt_context,
             )
         else:
             deploy_cluster_api_generic(
@@ -835,10 +1031,27 @@ def deploy(
         # Use image_username from cluster_api config if --ssh-username was not
         # explicitly provided (i.e. still the default "ubuntu").  Metal3 nodes
         # are provisioned with image_username, so we must SSH as that user.
-        effective_ssh_user = ssh_username
-        if ssh_username == "ubuntu" and cfg.cluster_api and getattr(cfg.cluster_api, "image_username", None):
-            effective_ssh_user = cfg.cluster_api.image_username
+        # image_username is baked into the provisioned OS image — always prefer it
+        # over the generic ssh_username (which comes from mgmt_cluster, not infra nodes).
+        # Only skip if --ssh-username was the sentinel value meaning "not set by user"
+        # is impossible to detect here, so we just always use image_username when present.
+        image_username = cfg.cluster_api and getattr(cfg.cluster_api, "image_username", None)
+        effective_ssh_user = image_username or ssh_username
+        if image_username and image_username != ssh_username:
             typer.echo(f"[nodes] Using image_username '{effective_ssh_user}' from cluster config for SSH")
+
+        # Derive private key from cluster_api.ssh_public_key_path if not explicitly set.
+        # Nodes are provisioned with that public key, so the matching private key is needed.
+        effective_node_ssh_key = ssh_key
+        if effective_node_ssh_key is None and cfg.cluster_api:
+            pub = getattr(cfg.cluster_api, "ssh_public_key_path", None)
+            if pub:
+                priv = Path(str(pub)).expanduser()
+                if str(priv).endswith(".pub"):
+                    priv = Path(str(priv)[:-4])
+                if priv.is_file():
+                    effective_node_ssh_key = priv
+                    typer.echo(f"[nodes] Using SSH key derived from cluster_api.ssh_public_key_path: {priv}")
 
         deploy_nodes(
             cfg=cfg,
@@ -846,55 +1059,85 @@ def deploy(
             cluster_name=cluster_name,
             node_tags=node_tags,
             ssh_username=effective_ssh_user,
-            ssh_key=ssh_key,
+            ssh_key=effective_node_ssh_key,
             domain_suffix=domain_suffix,
             managed_user=managed_user,
             managed_user_password=managed_user_password,
         )
 
+        # After nodes are bootstrapped, configure containerd trust for the local
+        # registry so subsequent image pulls (ceph, csi, openstack, etc.) succeed.
+        if effective_registry_url:
+            _infra_kubeconfig = f"/tmp/kubeconfig-{cfg.cluster_api.cluster_name}.yaml"
+            if os.path.isfile(_infra_kubeconfig):
+                typer.echo("\n[registry] Configuring infra cluster nodes to trust local Harbor registry...")
+                try:
+                    from daalu.bootstrap.registry.manager import RegistryManager
+                    from daalu.config.models import RegistryConfig
+                    _reg_cfg = cfg.registry or RegistryConfig()
+                    _reg_mgr = RegistryManager(
+                        registry_cfg=_reg_cfg,
+                        workspace_root=WORKSPACE_ROOT,
+                        secrets_path=WORKSPACE_ROOT / "cloud-config" / "secrets.yaml",
+                    )
+                    _reg_mgr.configure_cluster_registry_trust(_infra_kubeconfig)
+                    typer.echo("[registry] Registry trust configured on all infra nodes.")
+                except Exception as _trust_exc:
+                    logger.warning("[registry] Registry trust configuration failed (non-fatal): %s", _trust_exc)
+            else:
+                logger.debug("[registry] Infra kubeconfig not found at %s — skipping trust config", _infra_kubeconfig)
+
     # ------------------------------------------------------------------------------
-    # Shared controller SSH (for Ceph/CSI/Infra)
+    # Shared controller SSH (for Ceph/CSI/Infra/OpenStack)
+    # Only open if the install plan includes components that need it.
+    # Skip entirely for registry-only or cluster-api/nodes-only runs.
     # ------------------------------------------------------------------------------
+    _needs_controller_ssh = install_plan & {"ceph", "csi", "infrastructure", "monitoring", "openstack"}
+
     client: Optional[paramiko.SSHClient] = None
+    helm = None
+    ssh = None
+    kubeconfig_path = None
     ceph_hosts: List[CephHost] = []
 
     try:
-        client, _controller_host = connect_controller_ssh(
-            workspace_root=WORKSPACE_ROOT,
-            managed_user=managed_user,
-            ssh_key=ssh_key,
-            ssh_password=ssh_password,
-        )
-
-        ssh = SSHRunner(client)
-
-        # Ensure helm is installed on the remote node
-        typer.echo("[setup] Ensuring helm is installed on remote node...")
-        rc, out, _ = ssh.run("which helm", sudo=False)
-        if rc != 0:
-            typer.echo("[setup] Helm not found, installing...")
-            rc, out, err = ssh.run(
-                "curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash",
-                sudo=True,
+        if _needs_controller_ssh:
+            client, _controller_host = connect_controller_ssh(
+                workspace_root=WORKSPACE_ROOT,
+                managed_user=managed_user,
+                ssh_key=ssh_key,
+                ssh_password=ssh_password,
             )
+
+            ssh = SSHRunner(client)
+
+            # Ensure helm is installed on the remote node
+            typer.echo("[setup] Ensuring helm is installed on remote node...")
+            rc, out, _ = ssh.run("which helm", sudo=False)
             if rc != 0:
-                raise RuntimeError(f"Failed to install helm on remote node: {err}")
-            typer.echo("[setup] Helm installed successfully")
-        else:
-            typer.echo(f"[setup] Helm already installed at {out.strip()}")
+                typer.echo("[setup] Helm not found, installing...")
+                rc, out, err = ssh.run(
+                    "curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash",
+                    sudo=True,
+                )
+                if rc != 0:
+                    raise RuntimeError(f"Failed to install helm on remote node: {err}")
+                typer.echo("[setup] Helm installed successfully")
+            else:
+                typer.echo(f"[setup] Helm already installed at {out.strip()}")
 
-        helm = HelmCliRunner(ssh=ssh, kube_context=context or cfg.context)
+            helm = HelmCliRunner(ssh=ssh, kube_context=context or cfg.context)
 
-        kubeconfig_path = f"/tmp/kubeconfig-{cfg.cluster_api.cluster_name}.yaml"
-        if os.path.isfile(kubeconfig_path):
-            ssh.put_file(
-                local_path=kubeconfig_path,
-                remote_path=kubeconfig_path,
-            )
-        else:
-            logger.warning(
-                "Local kubeconfig %s not found – skipping upload", kubeconfig_path
-            )
+            kubeconfig_path = f"/tmp/kubeconfig-{cfg.cluster_api.cluster_name}.yaml"
+            if os.path.isfile(kubeconfig_path):
+                ssh.put_file(
+                    local_path=kubeconfig_path,
+                    remote_path=kubeconfig_path,
+                )
+            else:
+                logger.warning(
+                    "Local kubeconfig %s not found – skipping upload", kubeconfig_path
+                )
 
 
         # ------------------------------------------------------------------------------
@@ -1034,15 +1277,30 @@ def mgmt(
         "--skip-harbor",
         help="Skip Harbor registry deployment even if install_harbor=true in config",
     ),
+    provider: Optional[str] = typer.Option(
+        None,
+        "--provider",
+        help="Bare-metal provisioning backend to install: tinkerbell (default), metal3, proxmox",
+    ),
     debug: bool = typer.Option(False, "--debug"),
 ):
     """
-    Bootstrap a management Kubernetes cluster on a fresh Ubuntu node,
-    then install Metal3 / Ironic / CAPI on top of it.
+    Bootstrap a management Kubernetes cluster on a fresh Ubuntu node, then
+    install a bare-metal provisioning stack on top.
+
+    The --provider flag controls which provisioning backend is installed:
+
+      tinkerbell  (default) — Tinkerbell stack + CAPT
+      metal3                — Ironic + Baremetal Operator + CAPM3
+      proxmox               — Cluster API Provider for Proxmox (CAPO)
+
+    The provider can also be set via mgmt_cluster.provider in cluster.yaml.
+    The CLI flag takes precedence over the config file.
 
     Example:
 
       daalu mgmt cluster-defs/cluster.yaml \\
+        --provider tinkerbell \\
         --ssh-host 192.168.0.163 \\
         --ssh-password admin10 \\
         --provisioning-interface ens18 \\
@@ -1072,8 +1330,32 @@ def mgmt(
             update={"mgmt_cluster": MgmtClusterConfig(host=ssh_host)}
         )
 
+    # ------------------------------------------------------------------
+    # Resolve bare-metal provider
+    # Priority: --provider flag > mgmt_cluster.provider in config > default (tinkerbell)
+    # ------------------------------------------------------------------
+    from daalu.bootstrap.mgmt.models import BaremetalProvider
+
+    _valid_providers = {p.value for p in BaremetalProvider}
+
+    if provider is not None:
+        if provider not in _valid_providers:
+            typer.secho(
+                f"ERROR: --provider '{provider}' is not valid. "
+                f"Choose one of: {', '.join(sorted(_valid_providers))}",
+                fg=typer.colors.RED, err=True,
+            )
+            raise typer.Exit(1)
+        resolved_provider = BaremetalProvider(provider)
+    else:
+        # Falls back to whatever is in mgmt_cluster.provider (already defaults to tinkerbell)
+        resolved_provider = cfg.mgmt_cluster.provider
+
+    typer.echo(f"  Provider: {resolved_provider.value}")
+    typer.echo("")
+
     # Layer CLI flag overrides
-    overrides: dict = {}
+    overrides: dict = {"provider": resolved_provider}
     if ssh_host:
         overrides["host"] = ssh_host
     if ssh_username:
@@ -1155,7 +1437,9 @@ def mirror_images(
         raw = _yaml.safe_load(secrets_path.read_text()) or {}
         registry_cfg = RegistryConfig.model_validate(raw.get("registry", {}))
     except Exception as exc:
-        typer.secho(f"[registry] Could not load config: {exc}", fg=typer.colors.RED, err=True)
+        import logging as _logging
+        _logging.getLogger("daalu").exception("[registry] Could not load config: %s: %s", type(exc).__name__, exc)
+        typer.secho(f"[registry] Could not load config: {type(exc).__name__}: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
 
     # Override harbor_hostname with the explicitly provided URL so mirroring
@@ -1213,8 +1497,10 @@ def configure_registry_trust(
         registry_raw = raw.get("registry", {})
         registry_cfg = RegistryConfig.model_validate(registry_raw)
     except Exception as exc:
+        import logging as _logging
+        _logging.getLogger("daalu").exception("[registry] Could not load registry config from %s: %s: %s", secrets_path, type(exc).__name__, exc)
         typer.secho(
-            f"[registry] Could not load registry config from {secrets_path}: {exc}",
+            f"[registry] Could not load registry config from {secrets_path}: {type(exc).__name__}: {exc}",
             fg=typer.colors.RED, err=True,
         )
         raise typer.Exit(1)
@@ -1234,7 +1520,9 @@ def configure_registry_trust(
             fg=typer.colors.GREEN,
         )
     except Exception as exc:
-        typer.secho(f"[registry] ERROR: {exc}", fg=typer.colors.RED, err=True)
+        import logging as _logging
+        _logging.getLogger("daalu").exception("[registry] ERROR: %s: %s", type(exc).__name__, exc)
+        typer.secho(f"[registry] ERROR: {type(exc).__name__}: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
 
 
@@ -1270,6 +1558,12 @@ def clean(
         "--no-wait",
         help="Do not wait for BareMetalHosts to deprovision before resetting the mgmt node",
     ),
+    wipe_mgmt: bool = typer.Option(
+        False,
+        "--wipe-mgmt",
+        help="Also destroy the management cluster (kubeadm reset, wipe Harbor disk, remove Metal3 state). "
+             "Without this flag only the workload CAPI cluster is deleted.",
+    ),
     yes: bool = typer.Option(
         False,
         "--yes", "-y",
@@ -1278,17 +1572,17 @@ def clean(
     debug: bool = typer.Option(False, "--debug"),
 ):
     """
-    Tear down everything daalu created:
+    Tear down the workload CAPI cluster so Metal3/Ironic deprovisions bare-metal hosts.
 
-      1. Delete the workload CAPI cluster so Metal3/Ironic can cleanly
-         deprovision (wipe) bare-metal hosts.
-      2. SSH to the mgmt node: kubeadm reset, flush CNI/iptables,
-         wipe Harbor disk, remove Metal3/Ironic state.
-      3. Remove local kubeconfigs and known_hosts entries.
+    By default only the workload cluster is deleted — the management cluster
+    (Harbor, Metal3, Ironic) is left running so you can redeploy immediately.
 
-    Example:
+    Add --wipe-mgmt to also destroy the management cluster:
 
       daalu clean cluster-defs/cluster.yaml --mgmt-kubeconfig ~/.kube/daalu-mgmt-config
+
+      # Also destroy mgmt k8s + Harbor (full reset):
+      daalu clean cluster-defs/cluster.yaml --mgmt-kubeconfig ~/.kube/daalu-mgmt-config --wipe-mgmt
 
       # Skip waiting for deprovisioning (faster, but BMHs may not be wiped):
       daalu clean cluster-defs/cluster.yaml --no-wait
@@ -1321,8 +1615,12 @@ def clean(
     typer.echo("")
     typer.echo("  This will:")
     typer.echo("    1. Delete workload CAPI cluster (triggers bare-metal wipe via Ironic)")
-    typer.echo(f"    2. SSH to {mgmt_host} → kubeadm reset, CNI flush, Harbor disk wipe ({harbor_disk})")
-    typer.echo("    3. Remove local kubeconfigs and known_hosts entries")
+    if wipe_mgmt:
+        typer.echo(f"    2. SSH to {mgmt_host} → kubeadm reset, CNI flush, Harbor disk wipe ({harbor_disk})")
+        typer.echo("    3. Remove local kubeconfigs and known_hosts entries")
+    else:
+        typer.echo("    2. Remove workload kubeconfig from /tmp")
+        typer.secho("    (mgmt cluster kept running — add --wipe-mgmt to also destroy it)", dim=True)
     typer.echo("")
 
     if not yes:
@@ -1333,16 +1631,23 @@ def clean(
             mgmt_kubeconfig=mgmt_kubeconfig,
             skip_workload_cluster=skip_workload_cluster,
             wait_deprovision=not no_wait,
+            wipe_mgmt=wipe_mgmt,
         )
     except Exception as exc:
-        typer.secho(f"\n[clean] ERROR: {exc}", fg=typer.colors.RED, err=True)
+        import logging as _logging
+        _logging.getLogger("daalu").exception("[clean] ERROR: %s: %s", type(exc).__name__, exc)
+        typer.secho(f"\n[clean] ERROR: {type(exc).__name__}: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
 
     typer.echo("")
     typer.secho("Teardown complete.", bold=True, fg=typer.colors.GREEN)
     typer.echo("")
-    typer.echo("  To reinstall:")
-    typer.echo(f"    daalu mgmt {config}")
+    if wipe_mgmt:
+        typer.echo("  To reinstall from scratch:")
+        typer.echo(f"    daalu mgmt {config}")
+    else:
+        typer.echo("  Management cluster is still running. To redeploy the workload cluster:")
+        typer.echo(f"    daalu deploy {config} --mgmt-kubeconfig ~/.kube/daalu-mgmt-config --install cluster-api,nodes,ceph,csi,infrastructure,monitoring,openstack --local-registry --registry-url 10.10.0.9:30003")
     typer.echo("")
 
 

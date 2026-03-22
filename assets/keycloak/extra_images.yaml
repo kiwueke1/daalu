@@ -1,0 +1,5 @@
+# Images hardcoded in keycloak.py bootstrap jobs.
+# Mirrored to Harbor by `daalu mirror-images`.
+- docker.io/keycloak/keycloak:26.5.1
+- docker.io/library/mysql:8.0
+- docker.io/library/python:3.11-slim

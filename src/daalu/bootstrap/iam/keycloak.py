@@ -68,6 +68,7 @@ class KeycloakIAMManager:
             "password": self.config.admin.password,
         }
 
+
         last_exc: Exception | None = None
         for attempt in range(1, retries + 1):
             try:
@@ -149,6 +150,7 @@ class KeycloakIAMManager:
             "redirectUris": client.redirect_uris or [],
             "standardFlowEnabled": True,
             "directAccessGrantsEnabled": True,
+            "serviceAccountsEnabled": client.service_accounts_enabled,
         }
         if client.root_url:
             payload["rootUrl"] = client.root_url
