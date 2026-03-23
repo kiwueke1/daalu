@@ -34,7 +34,7 @@ Daalu is a Python-based CLI orchestrator that automates the full lifecycle of ba
 
 | Component | Details |
 |---|---|
-| Management host | `192.168.0.171` (Ubuntu 24.04) |
+| Management host | `192.168.1.10` (Ubuntu 24.04) |
 | Management cluster | Single-node kubeadm, Kubernetes v1.30, Cilium CNI |
 | Kubeconfig | `~/.kube/daalu-mgmt-config` |
 | Provisioning NIC | `ens19` → static IP `10.10.0.9/16` |
@@ -43,8 +43,8 @@ Daalu is a Python-based CLI orchestrator that automates the full lifecycle of ba
 | SMEE VIP | `10.10.0.9` (hostNetwork pod, binds directly to `ens19`) |
 | Image server | nginx pod (hostNetwork), serves `/var/www/images` at `http://10.10.0.9/` |
 | DHCP relay | `dhcrelay` forwarding `ens18 → 10.10.0.9` (management LAN to SMEE) |
-| Bare-metal node cp01 | MAC `ac:1f:6b:01:b7:21`, IP `10.10.0.170`, BMC `https://192.168.0.70` |
-| Bare-metal node cp02 | MAC `ac:1f:6b:01:b5:eb`, IP `10.10.0.171`, BMC `https://192.168.0.69` |
+| Bare-metal node cp01 | MAC `aa:bb:cc:dd:01:01`, IP `10.10.0.170`, BMC `https://192.168.1.70` |
+| Bare-metal node cp02 | MAC `aa:bb:cc:dd:02:01`, IP `10.10.0.171`, BMC `https://192.168.1.69` |
 | OS image | `UBUNTU_24.04_NODE_IMAGE_K8S_v1.35.0.raw.gz` at `/var/www/images/` |
 | Workflow status | Both cp01-provision and cp02-provision: **STATE_SUCCESS** |
 
@@ -57,7 +57,7 @@ Operator's laptop
               ▼
     MgmtClusterManager.deploy()   [manager.py]
          │
-         ├─ SSH → 192.168.0.171   (paramiko)
+         ├─ SSH → 192.168.1.10    (paramiko)
          │       K8sInstaller.install()           → kubeadm init, Cilium
          │       kubeconfig → ~/.kube/daalu-mgmt-config
          │
@@ -81,12 +81,12 @@ Bare-metal nodes (cp01, cp02)
 ### Network Architecture
 
 ```
-Management LAN (192.168.0.0/24)
-  192.168.0.171  — management node (ens18, DHCP from home router)
-  192.168.0.70   — cp01 BMC (Redfish/IPMI)
-  192.168.0.69   — cp02 BMC (Redfish/IPMI)
-  192.168.0.173  — cp01 post-install (eno1, DHCP)
-  192.168.0.172  — cp02 post-install (eno1, DHCP)
+Management LAN (192.168.1.0/24)
+  192.168.1.10   — management node (ens18, DHCP from home router)
+  192.168.1.70   — cp01 BMC (Redfish/IPMI)
+  192.168.1.69   — cp02 BMC (Redfish/IPMI)
+  192.168.1.11   — cp01 post-install (eno1, DHCP)
+  192.168.1.12   — cp02 post-install (eno1, DHCP)
   dhcrelay: forwards DHCP DISCOVERs from ens18 → SMEE at 10.10.0.9
 
 Provisioning LAN (10.10.0.0/16)
@@ -116,8 +116,8 @@ Provisioning LAN (10.10.0.0/16)
                               │
                               ▼
   ┌──────────────────────────────────────────────────────────────────────────────┐
-  │  Management Node  192.168.0.171  (Ubuntu 24.04, single-node kubeadm)        │
-  │  ens18 → 192.168.0.171  (home LAN, DHCP)                                    │
+  │  Management Node  192.168.1.10  (Ubuntu 24.04, single-node kubeadm)         │
+  │  ens18 → 192.168.1.10   (home LAN, DHCP)                                    │
   │  ens19 → 10.10.0.9/16   (provisioning LAN, static)                          │
   │                                                                              │
   │  ┌─────────────────────────────────────────────────────────────────────┐    │
@@ -185,26 +185,26 @@ Provisioning LAN (10.10.0.0/16)
       │   ┌─────────────────────────────────────────────────────────┐    │
       │   │  cp01  (eno2: 10.10.0.170/16)                           │    │
       │   │                                                         │    │
-      │   │  PXE NIC:  eno2  ac:1f:6b:01:b7:21  (provisioning)     │    │
-      │   │  Mgmt NIC: eno1  ac:1f:6b:01:b7:20  (192.168.0.173)    │    │
+      │   │  PXE NIC:  eno2  aa:bb:cc:dd:01:01  (provisioning)     │    │
+      │   │  Mgmt NIC: eno1  aa:bb:cc:dd:01:00  (192.168.1.11)     │    │
       │   │  Disk:     /dev/sda   (Ubuntu 24.04 + K8s v1.35.0)     │    │
       │   │  State:    ✓ STATE_SUCCESS  →  SSH-accessible           │    │
       │   └───────────────────────────┬─────────────────────────────┘    │
       │                               │ BMC Redfish                       │
-      │                               │ https://192.168.0.70             │
+      │                               │ https://192.168.1.70             │
       │                               │ (Rufio Machine CR → cp01)        │
       │                               │                                   │
       │   ┌─────────────────────────────────────────────────────────┐    │
       │   │  cp02  (eno2: 10.10.0.171/16)                           │    │
       │   │                                                         │    │
-      │   │  PXE NIC:  eno2  ac:1f:6b:01:b5:eb  (provisioning)     │    │
-      │   │  Mgmt NIC: eno1  ac:1f:6b:01:b5:ea  (192.168.0.172)    │    │
+      │   │  PXE NIC:  eno2  aa:bb:cc:dd:02:01  (provisioning)     │    │
+      │   │  Mgmt NIC: eno1  aa:bb:cc:dd:02:00  (192.168.1.12)     │    │
       │   │  Disk:     /dev/sda   (Ubuntu 24.04 + K8s v1.35.0)     │    │
       │   │  UEFI:     false  →  undionly.kpxe                      │    │
       │   │  State:    ✓ STATE_SUCCESS  →  SSH-accessible           │    │
       │   └───────────────────────────┬─────────────────────────────┘    │
       │                               │ BMC Redfish                       │
-      │                               │ https://192.168.0.69             │
+      │                               │ https://192.168.1.69             │
       │                               │ (Rufio Machine CR → cp02)        │
       │                               │                                   │
       │   Post-provision (allowPXE=false, Ubuntu running from /dev/sda): │
@@ -417,11 +417,11 @@ def _helm(self, *args, check=True):
 ```python
 class TinkerbellHardware(BaseModel):
     name: str          # e.g. "cp01"
-    mac: str           # PXE-boot NIC MAC: "ac:1f:6b:01:b7:21"
+    mac: str           # PXE-boot NIC MAC: "aa:bb:cc:dd:01:01"
     ip: str            # provisioning IP: "10.10.0.170"
-    bmc_endpoint: str  # "https://192.168.0.70"
-    bmc_username: str  # "ADMIN"
-    bmc_password: str  # "ADMIN"
+    bmc_endpoint: str  # "https://192.168.1.70"
+    bmc_username: str  # BMC username (e.g. "ADMIN")
+    bmc_password: str  # BMC password
     disk: str = "/dev/sda"
     uefi: bool = True
 ```
@@ -431,7 +431,7 @@ class TinkerbellHardware(BaseModel):
 ```python
 class MgmtClusterConfig(BaseModel):
     provider: BaremetalProvider = BaremetalProvider.tinkerbell
-    host: str                          # "192.168.0.171"
+    host: str                          # "192.168.1.10"
     ssh_username: str = "ubuntu"
     ssh_password: Optional[str]
     ssh_key: Optional[str]
@@ -674,23 +674,23 @@ The input is `self._cfg.hardware` — a `list[TinkerbellHardware]` populated fro
 mgmt_cluster:
   hardware:
     - name: cp01
-      mac: "ac:1f:6b:01:b7:20"    # ← INCORRECT (was b7:20, PXE NIC is b7:21)
+      mac: "aa:bb:cc:dd:01:00"    # ← INCORRECT (was management NIC, PXE NIC is aa:bb:cc:dd:01:01)
       ip: "10.10.0.170"
-      bmc_endpoint: "https://192.168.0.70"
-      bmc_username: "ADMIN"
-      bmc_password: "ADMIN"
+      bmc_endpoint: "https://192.168.1.70"
+      bmc_username: "<your-bmc-username>"
+      bmc_password: "<your-bmc-password>"
       disk: "/dev/sda"
     - name: cp02
-      mac: "ac:1f:6b:01:b5:eb"
+      mac: "aa:bb:cc:dd:02:01"
       ip: "10.10.0.171"
-      bmc_endpoint: "https://192.168.0.69"
-      bmc_username: "ADMIN"
-      bmc_password: "ADMIN"
+      bmc_endpoint: "https://192.168.1.69"
+      bmc_username: "<your-bmc-username>"
+      bmc_password: "<your-bmc-password>"
       disk: "/dev/sda"
       uefi: false
 ```
 
-> **Note on cp01 MAC discrepancy:** The `cluster.yaml` had `mac: ac:1f:6b:01:b7:20` which is `eno1` (management NIC). The PXE-boot NIC on cp01 is `eno2` with MAC `ac:1f:6b:01:b7:21`. This caused cp01's Hardware CR and original Workflow to target the wrong NIC. The Hardware CR on the cluster was manually patched and the Workflow was deleted and recreated with the correct MAC during the initial debugging session. The `cluster.yaml` still contains the incorrect MAC and should be corrected.
+> **Note on cp01 MAC discrepancy:** The `cluster.yaml` had `mac: aa:bb:cc:dd:01:00` which is `eno1` (management NIC). The PXE-boot NIC on cp01 is `eno2` with MAC `aa:bb:cc:dd:01:01`. This caused cp01's Hardware CR and original Workflow to target the wrong NIC. The Hardware CR on the cluster was manually patched and the Workflow was deleted and recreated with the correct MAC during the initial debugging session. The `cluster.yaml` still contains the incorrect MAC and should be corrected.
 
 ### Generated YAML (reconstructed from code)
 
@@ -704,8 +704,8 @@ metadata:
   name: cp01-bmc-secret
   namespace: tinkerbell
 stringData:
-  username: ADMIN
-  password: ADMIN
+  username: <your-bmc-username>
+  password: <your-bmc-password>
 
 ---
 # ── 2. Rufio Machine CR (BMC controller handle) ───────────────────────────────
@@ -716,7 +716,7 @@ metadata:
   namespace: tinkerbell
 spec:
   connection:
-    host: https://192.168.0.70
+    host: https://192.168.1.70
     authSecretRef:
       name: cp01-bmc-secret
       namespace: tinkerbell
@@ -745,7 +745,7 @@ spec:
           family: 4
           gateway: 10.10.0.9        # from cfg.dhcp_gateway
           netmask: 255.255.0.0      # _prefix_to_netmask("16")
-        mac: "ac:1f:6b:01:b7:20"   # ← from cfg.hardware[0].mac (currently wrong in cluster.yaml)
+        mac: "aa:bb:cc:dd:01:00"   # ← from cfg.hardware[0].mac (currently wrong in cluster.yaml)
         uefi: true
       netboot:
         allowPXE: true
@@ -790,8 +790,8 @@ metadata:
   namespace: tinkerbell
 type: Opaque
 stringData:
-  username: ADMIN
-  password: ADMIN
+  username: <your-bmc-username>
+  password: <your-bmc-password>
 ---
 apiVersion: bmc.tinkerbell.org/v1alpha1
 kind: Machine
@@ -800,7 +800,7 @@ metadata:
   namespace: tinkerbell
 spec:
   connection:
-    host: https://192.168.0.70
+    host: https://192.168.1.70
     authSecretRef:
       name: cp01-bmc-secret
       namespace: tinkerbell
@@ -827,7 +827,7 @@ spec:
           family: 4
           gateway: 10.10.0.9
           netmask: 255.255.0.0
-        mac: "ac:1f:6b:01:b7:21"   # ← corrected to PXE NIC MAC
+        mac: "aa:bb:cc:dd:01:01"   # ← corrected to PXE NIC MAC
         uefi: true
       netboot:
         allowPXE: true
@@ -1072,13 +1072,13 @@ spec:
   templateRef: ubuntu-kubeadm     # references Template CR by name
   hardwareRef: cp01               # references Hardware CR by name
   hardwareMap:
-    device_1: "ac:1f:6b:01:b7:21"     # PXE NIC MAC — must match Hardware.dhcp.mac
+    device_1: "aa:bb:cc:dd:01:01"     # PXE NIC MAC — must match Hardware.dhcp.mac
     disk: "/dev/sda"
     hostname: "cp01"
     image_url: "http://10.10.0.9/UBUNTU_24.04_NODE_IMAGE_K8S_v1.35.0.raw.gz"
     image_username: "builder"
-    ssh_pub_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGdk/DV6U01MtdXrIoSlKhEoNT2QND0lsKdfWmH3to7C kez@kez-dev-vm-1"
-    prov_mac: "ac:1f:6b:01:b7:21"
+    ssh_pub_key: "<your-ssh-public-key>"
+    prov_mac: "aa:bb:cc:dd:01:01"
     prov_ip: "10.10.0.170"
     prov_prefix: "16"
 ```
@@ -1096,13 +1096,13 @@ spec:
   templateRef: ubuntu-kubeadm
   hardwareRef: cp02
   hardwareMap:
-    device_1: "ac:1f:6b:01:b5:eb"
+    device_1: "aa:bb:cc:dd:02:01"
     disk: "/dev/sda"
     hostname: "cp02"
     image_url: "http://10.10.0.9/UBUNTU_24.04_NODE_IMAGE_K8S_v1.35.0.raw.gz"
     image_username: "builder"
-    ssh_pub_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGdk/DV6U01MtdXrIoSlKhEoNT2QND0lsKdfWmH3to7C kez@kez-dev-vm-1"
-    prov_mac: "ac:1f:6b:01:b5:eb"
+    ssh_pub_key: "<your-ssh-public-key>"
+    prov_mac: "aa:bb:cc:dd:02:01"
     prov_ip: "10.10.0.171"
     prov_prefix: "16"
 ```
@@ -1125,18 +1125,18 @@ STATE_TIMEOUT   (global_timeout=1800s exceeded)
 When tink-controller creates a Workflow, it renders the Template using `hardwareMap` values and stores the result in `status.tasks`. This rendering happens once, at creation time, and the result is **immutable**:
 
 ```
-Workflow created with hardwareMap.device_1 = "ac:1f:6b:01:b7:20"
-  → status.tasks[0].worker = "ac:1f:6b:01:b7:20"  ← rendered, immutable
+Workflow created with hardwareMap.device_1 = "aa:bb:cc:dd:01:00"
+  → status.tasks[0].worker = "aa:bb:cc:dd:01:00"  ← rendered, immutable
 
-tink-worker connects as workerID = "ac:1f:6b:01:b7:21"  (actual PXE NIC)
-  → tink-server: no matching workflow found for b7:21 (rendered worker is b7:20)
+tink-worker connects as workerID = "aa:bb:cc:dd:01:01"  (actual PXE NIC)
+  → tink-server: no matching workflow found for :01:01 (rendered worker is :01:00)
   → node idles in HookOS indefinitely
 
-Fix: kubectl patch workflow... spec.hardwareMap.device_1 = b7:21
-  → status.tasks[0].worker STILL = "ac:1f:6b:01:b7:20"  ← patch has no effect on status
+Fix: kubectl patch workflow... spec.hardwareMap.device_1 = aa:bb:cc:dd:01:01
+  → status.tasks[0].worker STILL = "aa:bb:cc:dd:01:00"  ← patch has no effect on status
 
 Correct fix: kubectl delete workflow cp01-provision && kubectl apply -f cp01-workflow.yaml
-  → fresh creation renders with b7:21 → status.tasks[0].worker = b7:21 ← matches
+  → fresh creation renders with aa:bb:cc:dd:01:01 → status.tasks[0].worker = aa:bb:cc:dd:01:01 ← matches
 ```
 
 ### Workflow Status Tracking
@@ -1176,7 +1176,7 @@ Node powers on (manual power button or Rufio BMC Job)
       - SMEE receives it directly (hostNetwork on ens19)
     │
     SMEE checks: does MAC appear in any Hardware CR with allowPXE=true?
-      Hardware[cp01].interfaces[0].dhcp.mac = "ac:1f:6b:01:b7:21"
+      Hardware[cp01].interfaces[0].dhcp.mac = "aa:bb:cc:dd:01:01"
       allowPXE = true  → YES
     │
     SMEE responds with DHCP OFFER:
@@ -1192,7 +1192,7 @@ Node powers on (manual power button or Rufio BMC Job)
 UEFI firmware TFTP-fetches ipxe.efi from 10.10.0.9 (SMEE TFTP server)
     │
     iPXE boots, sends HTTP GET:
-      http://10.10.0.9:8080/auto.ipxe?mac=ac:1f:6b:01:b7:21
+      http://10.10.0.9:8080/auto.ipxe?mac=aa:bb:cc:dd:01:01
     │
     SMEE returns iPXE script:
       #!ipxe
@@ -1200,7 +1200,7 @@ UEFI firmware TFTP-fetches ipxe.efi from 10.10.0.9 (SMEE TFTP server)
         console=tty0 console=ttyS0,115200 \
         tink_worker_image=ghcr.io/tinkerbell/tink-worker:latest \
         grpc_authority=10.10.0.9:42113 \
-        worker_id=ac:1f:6b:01:b7:21 \
+        worker_id=aa:bb:cc:dd:01:01 \
         ...
       initrd http://10.10.0.9:8080/initramfs-x86_64
       boot
@@ -1216,13 +1216,13 @@ HookOS init script:
   docker pull ghcr.io/tinkerbell/tink-worker:latest
   docker run ... tink-worker \
     --grpc-address=10.10.0.9:42113 \
-    --worker-id=ac:1f:6b:01:b7:21
+    --worker-id=aa:bb:cc:dd:01:01
     │
     tink-worker connects to tink-server gRPC (port 42113)
-    Sends: GetWorkflowActions(workerID="ac:1f:6b:01:b7:21")
+    Sends: GetWorkflowActions(workerID="aa:bb:cc:dd:01:01")
     │
-    tink-server looks up: Workflow where status.tasks[].worker == "ac:1f:6b:01:b7:21"
-    → cp01-provision found (status.tasks[0].worker = "ac:1f:6b:01:b7:21" after correct creation)
+    tink-server looks up: Workflow where status.tasks[].worker == "aa:bb:cc:dd:01:01"
+    → cp01-provision found (status.tasks[0].worker = "aa:bb:cc:dd:01:01" after correct creation)
     Returns: ordered action list [image2disk, configure-node, reboot]
 ```
 
@@ -1287,7 +1287,7 @@ Node reboots
     sshd starts
     cp01 accessible at:
       10.10.0.170 (eno2 static — provisioning LAN)
-      192.168.0.173 (eno1 DHCP — management LAN)
+      192.168.1.11 (eno1 DHCP — management LAN)
 ```
 
 ### Hegel's Role in This Implementation
@@ -1500,13 +1500,13 @@ The `templateOverride` in both `tinkerbell-controlplane.yaml` and `tinkerbell-wo
 
 ```
 1. Physical bare-metal servers cp01, cp02 exist with:
-   - BMC accessible at 192.168.0.70 and 192.168.0.69 (Redfish)
-   - Provisioning NIC: eno2 (cp01: ac:1f:6b:01:b7:21, cp02: ac:1f:6b:01:b5:eb)
+   - BMC accessible at 192.168.1.70 and 192.168.1.69 (Redfish)
+   - Provisioning NIC: eno2 (cp01: aa:bb:cc:dd:01:01, cp02: aa:bb:cc:dd:02:01)
    - Management NIC: eno1
 
-2. Fresh Ubuntu 24.04 node at 192.168.0.171
+2. Fresh Ubuntu 24.04 node at 192.168.1.10
    - Two NICs: ens18 (management, DHCP), ens19 (provisioning, will get static 10.10.0.9)
-   - SSH accessible as 'kez' with password
+   - SSH accessible as 'ubuntu' with password
 
 3. OS image built and ready at operator's machine
 
@@ -1524,7 +1524,7 @@ app.py:1243  mgmt()
   ├─ load_config("cluster-defs/cluster.yaml")
   │    DaaluConfig loaded, deep-merged with cloud-config/secrets.yaml
   │    mgmt_cfg = MgmtClusterConfig(
-  │      host="192.168.0.171", ssh_username="kez",
+  │      host="192.168.1.10", ssh_username="ubuntu",
   │      provisioning_ip="10.10.0.9", provisioning_interface="ens19",
   │      dhcp_range_begin="10.10.0.200", dhcp_range_end="10.10.0.250",
   │      hardware=[TinkerbellHardware(cp01...), TinkerbellHardware(cp02...)]
@@ -1533,7 +1533,7 @@ app.py:1243  mgmt()
   └─ MgmtClusterManager(cfg, WORKSPACE_ROOT).deploy()
        │
        ├─ manager.py:64  _ssh_connect(mgmt_cfg)
-       │    paramiko.SSHClient().connect("192.168.0.171", username="kez", password=...)
+       │    paramiko.SSHClient().connect("192.168.1.10", username="ubuntu", password=...)
        │    SSHRunner(client)
        │
        ├─ manager.py:72  K8sInstaller(ssh, mgmt_cfg).install()
@@ -1660,7 +1660,7 @@ cp01 powers on (manual or BMC Job)
   → SMEE offers 10.10.0.170, next-server=10.10.0.9, filename=ipxe.efi
   → iPXE boots, fetches vmlinuz + initramfs from SMEE
   → HookOS boots in RAM
-  → tink-worker: workerID=ac:1f:6b:01:b7:21 → connects tink-server:42113
+  → tink-worker: workerID=aa:bb:cc:dd:01:01 → connects tink-server:42113
   → action image2disk: wget | gunzip | dd → /dev/sda  (~5-8 minutes)
   → action configure-node: mount, write files, umount
   → action reboot: nsenter + sysrq (background, 5s delay)
@@ -1668,7 +1668,7 @@ cp01 powers on (manual or BMC Job)
   → Hardware.allowPXE patched to false (manual step post-workflow)
   → Rufio BMC Job: powerAction=off, oneTimeBootDeviceAction=disk, powerAction=on
   → Ubuntu boots from /dev/sda, cloud-init applies configuration
-  → cp01 SSH-accessible at 10.10.0.170 (eno2) and 192.168.0.173 (eno1)
+  → cp01 SSH-accessible at 10.10.0.170 (eno2) and 192.168.1.11 (eno1)
 
 cp02: same flow, STATE_SUCCESS, up for 12h+ at session time
 ```
@@ -1792,12 +1792,12 @@ IMAGE_USERNAME, SSH_PUB_KEY_CONTENT
 ```yaml
 hardware:
   - name: cp01
-    mac: "ac:1f:6b:01:b7:20"   # ← eno1 (management NIC), NOT the PXE boot NIC
+    mac: "aa:bb:cc:dd:01:00"   # ← eno1 (management NIC), NOT the PXE boot NIC
 ```
 
-The PXE-boot NIC on cp01 is `eno2` with MAC `ac:1f:6b:01:b7:21`. The cluster.yaml has `b7:20` which is `eno1`. When `TinkerbellInstaller._register_hardware()` runs, it will create a Hardware CR with `dhcp.mac: ac:1f:6b:01:b7:20`, and the Workflow it creates from `cp01-workflow.yaml` (which has the correct `b7:21`) will be inconsistent with the Hardware CR.
+The PXE-boot NIC on cp01 is `eno2` with MAC `aa:bb:cc:dd:01:01`. The cluster.yaml has `aa:bb:cc:dd:01:00` which is `eno1`. When `TinkerbellInstaller._register_hardware()` runs, it will create a Hardware CR with `dhcp.mac: aa:bb:cc:dd:01:00`, and the Workflow it creates from `cp01-workflow.yaml` (which has the correct `aa:bb:cc:dd:01:01`) will be inconsistent with the Hardware CR.
 
-**Fix:** Correct the MAC in `cluster.yaml` to `ac:1f:6b:01:b7:21`.
+**Fix:** Correct the MAC in `cluster.yaml` to `aa:bb:cc:dd:01:01`.
 
 ---
 
@@ -1843,7 +1843,7 @@ The working standalone Template (`ubuntu-kubeadm.yaml`) uses `busybox:stable` wi
 The `_deploy_image_server()` step deploys nginx and creates `hostPath: /var/www/images` on the mgmt node, but the OS image must be manually placed there:
 
 ```bash
-# On mgmt node (192.168.0.171):
+# On mgmt node (192.168.1.10):
 sudo cp UBUNTU_24.04_NODE_IMAGE_K8S_v1.35.0.raw.gz /var/www/images/
 ```
 
@@ -1858,15 +1858,15 @@ There is no code to upload or download the image. The installer logs a reminder 
 The `ssh_pub_key` in `cp01-workflow.yaml` and `cp02-workflow.yaml` is hardcoded:
 
 ```yaml
-ssh_pub_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGdk/DV6U01MtdXrIoSlKhEoNT2QND0lsKdfWmH3to7C kez@kez-dev-vm-1"
+ssh_pub_key: "<your-ssh-public-key>"
 ```
 
-This is the developer's personal key committed to version-controlled YAML files alongside BMC credentials. The BMC passwords (`ADMIN/ADMIN`) are also in `cluster.yaml` in plaintext.
+An operator's personal SSH public key is committed to version-controlled YAML files alongside BMC credentials. BMC passwords are also in `cluster.yaml` in plaintext.
 
 **Fix:**
 - Move `ssh_pub_key` to `secrets.yaml` and inject at workflow generation time
 - Build workflows programmatically (not as static files) so `ssh_pub_key` comes from config
-- Rotate BMC credentials from default `ADMIN/ADMIN`
+- Rotate BMC credentials from vendor defaults and store in `secrets.yaml`
 
 ---
 

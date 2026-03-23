@@ -1,6 +1,9 @@
 # values.yaml for jetstack/cert-manager
 
 installCRDs: true
+
+startupapicheck:
+  enabled: false
 nodeSelector:
   kubernetes.io/os: linux
   openstack-control-plane: enabled

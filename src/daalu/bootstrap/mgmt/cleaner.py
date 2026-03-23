@@ -76,6 +76,12 @@ class MgmtClusterCleaner:
                 log.info("[clean] No mgmt kubeconfig found — skipping workload cluster deletion")
 
         # ------------------------------------------------------------------
+        # 1b. Wipe workload node disks so they PXE-boot on next power-on
+        # ------------------------------------------------------------------
+        if mgmt_cfg and mgmt_cfg.hardware:
+            self._wipe_workload_nodes(mgmt_cfg)
+
+        # ------------------------------------------------------------------
         # 2. Reset mgmt node (k8s + Harbor disk + provider stack)
         # ------------------------------------------------------------------
         if wipe_mgmt:
@@ -181,6 +187,68 @@ class MgmtClusterCleaner:
         )
 
     # ------------------------------------------------------------------
+    # 1b. Wipe workload node disks (forces PXE boot on next power-on)
+    # ------------------------------------------------------------------
+
+    def _wipe_workload_nodes(self, mgmt_cfg) -> None:
+        """
+        SSH to each workload node and zero the first 100 MB of its boot disk.
+        This destroys the MBR/GPT so the node falls through to PXE on next boot.
+
+        Uses the same SSH key as the mgmt cluster but connects as node_ssh_username
+        (default: root) since workload nodes are provisioned with root access.
+        """
+        for hw in mgmt_cfg.hardware:
+            log.info(
+                "[clean] Wiping boot disk %s on workload node %s (%s)...",
+                hw.disk, hw.name, hw.ip,
+            )
+            try:
+                client = paramiko.SSHClient()
+                client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+                connect_kwargs: dict = {
+                    "hostname": hw.ip,
+                    "username": mgmt_cfg.node_ssh_username,
+                    "timeout": 30,
+                }
+
+                if mgmt_cfg.ssh_key:
+                    pkey = None
+                    for key_class in (paramiko.Ed25519Key, paramiko.RSAKey, paramiko.ECDSAKey):
+                        try:
+                            pkey = key_class.from_private_key_file(
+                                str(Path(mgmt_cfg.ssh_key).expanduser())
+                            )
+                            break
+                        except paramiko.ssh_exception.SSHException:
+                            continue
+                    if pkey:
+                        connect_kwargs["pkey"] = pkey
+                    else:
+                        connect_kwargs["key_filename"] = str(Path(mgmt_cfg.ssh_key).expanduser())
+                else:
+                    connect_kwargs["look_for_keys"] = True
+                    connect_kwargs["allow_agent"] = True
+
+                client.connect(**connect_kwargs)
+                ssh = SSHRunner(client)
+                try:
+                    rc, out, err = ssh.run(
+                        f"dd if=/dev/zero of={hw.disk} bs=1M count=100 conv=noerror 2>&1"
+                    )
+                    if rc == 0:
+                        log.info("[clean] Disk %s wiped on %s — rebooting", hw.disk, hw.name)
+                    else:
+                        log.warning("[clean] dd exited %d on %s: %s", rc, hw.name, err or out)
+                    # Reboot regardless — best-effort
+                    ssh.run("reboot")
+                finally:
+                    client.close()
+            except Exception:
+                log.exception("[clean] Failed to wipe node %s (%s) — skipping", hw.name, hw.ip)
+
+    # ------------------------------------------------------------------
     # Tinkerbell teardown (runs before kubeadm reset, API server still up)
     # ------------------------------------------------------------------
 
@@ -194,22 +262,16 @@ class MgmtClusterCleaner:
           3. kubectl delete namespace tinkerbell
           4. clusterctl delete --infrastructure tinkerbell
         """
-        log.info("[clean] Waiting for Tinkerbell Hardware objects to deprovision...")
-        deadline = time.time() + 300
-        while time.time() < deadline:
-            r = subprocess.run(
-                [
-                    "kubectl", "--kubeconfig", kubeconfig,
-                    "get", "hardware", "-A",
-                    "-o", "jsonpath={.items[*].metadata.name}",
-                ],
-                capture_output=True, text=True,
-            )
-            if r.returncode != 0 or not r.stdout.strip():
-                log.info("[clean] No Hardware objects found — continuing")
-                break
-            log.info("[clean] Hardware objects still present: %s — waiting...", r.stdout.strip())
-            time.sleep(10)
+        log.info("[clean] Deleting Tinkerbell Hardware objects...")
+        subprocess.run(
+            [
+                "kubectl", "--kubeconfig", kubeconfig,
+                "delete", "hardware", "-A", "--all",
+                "--ignore-not-found",
+            ],
+            capture_output=True, text=True,
+        )
+        log.info("[clean] Hardware objects deleted")
 
         log.info("[clean] Uninstalling Tinkerbell Helm release...")
         subprocess.run(

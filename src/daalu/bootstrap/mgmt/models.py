@@ -45,6 +45,10 @@ class MgmtClusterConfig(BaseModel):
     ssh_password: Optional[str] = None      # populated via secrets.yaml mgmt_cluster.ssh_password
     ssh_key: Optional[str] = None           # path to SSH private key (alternative to password)
 
+    # SSH username used when connecting to workload nodes (e.g. to wipe their disks).
+    # Workload nodes are provisioned with root access; the mgmt node uses ssh_username.
+    node_ssh_username: str = "root"
+
     # Managed user created on bare-metal nodes during bootstrap
     managed_user: str = "builder"
     managed_user_password: Optional[str] = None  # populated via secrets.yaml mgmt_cluster.managed_user_password
