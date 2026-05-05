@@ -138,10 +138,32 @@ class TemporalConfig(BaseModel):
     server_chart_path: str = "assets/temporal/charts/temporal"
     server_image_tag: str = "1.27.0"
 
-    # Persistence — Temporal needs a SQL backend. The chart defaults to a
-    # bundled Cassandra; we set cassandra.enabled=false in the installer and
-    # use the bundled Postgres which is lighter and easier to debug.
-    storage: str = "postgresql"             # "postgresql" | "cassandra" | "mysql"
+    # Persistence backend. The official temporalio/temporal chart bundles
+    # ONLY a Cassandra subchart (plus optional ES/Prometheus/Grafana for
+    # observability). The `mysql.enabled` and `postgresql.enabled` value
+    # flags exist for legacy reasons but ship no actual DB — they only
+    # toggle which sql driver the server is configured for.
+    #
+    # MySQL is the daalu default because:
+    #   • Cassandra-based visibility schemas were dropped from the
+    #     temporalio/admin-tools image in 1.21+, breaking the chart's
+    #     update-visibility-store init container against modern image tags.
+    #   • A 1-pod MySQL fits a single-operator mgmt cluster better than a
+    #     3-replica Cassandra ring.
+    # When storage=mysql, the installer deploys a standalone MySQL 8
+    # StatefulSet (mysql_*) into the temporal namespace and points the
+    # chart at it. For Postgres or external/HA databases, deploy them
+    # separately and override server.config.persistence.* via a custom
+    # values file — set storage="external".
+    storage: str = "mysql"                  # "mysql" | "cassandra" | "external"
+
+    # Standalone MySQL deployed alongside Temporal when storage=mysql.
+    mysql_image: str = "mysql:8.0"
+    mysql_storage_class: str = "local-path"
+    mysql_storage_size: str = "10Gi"
+    mysql_root_password: str = "temporal"
+    mysql_default_database: str = "temporal"
+    mysql_visibility_database: str = "temporal_visibility"
 
     # Daalu worker — first-party chart shipped in this repo.
     worker_namespace: str = "daalu"

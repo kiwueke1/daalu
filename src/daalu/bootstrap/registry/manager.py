@@ -168,6 +168,20 @@ class RegistryManager:
                     project, report.failed, report.failed_images,
                 )
 
+    def ensure_project(self, project_name: str) -> None:
+        """
+        Create a Harbor project if it doesn't exist. Idempotent.
+
+        Reuses the active HarborDeployer if deploy_harbor() ran in this
+        session; otherwise spins up a minimal standalone deployer pointed at
+        the configured harbor_registry_url().
+        """
+        deployer = getattr(self, "_deployer", None)
+        if deployer is not None:
+            deployer.ensure_project(project_name)
+            return
+        self._ensure_harbor_project_standalone(self.harbor_registry_url(), project_name)
+
     def _ensure_harbor_project_standalone(self, harbor_url: str, project_name: str) -> None:
         """Create a Harbor project without a full HarborDeployer instance."""
         from daalu.bootstrap.registry.harbor_deployer import HarborDeployer

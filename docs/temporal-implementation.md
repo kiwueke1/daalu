@@ -150,10 +150,10 @@ well under the 50k/event soft cap.
 `MgmtClusterManager.deploy()` runs **TemporalInstaller** after Harbor:
 
 1. **Server** — `helm upgrade --install temporal temporalio/temporal` in
-   namespace `temporal`. The bundled Postgres backend is good enough for a
-   single-operator mgmt cluster. To switch to Cassandra/MySQL or external
-   storage, set `mgmt_cluster.temporal.storage` and override values via the
-   helm chart.
+   namespace `temporal`. Persistence defaults to a standalone MySQL 8
+   StatefulSet that the installer deploys into the same namespace —
+   **not** a chart subchart (see §4.1 below). For the trade-offs and how
+   to switch to Cassandra or an external DB, see "Persistence backend".
 2. **Worker** — `helm upgrade --install daalu-worker
    deployments/daalu-worker/chart` in namespace `daalu`. The pod
    `hostPath`-mounts the daalu workspace, the mgmt kubeconfig, and `~/.ssh/`
@@ -179,7 +179,7 @@ mgmt_cluster:
     namespace: temporal
     server_chart_path: assets/temporal/charts/temporal
     server_image_tag: "1.27.0"
-    storage: postgresql             # postgresql | mysql | cassandra
+    storage: mysql                  # mysql (default) | cassandra (advanced — see §4 Server)
 
     worker_namespace: daalu
     worker_chart_path: deployments/daalu-worker/chart
@@ -199,6 +199,159 @@ mgmt_cluster:
 
 `temporal.enabled: false` skips the whole subsystem cleanly — daalu CLI
 still works without Temporal.
+
+### 4.1 Persistence backend (read this if Temporal pods crash-loop)
+
+The `temporalio/temporal` Helm chart **does not bundle MySQL or Postgres**
+despite having `mysql.enabled` / `postgresql.enabled` value flags. Those
+flags only flip the persistence driver in the rendered server config —
+no database StatefulSet is created. The chart's only bundled DB
+dependency is **Cassandra**.
+
+Concretely, the chart's `Chart.yaml` lists these dependencies:
+
+| Subchart | Purpose | Bundled? |
+|---|---|---|
+| `cassandra` | persistence (default + visibility) | ✅ |
+| `elasticsearch` | advanced visibility | ✅ (optional) |
+| `prometheus` / `grafana` | observability | ✅ (optional) |
+| `mysql` | persistence | ❌ — values flag only, no StatefulSet |
+| `postgresql` | persistence | ❌ — not even a values flag |
+
+Three valid `temporal.storage` values are supported by the installer:
+
+#### `storage: mysql` (default)
+
+The installer deploys a single-pod MySQL 8 StatefulSet
+(`mysql-0`, headless service `mysql`) into the temporal namespace
+**before** running `helm install temporal`. A ConfigMap-mounted init
+script pre-creates the visibility database and grants `root@%` on both.
+Persistence is `local-path` (10 Gi by default) — same provisioner used
+for Harbor.
+
+Why MySQL is the daalu default:
+
+- **Cassandra-based visibility schemas were dropped** from the
+  `temporalio/admin-tools` image in 1.21+. The chart still tries to run
+  an `update-visibility-store` init container that reads from
+  `/etc/temporal/schema/cassandra/visibility/versioned/`, which doesn't
+  exist in modern admintools images. You'll see:
+  ```
+  ERROR Unable to update CQL schema. error listing schema dir:
+  open .: no such file or directory
+  ```
+- A 1-pod MySQL fits a single-operator mgmt cluster; Cassandra is a
+  3-replica ring even at minimum config.
+- The chart's MySQL settings (`server.config.persistence.*.sql.*`) work
+  fine once a real MySQL is reachable at `mysql:3306`.
+
+Tuneable via `mgmt_cluster.temporal.mysql_*` fields (see `TemporalConfig`
+in `src/daalu/bootstrap/mgmt/models.py`):
+
+```yaml
+temporal:
+  storage: mysql
+  mysql_image: "mysql:8.0"
+  mysql_storage_class: "local-path"
+  mysql_storage_size: "10Gi"
+  mysql_root_password: "temporal"
+  mysql_default_database: "temporal"
+  mysql_visibility_database: "temporal_visibility"
+```
+
+#### `storage: cassandra`
+
+Uses the chart's bundled 3-node Cassandra subchart. **Only works with
+`server_image_tag <= 1.20.x`** because of the visibility-schema removal
+described above. The installer logs a warning and proceeds; if your
+image tag is newer you'll see schema-init `update-visibility-store` fail
+in `CrashLoopBackOff`.
+
+If you must run Cassandra with a modern Temporal version, you also need
+an external visibility store (Elasticsearch or MySQL) and have to wire
+it via the chart's values file — not handled by this installer.
+
+#### `storage: external`
+
+Deploy your own DB (Postgres, MySQL, Cassandra, RDS, etc.) and pass a
+custom values file to the chart that overrides
+`server.config.persistence.*`. The installer skips the storage block
+entirely; everything else (server, worker, console) still applies.
+
+#### Symptom → diagnosis cheat sheet
+
+| Symptom | Likely cause |
+|---|---|
+| `temporal-frontend` CrashLoop, log says `sql schema version compatibility check failed` / `no usable database connection found` | Persistence driver is `sql` but no DB is reachable. With `storage: mysql`, check that `mysql-0` is `Running`. With `storage: external`, verify `server.config.persistence.*.sql.host` resolves. |
+| Schema-init `update-visibility-store` fails with `error listing schema dir: open .: no such file or directory` | `storage: cassandra` with `server_image_tag >= 1.21`. Pin tag ≤ 1.20.x or switch to `storage: mysql`. |
+| Schema-init `create-default-store` fails with `dial tcp: lookup mysql on ...: no such host` | `storage: mysql` was selected but the standalone MySQL StatefulSet didn't deploy (e.g. previous installer version that only set `mysql.enabled=true` without shipping a real DB). Re-run with the current installer; it ships `mysql-0` itself. |
+| `mysql-0` stuck `Pending` with `unbound immediate PersistentVolumeClaims` | No default `StorageClass` and `mysql_storage_class` doesn't match an installed SC. Check `kubectl get sc` — daalu provisions `local-path` as part of Harbor setup. |
+
+### First-run sequence (two-pass bootstrap)
+
+There's a chicken-and-egg between Temporal and Harbor: the daalu-worker
+and temporal-console images live at `10.10.0.9:30003/daalu/...`, but on
+a fresh setup that registry is what `daalu mgmt` itself stands up. The
+worker pod can't pull from a registry that doesn't exist yet. So the
+first build is two passes:
+
+**Pass 1 — bring up the mgmt cluster + Harbor only**
+
+In `cluster-defs/cluster.yaml`:
+
+```yaml
+mgmt_cluster:
+  temporal:
+    enabled: false       # skip Temporal on the first pass
+```
+
+```bash
+daalu mgmt cluster-defs/cluster.yaml
+```
+
+When this finishes, Harbor is at `https://10.10.0.9:30003`. Pass 1
+auto-creates two projects: `openstack` (default) and any project
+referenced by `temporal.worker_image` / `temporal.console_image`
+(default `daalu`). The pre-creation lives in
+`MgmtClusterManager.deploy()` right after `registry_mgr.mirror_images()`
+and runs even when `temporal.enabled=False`, precisely so the operator
+can push images between passes without a manual curl. The
+TemporalInstaller also calls `ensure_project()` defensively in pass 2 —
+both paths use `RegistryManager.ensure_project()` and are idempotent.
+
+Before pushing images from your workstation, log in to Harbor:
+
+```bash
+HARBOR_PW=$(kubectl --kubeconfig ~/.kube/daalu-mgmt-config \
+  -n harbor get secret harbor-core \
+  -o jsonpath='{.data.HARBOR_ADMIN_PASSWORD}' | base64 -d)
+
+docker login 10.10.0.9:30003 -u admin -p "${HARBOR_PW}"
+```
+
+If your Docker daemon doesn't trust Harbor's self-signed cert, add
+`"insecure-registries": ["10.10.0.9:30003"]` to `/etc/docker/daemon.json`
+and `sudo systemctl restart docker` first.
+
+**Pass 2 — build/push images, then re-enable Temporal**
+
+Build and push the worker and console images (see "Building the worker
+image" and "Building the console image" below), then flip the flag:
+
+```yaml
+mgmt_cluster:
+  temporal:
+    enabled: true
+```
+
+```bash
+daalu mgmt cluster-defs/cluster.yaml
+```
+
+`daalu mgmt` is idempotent — earlier installers (kind, Cilium, CAPI,
+Harbor, …) short-circuit via `helm upgrade --install`, and only the
+Temporal installer (`manager.py` step 7) does new work. The Helm chart
+pull below must already have happened by this point.
 
 ### Pulling the Temporal helm chart
 
@@ -254,11 +407,18 @@ setting `REGISTRY_FILE=/etc/daalu/registry.json` on the console pod.
 
 ### Step 1 — Bootstrap the mgmt cluster (CLI)
 
+Follow the **two-pass bootstrap** in §4: first run with
+`temporal.enabled: false` to bring up Harbor, then create the `daalu`
+Harbor project, push the worker + console images, flip the flag to
+`true`, and re-run:
+
 ```bash
-daalu mgmt cluster-defs/cluster.yaml
+daalu mgmt cluster-defs/cluster.yaml      # pass 1 — Harbor only
+# … create Harbor `daalu` project, push images, set temporal.enabled=true …
+daalu mgmt cluster-defs/cluster.yaml      # pass 2 — Temporal stack
 ```
 
-When this finishes you'll have:
+After pass 2 you'll have:
 
 * `~/.kube/daalu-mgmt-config` — kubeconfig for the mgmt cluster
 * Harbor at `https://10.10.0.9:30003`

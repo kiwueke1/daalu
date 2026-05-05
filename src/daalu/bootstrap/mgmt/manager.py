@@ -65,6 +65,7 @@ class MgmtClusterManager:
         ssh = SSHRunner(client)
 
         harbor_url: str | None = None
+        registry_mgr: RegistryManager | None = None
         try:
             # ------------------------------------------------------------------
             # 2. Install Kubernetes + Cilium
@@ -159,6 +160,30 @@ class MgmtClusterManager:
                 )
                 registry_mgr.mirror_images()
                 harbor_url = registry_mgr.harbor_registry_url()
+
+                # Pre-create Harbor projects referenced by the Temporal images
+                # so the operator can `docker push` between pass 1 (Harbor only)
+                # and pass 2 (Temporal install) without a manual curl. Runs even
+                # when temporal.enabled=False — the projects are still needed
+                # the moment the operator builds and pushes the images.
+                if mgmt_cfg.temporal:
+                    from daalu.bootstrap.mgmt.temporal_installer import TemporalInstaller
+                    extras = {
+                        TemporalInstaller._project_from_image(img)
+                        for img in (
+                            mgmt_cfg.temporal.worker_image,
+                            mgmt_cfg.temporal.console_image,
+                        )
+                    } - {None, registry_mgr.harbor_project()}
+                    for project in sorted(p for p in extras if p):
+                        try:
+                            registry_mgr.ensure_project(project)
+                        except Exception as exc:  # noqa: BLE001
+                            log.warning(
+                                "[mgmt] Could not pre-create Harbor project "
+                                "'%s' (needed for Temporal images): %s",
+                                project, exc,
+                            )
             elif mgmt_cfg.install_harbor and not self._cfg.registry:
                 log.warning(
                     "[mgmt] install_harbor=true but no 'registry:' block found in config. "
@@ -177,6 +202,7 @@ class MgmtClusterManager:
                         kubeconfig_path=kubeconfig_path,
                         cfg=mgmt_cfg,
                         workspace_root=self._workspace_root,
+                        registry_mgr=registry_mgr,
                     ).install()
                 except Exception as exc:  # noqa: BLE001
                     log.error(

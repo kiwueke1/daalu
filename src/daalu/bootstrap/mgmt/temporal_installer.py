@@ -13,9 +13,9 @@ from the UI rather than the daalu CLI.
 What we install
 ---------------
 1. **Temporal server** — official ``temporalio/temporal`` Helm chart in
-   namespace ``temporal``. The bundled Postgres backend is good enough for a
-   single-operator mgmt cluster; switch to the production chart settings later
-   if you need HA.
+   namespace ``temporal``. The chart bundles a single-replica Cassandra
+   subchart (default) which is good enough for a single-operator mgmt
+   cluster; switch to MySQL or external Postgres for production HA.
 2. **daalu-worker** — Deployment in namespace ``daalu`` running the
    ``daalu-worker`` entrypoint. Polls the ``daalu.deployments`` task queue
    and shells out to the daalu CLI to execute each stage. Mounts the daalu
@@ -36,9 +36,12 @@ import shutil
 import subprocess
 import time
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from daalu.bootstrap.mgmt.models import MgmtClusterConfig, TemporalConfig
+
+if TYPE_CHECKING:
+    from daalu.bootstrap.registry.manager import RegistryManager
 
 log = logging.getLogger("daalu")
 
@@ -53,6 +56,10 @@ class TemporalInstaller:
                          chart versions, and toggles.
         workspace_root:  workspace root containing ``deployments/daalu-worker/``
                          and (optionally) ``../temporal-console/chart``.
+        registry_mgr:    optional RegistryManager used to pre-create Harbor
+                         projects referenced by the worker/console images.
+                         Without it, the operator must create those projects
+                         manually before pushing images.
     """
 
     def __init__(
@@ -60,11 +67,13 @@ class TemporalInstaller:
         kubeconfig_path: str,
         cfg: MgmtClusterConfig,
         workspace_root: Path,
+        registry_mgr: Optional["RegistryManager"] = None,
     ) -> None:
         self._kubeconfig = kubeconfig_path
         self._cfg = cfg
         self._tcfg: TemporalConfig = cfg.temporal
         self._workspace_root = workspace_root
+        self._registry_mgr = registry_mgr
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -78,6 +87,7 @@ class TemporalInstaller:
         self._require_tools()
         self._ensure_namespace(self._tcfg.namespace)
         self._ensure_namespace(self._tcfg.worker_namespace)
+        self._ensure_harbor_projects()
 
         log.info("[temporal] installing Temporal server in ns=%s", self._tcfg.namespace)
         self._install_temporal_server()
@@ -102,28 +112,69 @@ class TemporalInstaller:
     def _install_temporal_server(self) -> None:
         chart = self._resolve_server_chart()
         ns = self._tcfg.namespace
+        storage = self._tcfg.storage
 
-        # Minimal, single-instance config — bundled Postgres + ephemeral storage.
-        # For production, set persistence + replicas in a values file.
+        # The official temporalio/temporal chart only bundles a `cassandra`
+        # subchart for persistence (plus elasticsearch/prometheus/grafana for
+        # observability). The `mysql.enabled` / `postgresql.enabled` flags do
+        # NOT install a database — they only configure the sql driver. So for
+        # storage=mysql we deploy our own standalone MySQL into the temporal
+        # namespace before installing the Temporal release.
+        if storage not in ("cassandra", "mysql", "external"):
+            raise ValueError(
+                f"Unsupported temporal.storage={storage!r}. "
+                "Valid options: 'mysql' (default — installer deploys a "
+                "standalone MySQL 8 alongside Temporal), 'cassandra' (chart's "
+                "bundled 3-node Cassandra; visibility broken on admin-tools "
+                ">=1.21 — pin server_image_tag<=1.20.x or pair with an "
+                "external visibility store), or 'external' (you deploy the DB "
+                "yourself and override server.config.persistence.* via a "
+                "custom values file)."
+            )
+
+        if storage == "mysql":
+            self._install_mysql_for_temporal(ns)
+
         sets = [
             "server.replicaCount=1",
             f"server.image.tag={self._tcfg.server_image_tag}",
-            "cassandra.enabled=false",
-            "mysql.enabled=false",
             "prometheus.enabled=false",
             "grafana.enabled=false",
             "elasticsearch.enabled=false",
+            "cassandra.enabled=false",
+            "mysql.enabled=false",
         ]
-        if self._tcfg.storage == "postgresql":
-            sets.append("postgresql.enabled=true")
-        elif self._tcfg.storage == "mysql":
-            sets += ["postgresql.enabled=false", "mysql.enabled=true"]
-        elif self._tcfg.storage == "cassandra":
-            sets += ["postgresql.enabled=false", "cassandra.enabled=true"]
-        # Drop the elasticsearch dependency in favour of the basic visibility
-        # store backed by the chosen SQL backend.
-        sets.append("server.config.persistence.default.driver=sql")
-        sets.append("server.config.persistence.visibility.driver=sql")
+        if storage == "cassandra":
+            # Chart's default persistence driver is `cassandra`; just enable
+            # the bundled subchart.
+            sets[-2] = "cassandra.enabled=true"
+            log.warning(
+                "[temporal] storage=cassandra: visibility schema was dropped "
+                "from temporalio/admin-tools >=1.21. If "
+                "update-visibility-store fails, pin server_image_tag<=1.20.x "
+                "or switch to storage=mysql."
+            )
+        elif storage == "mysql":
+            db_default = self._tcfg.mysql_default_database
+            db_vis = self._tcfg.mysql_visibility_database
+            pw = self._tcfg.mysql_root_password
+            sets += [
+                "server.config.persistence.default.driver=sql",
+                "server.config.persistence.visibility.driver=sql",
+                "server.config.persistence.default.sql.driver=mysql8",
+                "server.config.persistence.default.sql.host=mysql",
+                "server.config.persistence.default.sql.port=3306",
+                f"server.config.persistence.default.sql.database={db_default}",
+                "server.config.persistence.default.sql.user=root",
+                f"server.config.persistence.default.sql.password={pw}",
+                "server.config.persistence.visibility.sql.driver=mysql8",
+                "server.config.persistence.visibility.sql.host=mysql",
+                "server.config.persistence.visibility.sql.port=3306",
+                f"server.config.persistence.visibility.sql.database={db_vis}",
+                "server.config.persistence.visibility.sql.user=root",
+                f"server.config.persistence.visibility.sql.password={pw}",
+            ]
+        # storage == "external": no overrides — operator's values file wins.
 
         cmd = [
             "helm", "upgrade", "--install", "temporal",
@@ -135,6 +186,113 @@ class TemporalInstaller:
         for s in sets:
             cmd += ["--set", s]
         self._run(cmd)
+
+    def _install_mysql_for_temporal(self, ns: str) -> None:
+        """
+        Deploy a single-pod MySQL 8 StatefulSet into the temporal namespace.
+
+        The temporal helm chart does not bundle a MySQL database (despite
+        having a ``mysql.enabled`` flag that only flips driver config), so we
+        ship our own. Idempotent — re-running ``daalu mgmt`` is safe; existing
+        data on the PVC is preserved across helm upgrades.
+
+        The init ConfigMap pre-creates the visibility database so the chart's
+        ``schema.createDatabase`` step doesn't need elevated SQL permissions.
+        """
+        log.info("[temporal] Deploying standalone MySQL into ns=%s", ns)
+
+        pw = self._tcfg.mysql_root_password
+        db_default = self._tcfg.mysql_default_database
+        db_vis = self._tcfg.mysql_visibility_database
+        image = self._tcfg.mysql_image
+        sc = self._tcfg.mysql_storage_class
+        size = self._tcfg.mysql_storage_size
+
+        manifest = f"""---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-init
+  namespace: {ns}
+data:
+  init.sql: |
+    CREATE DATABASE IF NOT EXISTS {db_vis} CHARACTER SET utf8mb4;
+    GRANT ALL PRIVILEGES ON {db_default}.* TO 'root'@'%';
+    GRANT ALL PRIVILEGES ON {db_vis}.* TO 'root'@'%';
+    FLUSH PRIVILEGES;
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: data-mysql-0
+  namespace: {ns}
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: {sc}
+  resources:
+    requests:
+      storage: {size}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mysql
+  namespace: {ns}
+spec:
+  serviceName: mysql
+  replicas: 1
+  selector:
+    matchLabels: {{app: mysql}}
+  template:
+    metadata:
+      labels: {{app: mysql}}
+    spec:
+      containers:
+      - name: mysql
+        image: {image}
+        env:
+        - {{name: MYSQL_ROOT_PASSWORD, value: "{pw}"}}
+        - {{name: MYSQL_DATABASE,      value: "{db_default}"}}
+        ports:
+        - {{containerPort: 3306, name: mysql}}
+        volumeMounts:
+        - {{name: data, mountPath: /var/lib/mysql}}
+        - {{name: init, mountPath: /docker-entrypoint-initdb.d}}
+        readinessProbe:
+          exec: {{command: [mysqladmin, ping, -h, localhost, -uroot, -p{pw}]}}
+          initialDelaySeconds: 20
+          periodSeconds: 5
+        resources:
+          requests: {{cpu: 100m, memory: 256Mi}}
+      volumes:
+      - {{name: data, persistentVolumeClaim: {{claimName: data-mysql-0}}}}
+      - {{name: init, configMap: {{name: mysql-init}}}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql
+  namespace: {ns}
+spec:
+  selector: {{app: mysql}}
+  ports: [{{port: 3306, targetPort: 3306}}]
+  clusterIP: None
+"""
+
+        self._run(
+            ["kubectl", "--kubeconfig", self._kubeconfig, "apply", "-f", "-"],
+            input_text=manifest,
+        )
+        # Wait for mysql-0 to be Ready before the helm install kicks off the
+        # chart's schema-init job (which fails with "no usable database
+        # connection found" if MySQL is not yet listening on 3306).
+        self._run([
+            "kubectl", "--kubeconfig", self._kubeconfig,
+            "-n", ns,
+            "rollout", "status", "statefulset/mysql",
+            "--timeout=5m",
+        ])
+        log.info("[temporal] MySQL ready at mysql.%s.svc.cluster.local:3306", ns)
 
     def _resolve_server_chart(self) -> Path:
         """
@@ -281,6 +439,56 @@ class TemporalInstaller:
     # Helpers
     # ------------------------------------------------------------------
 
+    def _ensure_harbor_projects(self) -> None:
+        """
+        Pre-create Harbor projects referenced by the Temporal images.
+
+        Harbor's deployer only auto-creates the default ``openstack`` project,
+        so a fresh registry rejects pushes/pulls for any other path with
+        ``project ... not found``. Derive the project from each image URL
+        (``host:port/<project>/<image>:tag``) and ensure it exists.
+        """
+        if self._registry_mgr is None:
+            log.info(
+                "[temporal] No RegistryManager available — skipping Harbor "
+                "project pre-creation. If image pulls fail with 'project not "
+                "found', create the project manually via the Harbor UI."
+            )
+            return
+
+        projects: set[str] = set()
+        for image in (self._tcfg.worker_image, self._tcfg.console_image):
+            project = self._project_from_image(image)
+            if project:
+                projects.add(project)
+
+        for project in sorted(projects):
+            try:
+                self._registry_mgr.ensure_project(project)
+            except Exception as exc:  # noqa: BLE001
+                log.warning(
+                    "[temporal] Could not ensure Harbor project '%s': %s. "
+                    "If image pulls fail, create the project manually in Harbor.",
+                    project, exc,
+                )
+
+    @staticmethod
+    def _project_from_image(image: str) -> Optional[str]:
+        """
+        Extract the Harbor project from an image reference.
+
+        ``10.10.0.9:30003/daalu/daalu-worker:latest`` → ``"daalu"``.
+        Returns None for refs without a host/project structure (e.g. bare
+        ``nginx:latest``) — those don't target a Harbor project.
+        """
+        if not image:
+            return None
+        ref = image.split("@", 1)[0]
+        parts = ref.split("/")
+        if len(parts) < 3:
+            return None
+        return parts[1]
+
     def _ensure_namespace(self, ns: str) -> None:
         # `kubectl get ns X --ignore-not-found` returns rc=0 whether or not the
         # ns exists, so check for empty stdout to decide whether to create it.
@@ -311,6 +519,7 @@ class TemporalInstaller:
         check: bool = True,
         capture: bool = False,
         pipe_to: Optional[list[str]] = None,
+        input_text: Optional[str] = None,
     ) -> subprocess.CompletedProcess:
         log.debug("[temporal] $ %s", shlex.join(cmd))
         if pipe_to is not None:
@@ -326,6 +535,7 @@ class TemporalInstaller:
             check=check,
             capture_output=capture,
             text=True,
+            input=input_text,
             env=self._env(),
         )
 
