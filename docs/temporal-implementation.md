@@ -67,13 +67,15 @@ as a collapsible per-stage view.
 | Schemas | `src/daalu/temporal/schemas.py` | Workflow input schemas — drives the UI form. |
 | Worker entry | `src/daalu/temporal/worker.py` | `daalu-worker` console entry point. |
 | Registry CLI | `src/daalu/temporal/cli.py` | `daalu-registry` — dumps schemas as JSON. |
-| Worker chart | `deployments/daalu-worker/` | Dockerfile + helm chart for the worker deployment. |
+| Worker chart | `deployments/daalu-worker/` | Dockerfile + first-party helm chart for the worker deployment. |
+| Console source + chart | `external/temporal-console/` | Full FastAPI UI app (Dockerfile, chart, source) shipped in-tree so a single clone has everything. |
+| Server chart (user-pulled) | `assets/temporal/charts/temporal/` | Pulled from `temporal/temporal` by the operator, same pattern as MetalLB / Ingress. See README. |
 | Server installer | `src/daalu/bootstrap/mgmt/temporal_installer.py` | `helm install` Temporal server, daalu-worker, temporal-console. |
 | Server config | `src/daalu/bootstrap/mgmt/models.py` (`TemporalConfig`) | `mgmt_cluster.temporal.*` keys in `cluster.yaml`. |
-| Console — registry | `temporal-console/src/temporal_console/registry.py` | Loads `registry.json` baked into the image. |
-| Console — start router | `temporal-console/src/temporal_console/api/routers/start.py` | Renders typed form, posts to `client.start_workflow`. |
-| Console — progress | `temporal-console/src/temporal_console/api/routers/workflows.py` (`/workflows/{id}/progress.html`) | HTMX partial — reads `progress` query + pending-activity heartbeat. |
-| Console — templates | `temporal-console/.../templates/workflow_start_*.j2`, `_partials/workflow_progress.html.j2` | Pick + form + collapsible step view. |
+| Console — registry | `external/temporal-console/src/temporal_console/registry.py` | Loads `registry.json` baked into the image. |
+| Console — start router | `external/temporal-console/src/temporal_console/api/routers/start.py` | Renders typed form, posts to `client.start_workflow`. |
+| Console — progress | `external/temporal-console/src/temporal_console/api/routers/workflows.py` (`/workflows/{id}/progress.html`) | HTMX partial — reads `progress` query + pending-activity heartbeat. |
+| Console — templates | `external/temporal-console/.../templates/workflow_start_*.j2`, `_partials/workflow_progress.html.j2` | Pick + form + collapsible step view. |
 
 ---
 
@@ -175,7 +177,7 @@ mgmt_cluster:
   temporal:
     enabled: true                   # set false to skip everything below
     namespace: temporal
-    chart_version: "0.62.0"
+    server_chart_path: assets/temporal/charts/temporal
     server_image_tag: "1.27.0"
     storage: postgresql             # postgresql | mysql | cassandra
 
@@ -187,7 +189,7 @@ mgmt_cluster:
 
     console_enabled: true
     console_namespace: daalu
-    console_chart_path: "../temporal-console/chart"
+    console_chart_path: external/temporal-console/chart
     console_image: "10.10.0.9:30003/daalu/temporal-console:latest"
     console_brand_name: "Daalu Workflows"
     console_host: "workflows.daalu.io"
@@ -197,6 +199,20 @@ mgmt_cluster:
 
 `temporal.enabled: false` skips the whole subsystem cleanly — daalu CLI
 still works without Temporal.
+
+### Pulling the Temporal helm chart
+
+The Temporal server chart is third-party, so it follows the same pattern
+as MetalLB / Ingress / Keycloak — the operator pulls it once before
+running `daalu mgmt`:
+
+```bash
+helm repo add temporal https://go.temporal.io/helm-charts
+helm pull temporal/temporal --untar --untardir assets/temporal/charts/
+```
+
+The `daalu-worker` and `temporal-console` charts are first-party (live in
+this repo at `deployments/`) so no pull is needed for those.
 
 ### Building the worker image
 
@@ -211,17 +227,21 @@ docker push 10.10.0.9:30003/daalu/daalu-worker:latest
 
 ### Building the console image
 
-The temporal-console lives in a sibling repo (`../temporal-console/`). The
-Daalu workflow registry is baked into its image at
-`src/temporal_console/registry.json`. To refresh it from the daalu source:
+The temporal-console UI source ships in this repo at
+`external/temporal-console/`. The Daalu workflow registry is baked into
+the image at `src/temporal_console/registry.json`. To refresh it from the
+daalu source and rebuild:
 
 ```bash
-# In the daalu repo
-daalu-registry > ../temporal-console/src/temporal_console/registry.json
+cd /path/to/daalu
 
-# Then build & push the console
-cd ../temporal-console
-docker build -t 10.10.0.9:30003/daalu/temporal-console:latest .
+# Refresh the workflow registry from daalu's schemas
+daalu-registry > external/temporal-console/src/temporal_console/registry.json
+
+# Build & push
+docker build \
+  -t 10.10.0.9:30003/daalu/temporal-console:latest \
+  external/temporal-console
 docker push 10.10.0.9:30003/daalu/temporal-console:latest
 ```
 

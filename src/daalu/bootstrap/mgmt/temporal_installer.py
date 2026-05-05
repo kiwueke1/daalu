@@ -55,9 +55,6 @@ class TemporalInstaller:
                          and (optionally) ``../temporal-console/chart``.
     """
 
-    HELM_REPO_NAME = "temporal"
-    HELM_REPO_URL = "https://go.temporal.io/helm-charts"
-
     def __init__(
         self,
         kubeconfig_path: str,
@@ -103,22 +100,19 @@ class TemporalInstaller:
     # ------------------------------------------------------------------
 
     def _install_temporal_server(self) -> None:
-        # Add/update the official Temporal helm repo.
-        self._run(["helm", "repo", "add", self.HELM_REPO_NAME, self.HELM_REPO_URL,
-                   "--force-update"], check=False)
-        self._run(["helm", "repo", "update", self.HELM_REPO_NAME])
-
+        chart = self._resolve_server_chart()
         ns = self._tcfg.namespace
+
         # Minimal, single-instance config — bundled Postgres + ephemeral storage.
         # For production, set persistence + replicas in a values file.
         sets = [
-            f"server.replicaCount=1",
+            "server.replicaCount=1",
             f"server.image.tag={self._tcfg.server_image_tag}",
-            f"cassandra.enabled=false",
-            f"mysql.enabled=false",
-            f"prometheus.enabled=false",
-            f"grafana.enabled=false",
-            f"elasticsearch.enabled=false",
+            "cassandra.enabled=false",
+            "mysql.enabled=false",
+            "prometheus.enabled=false",
+            "grafana.enabled=false",
+            "elasticsearch.enabled=false",
         ]
         if self._tcfg.storage == "postgresql":
             sets.append("postgresql.enabled=true")
@@ -133,8 +127,7 @@ class TemporalInstaller:
 
         cmd = [
             "helm", "upgrade", "--install", "temporal",
-            f"{self.HELM_REPO_NAME}/temporal",
-            "--version", self._tcfg.chart_version,
+            str(chart),
             "--namespace", ns,
             "--create-namespace",
             "--wait", "--timeout", "20m",
@@ -142,6 +135,33 @@ class TemporalInstaller:
         for s in sets:
             cmd += ["--set", s]
         self._run(cmd)
+
+    def _resolve_server_chart(self) -> Path:
+        """
+        Locate the user-pulled Temporal helm chart.
+
+        We use the same pattern as the rest of daalu's third-party charts —
+        the user runs `helm pull temporal/temporal --untar --untardir
+        assets/temporal/charts/` once before `daalu mgmt`. See README's
+        "Helm Charts" section for the exact command.
+        """
+        candidates = [
+            Path(self._tcfg.server_chart_path),
+            self._workspace_root / self._tcfg.server_chart_path,
+        ]
+        for c in candidates:
+            try:
+                if (c / "Chart.yaml").is_file():
+                    return c.resolve()
+            except OSError:
+                continue
+        raise FileNotFoundError(
+            f"Temporal helm chart not found at "
+            f"{self._workspace_root / self._tcfg.server_chart_path}.\n"
+            f"Run this once before `daalu mgmt`:\n\n"
+            f"  helm repo add temporal https://go.temporal.io/helm-charts\n"
+            f"  helm pull temporal/temporal --untar --untardir assets/temporal/charts/\n"
+        )
 
     def _wait_temporal_ready(self) -> None:
         ns = self._tcfg.namespace
@@ -238,12 +258,16 @@ class TemporalInstaller:
         self._run(cmd)
 
     def _resolve_console_chart(self) -> Optional[Path]:
-        """Locate the temporal-console helm chart, trying a few common spots."""
+        """
+        Locate the temporal-console helm chart.
+
+        Default location is ``external/temporal-console/chart`` inside this
+        repo — the console source ships alongside daalu so a single clone has
+        everything. ``console_chart_path`` can override.
+        """
         candidates = [
             Path(self._tcfg.console_chart_path),
             self._workspace_root / self._tcfg.console_chart_path,
-            self._workspace_root.parent / "temporal-console" / "chart",
-            self._workspace_root.parent / "daalu_private" / "temporal-console" / "chart",
         ]
         for c in candidates:
             try:

@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    app: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}
+    spec:
+      {{- with .Values.hostAliases }}
+      hostAliases:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: console
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 8000
+          env:
+            - name: TEMPORAL_HOST
+              value: {{ .Values.temporal.host | quote }}
+            - name: TEMPORAL_NAMESPACES
+              value: {{ .Values.temporal.namespaces | quote }}
+            - name: NAMESPACE_LABELS
+              value: {{ .Values.temporal.namespaceLabels | quote }}
+            - name: BRAND_NAME
+              value: {{ .Values.brand.name | quote }}
+            - name: BRAND_SUBTITLE
+              value: {{ .Values.brand.subtitle | quote }}
+            - name: BRAND_ACCENT
+              value: {{ .Values.brand.accent | quote }}
+            - name: DEEP_LINK_TEMPLATE
+              value: {{ .Values.deepLink.template | quote }}
+            - name: OIDC_ISSUER
+              value: {{ .Values.oidc.issuer | quote }}
+            - name: OIDC_CLIENT_ID
+              value: {{ .Values.oidc.clientId | quote }}
+            - name: OIDC_REDIRECT_URI
+              value: {{ .Values.oidc.redirectUri | quote }}
+            - name: OIDC_REQUIRED_ROLE
+              value: {{ .Values.oidc.requiredRole | quote }}
+            - name: ENVIRONMENT
+              value: production
+            {{- if .Values.oidc.issuer }}
+            - name: OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.oidc.existingSecret }}
+                  key: client-secret
+            - name: SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.oidc.existingSecret }}
+                  key: session-secret
+            {{- else }}
+            - name: SESSION_SECRET
+              value: "dev-no-auth"
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}

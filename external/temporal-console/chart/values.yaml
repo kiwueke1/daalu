@@ -1,0 +1,65 @@
+replicaCount: 1
+
+image:
+  repository: 10.10.0.9:30003/daalu/temporal-console
+  tag: latest
+  pullPolicy: Always
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8000
+
+temporal:
+  host: temporal-frontend.temporal.svc.cluster.local:7233
+  namespaces: default
+  namespaceLabels: ""   # e.g. "default:Ajani Workflows"
+
+brand:
+  name: Workflows
+  subtitle: orchestration console
+  accent: "#7aa2ff"
+
+deepLink:
+  template: ""          # e.g. "https://ajani.daalu.io/workflows/{workflow_id}"
+
+oidc:
+  issuer: ""            # e.g. "https://auth.daalu.io/realms/daalu"
+  clientId: temporal-console
+  # clientSecret is read from an existingSecret; never put it in values.
+  existingSecret: temporal-console-secrets
+  # Key inside the Secret holding the client_secret + session_secret.
+  redirectUri: ""       # e.g. "https://workflows.daalu.io/auth/callback"
+  requiredRole: ""
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# istio VirtualService attached to the shared gateway. Set to enabled=false
+# if your cluster uses ingress-nginx or another ingress.
+istio:
+  enabled: true
+  gateway: istio-ingress/gateway
+  host: workflows.daalu.io
+
+ingress:
+  enabled: false
+  host: workflows.daalu.io
+  className: nginx
+  tls: true
+
+# Add /etc/hosts entries inside the pod — needed when the OIDC issuer
+# URL uses a hostname that's only in the cluster's external DNS (e.g.
+# auth.daalu.io resolves at the LB IP for browsers, but inside the pod
+# we have to point it at the in-cluster Service IP).
+hostAliases: []
+# Example:
+# hostAliases:
+#   - ip: 10.10.1.103
+#     hostnames:
+#       - auth.daalu.io

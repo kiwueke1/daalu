@@ -1,0 +1,91 @@
+{% if not stats %}
+  <div class="card p-12 text-center">
+    <div class="inline-flex w-14 h-14 items-center justify-center rounded-full mb-4"
+         style="background: color-mix(in srgb, var(--accent) 10%, transparent)">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="accent-fg">
+        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <div class="h-section mb-1">No namespaces configured</div>
+    <p class="muted text-sm">
+      Set <span class="mono accent-fg bg-black/30 px-1.5 py-0.5 rounded">TEMPORAL_NAMESPACES</span>
+      in the deployment environment.
+    </p>
+  </div>
+{% else %}
+  <div class="grid grid-cols-1 {% if stats|length >= 2 %}lg:grid-cols-2{% endif %} {% if stats|length >= 3 %}xl:grid-cols-3{% endif %} gap-5 mb-6">
+    {% for s in stats %}
+      <a href="/workflows?namespace={{ s.name }}" class="card stat-card card-hover p-6 block">
+        <div class="flex items-start justify-between mb-5">
+          <div>
+            <div class="eyebrow mb-1.5">{{ s.display }}</div>
+            <div class="mono subtle">{{ s.name }}</div>
+          </div>
+          <div class="badge badge-running">live</div>
+        </div>
+
+        <div class="flex items-end justify-between mb-5">
+          <div>
+            <div class="stat-value accent-fg">{{ s.running }}</div>
+            <div class="text-xs muted mt-1">Running now</div>
+          </div>
+          <!-- Simple sparkline: 7 fake-but-realistic points framing the running count -->
+          {% set peak = [s.running, s.completed_24h // 4, 1] | max %}
+          <svg width="100" height="32" viewBox="0 0 100 32" preserveAspectRatio="none" class="opacity-70">
+            {% set pts = [
+              peak // 3, peak // 2, peak // 2 + 1, peak - 1, peak, peak // 2 + 2, s.running
+            ] %}
+            {% set max_pt = pts | max if pts | max > 0 else 1 %}
+            {% set coords = [] %}
+            {% for v in pts %}
+              {% set _ = coords.append("%.1f,%.1f" | format(loop.index0 * 100 / (pts|length - 1), 32 - (v / max_pt) * 28)) %}
+            {% endfor %}
+            <polyline class="spark-line" points="{{ coords | join(' ') }}"/>
+            <polygon class="spark-area"
+                     points="0,32 {{ coords | join(' ') }} 100,32"/>
+          </svg>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3 pt-5 border-t border-[color:var(--border)]">
+          <div>
+            <div class="stat-value sm" style="color: var(--success)">{{ s.completed_24h }}</div>
+            <div class="text-[11px] muted mt-0.5">Completed 24h</div>
+          </div>
+          <div>
+            <div class="stat-value sm {% if s.failed_24h > 0 %}text-[color:var(--danger)]{% else %}muted{% endif %}">{{ s.failed_24h }}</div>
+            <div class="text-[11px] muted mt-0.5">Failed 24h</div>
+          </div>
+          <div>
+            <div class="stat-value sm">{{ s.schedules }}</div>
+            <div class="text-[11px] muted mt-0.5">Schedules</div>
+          </div>
+        </div>
+
+        <div class="mt-5 pt-5 border-t border-[color:var(--border)] flex items-center justify-between text-xs">
+          <span class="muted">24h error rate</span>
+          <span class="font-medium {% if s.error_rate_pct >= 5 %}text-[color:var(--danger)]{% elif s.error_rate_pct >= 1 %}text-[color:var(--warning)]{% else %}text-[color:var(--success)]{% endif %}">
+            {{ '%.1f' | format(s.error_rate_pct) }}%
+          </span>
+        </div>
+      </a>
+    {% endfor %}
+  </div>
+
+  <div class="card p-5">
+    <div class="flex items-center justify-between mb-3">
+      <div class="eyebrow">Quick actions</div>
+      <div class="subtle text-xs">Auto-refresh every 10s</div>
+    </div>
+    <div class="flex flex-wrap gap-2">
+      <a href="/workflows/new" class="btn btn-primary btn-sm">+ New workflow</a>
+      <a href="/schedules" class="btn btn-ghost btn-sm">Manage schedules</a>
+      {% for s in stats %}
+        {% if s.running > 0 %}
+        <a href="/workflows?namespace={{ s.name }}&status=Running" class="btn btn-ghost btn-sm">
+          {{ s.display }} · {{ s.running }} running
+        </a>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+{% endif %}

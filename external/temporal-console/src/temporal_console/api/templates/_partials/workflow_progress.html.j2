@@ -1,0 +1,135 @@
+{#
+  HTMX partial: collapsible stage cards for a daalu-style workflow.
+
+  Inputs:
+    progress    dict | None  — { workflow_id, phase, message, current_stage,
+                                  stages: [ { name, status, started_at,
+                                  ended_at, log_lines, error } ], error }
+    live_tail   list[str]    — newest stdout lines from the running activity
+    live_stage  str | None   — name of the running activity (matches stage)
+    workflow_id, namespace   — for poll URL substitution
+
+  This whole partial is HTMX-swap-target=outerHTML; the wrapper div re-installs
+  itself on every poll (every 2s) until the workflow is in a terminal phase.
+#}
+
+{% set phase = (progress.phase if progress else 'PENDING') | string %}
+{% set stages = (progress.stages if progress else []) or [] %}
+{% set is_terminal = phase in ('SUCCEEDED', 'FAILED', 'CANCELED', 'TERMINATED', 'TIMED_OUT') %}
+
+<div id="wf-progress"
+     {% if not is_terminal %}
+     hx-get="/workflows/{{ workflow_id }}/progress.html?namespace={{ namespace }}"
+     hx-trigger="load delay:2s"
+     hx-swap="outerHTML"
+     {% endif %}
+>
+  {% if not stages and not progress %}
+    <div class="card p-6 text-sm muted">
+      No structured progress reported by this workflow. The workflow may not
+      expose a <span class="mono">progress</span> query, or the worker is using
+      a custom progress shape.
+    </div>
+  {% else %}
+    <div class="card p-6">
+      <div class="flex items-center justify-between mb-5">
+        <div>
+          <div class="eyebrow mb-0.5">Pipeline</div>
+          <h2 class="h-section">
+            {% if progress and progress.message %}{{ progress.message }}{% else %}Stages{% endif %}
+          </h2>
+        </div>
+        <span class="badge badge-{{ {'PENDING':'neutral','RUNNING':'running','SUCCEEDED':'success','FAILED':'danger'}.get(phase, 'neutral') }}">
+          {{ phase | title }}
+        </span>
+      </div>
+
+      <div class="space-y-3">
+        {% for s in stages %}
+          {% set status = (s.status or 'pending') | string %}
+          {% set is_active = status == 'running' %}
+          {% set is_done = status == 'succeeded' %}
+          {% set is_failed = status == 'failed' %}
+          {% set border_color = 'var(--success)' if is_done else 'var(--danger)' if is_failed else 'var(--accent)' if is_active else 'var(--border)' %}
+
+          <details class="card overflow-hidden"
+                   style="border-color: {{ border_color }};"
+                   {% if is_active or is_failed %}open{% endif %}>
+            <summary class="cursor-pointer p-4 flex items-center gap-3 hover:bg-[color:var(--bg-card-hover)]">
+              {# status dot #}
+              {% if is_done %}
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="color: var(--success)">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              {% elif is_failed %}
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="color: var(--danger)">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              {% elif is_active %}
+                <span class="inline-block w-3.5 h-3.5 rounded-full"
+                      style="background: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 25%, transparent);">
+                </span>
+              {% else %}
+                <span class="inline-block w-3.5 h-3.5 rounded-full border"
+                      style="border-color: var(--border)"></span>
+              {% endif %}
+
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-medium">{{ s.name }}</div>
+                <div class="text-xs subtle mono">
+                  {% if s.started_at and s.ended_at %}
+                    {{ s.started_at[:19] }} → {{ s.ended_at[:19] }}
+                  {% elif s.started_at %}
+                    started {{ s.started_at[:19] }}
+                  {% else %}
+                    pending
+                  {% endif %}
+                </div>
+              </div>
+
+              <span class="badge badge-{{ {'pending':'neutral','running':'running','succeeded':'success','failed':'danger','skipped':'neutral'}.get(status, 'neutral') }}">
+                {{ status }}
+              </span>
+
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="subtle shrink-0 details-chevron">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </summary>
+
+            <div class="border-t border-[color:var(--border)] p-4 bg-[color:var(--bg-1)]">
+              {% if s.error %}
+                <div class="mb-3 text-xs mono" style="color: var(--danger)">
+                  {{ s.error }}
+                </div>
+              {% endif %}
+
+              {# Logs: completed stages show their full log_lines; the live
+                 stage shows the heartbeat tail (capped to ~200 lines). #}
+              {% set lines = s.log_lines or [] %}
+              {% if is_active and live_stage and ('deploy_stage' in (live_stage|string) or s.name in (live_stage|string)) and live_tail %}
+                {% set lines = live_tail %}
+              {% endif %}
+
+              {% if lines %}
+                <pre class="mono text-xs leading-relaxed scroll-area"
+                     style="max-height: 360px; overflow: auto; white-space: pre-wrap; word-break: break-all; color: var(--text-2);"
+                >{% for line in lines %}{{ line }}
+{% endfor %}</pre>
+              {% else %}
+                <div class="text-xs subtle">
+                  {% if is_active %}Activity is running — log tail will appear here once the worker emits its first heartbeat.{% else %}No log output for this stage yet.{% endif %}
+                </div>
+              {% endif %}
+            </div>
+          </details>
+        {% endfor %}
+      </div>
+
+      {% if progress and progress.error %}
+        <div class="mt-4 text-xs mono" style="color: var(--danger)">
+          {{ progress.error }}
+        </div>
+      {% endif %}
+    </div>
+  {% endif %}
+</div>

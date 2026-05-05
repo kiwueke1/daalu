@@ -1,0 +1,117 @@
+{% extends "base.html.j2" %}
+{% block title %}{{ schema.title }}{% endblock %}
+
+{% macro render_field(f, values) %}
+  {% set v = values.get(f.name) if values else None %}
+  {% if v is none %}{% set v = f.default %}{% endif %}
+
+  {% if f.type == 'bool' %}
+    <label class="flex items-start gap-3 py-1 cursor-pointer">
+      <input type="checkbox" name="{{ f.name }}"
+             {% if v %}checked{% endif %}
+             class="mt-0.5">
+      <div class="flex-1">
+        <div class="text-sm">{{ f.label }}</div>
+        {% if f.help %}<div class="text-xs subtle mt-0.5">{{ f.help }}</div>{% endif %}
+      </div>
+    </label>
+  {% else %}
+    <label class="block text-sm">
+      <div class="eyebrow mb-1.5">
+        {{ f.label }}
+        {% if f.required %}<span style="color: var(--danger)">*</span>{% endif %}
+      </div>
+      {% if f.choices %}
+        <select name="{{ f.name }}" class="w-full">
+          {% for choice in f.choices %}
+            <option value="{{ choice }}" {% if v == choice %}selected{% endif %}>{{ choice or '(none)' }}</option>
+          {% endfor %}
+        </select>
+      {% elif f.type == 'textarea' %}
+        <textarea name="{{ f.name }}" rows="4" class="w-full"
+                  placeholder="{{ f.placeholder }}">{{ v or '' }}</textarea>
+      {% elif f.type == 'secret' %}
+        <input type="password" name="{{ f.name }}" value="{{ v or '' }}"
+               placeholder="{{ f.placeholder }}" class="w-full font-mono">
+      {% elif f.type == 'int' %}
+        <input type="number" name="{{ f.name }}" value="{{ v or '' }}"
+               placeholder="{{ f.placeholder }}" class="w-full font-mono">
+      {% else %}
+        <input type="text" name="{{ f.name }}" value="{{ v or '' }}"
+               placeholder="{{ f.placeholder }}" class="w-full font-mono"
+               {% if f.required %}required{% endif %}>
+      {% endif %}
+      {% if f.help %}<div class="text-xs subtle mt-1.5">{{ f.help }}</div>{% endif %}
+    </label>
+  {% endif %}
+{% endmacro %}
+
+{% block content %}
+<div class="max-w-3xl">
+  <div class="mb-8">
+    <a href="/workflows/start" class="muted text-xs hover:underline">← All workflows</a>
+    <div class="eyebrow mt-2 mb-2">{{ schema.workflow_type }}</div>
+    <h1 class="h-display">{{ schema.title }}</h1>
+    <p class="muted text-sm mt-3">{{ schema.description }}</p>
+    <div class="mono subtle mt-3">task_queue: {{ schema.task_queue }}</div>
+  </div>
+
+  {% if error %}
+    <div class="card p-4 mb-6 text-sm flex gap-3 items-start"
+         style="background: color-mix(in srgb, var(--danger) 8%, var(--bg-card)); border-color: color-mix(in srgb, var(--danger) 30%, var(--border));">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--danger); margin-top: 1px;">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <div style="color: var(--danger)">{{ error }}</div>
+    </div>
+  {% endif %}
+
+  <form method="post" action="/workflows/start/{{ schema.workflow_type }}"
+        class="card p-8 space-y-5">
+
+    <label class="block text-sm">
+      <div class="eyebrow mb-1.5">Namespace</div>
+      <select name="namespace" required class="w-full">
+        {% for ns in namespaces %}
+          <option value="{{ ns }}" {% if ns == namespace %}selected{% endif %}>
+            {{ namespace_display(ns) }}
+          </option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label class="block text-sm">
+      <div class="eyebrow mb-1.5">Workflow ID <span class="subtle">(optional — auto-generated if blank)</span></div>
+      <input type="text" name="workflow_id" value="" class="w-full font-mono"
+             placeholder="{{ schema.workflow_type | lower }}-YYYYMMDD-XXXXXX">
+    </label>
+
+    {# Basic fields #}
+    {% for f in schema.basic_fields %}
+      {{ render_field(f, values) }}
+    {% endfor %}
+
+    {# Advanced fields, collapsed #}
+    {% if schema.advanced_fields %}
+      <details class="pt-3 border-t border-[color:var(--border)]">
+        <summary class="cursor-pointer text-sm muted hover:text-[color:var(--text-1)] py-1">
+          Advanced options ({{ schema.advanced_fields | length }})
+        </summary>
+        <div class="space-y-5 mt-4">
+          {% for f in schema.advanced_fields %}
+            {{ render_field(f, values) }}
+          {% endfor %}
+        </div>
+      </details>
+    {% endif %}
+
+    <div class="flex justify-end gap-2 pt-3 border-t border-[color:var(--border)]">
+      <a href="/workflows/start" class="btn btn-ghost">Cancel</a>
+      <button type="submit" class="btn btn-primary">
+        Start workflow
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}

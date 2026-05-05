@@ -149,6 +149,10 @@ helm pull grafana/loki --untar --untardir assets/loki/charts/
 
 helm repo add bitnami https://charts.bitnami.com/bitnami
 helm pull bitnami/keycloak --untar --untardir assets/keycloak/charts/
+
+# Temporal — required only if mgmt_cluster.temporal.enabled (default: true)
+helm repo add temporal https://go.temporal.io/helm-charts
+helm pull temporal/temporal --untar --untardir assets/temporal/charts/
 ```
 
 ---

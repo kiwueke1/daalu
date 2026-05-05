@@ -1,0 +1,94 @@
+{% extends "base.html.j2" %}
+{% block title %}Workflows{% endblock %}
+
+{% block content %}
+<div class="flex items-end justify-between mb-8">
+  <div>
+    <div class="eyebrow mb-2">{{ namespace_display(namespace) }}</div>
+    <h1 class="h-display">Workflows</h1>
+    <p class="muted text-sm mt-2">{{ rows|length }} workflow{% if rows|length != 1 %}s{% endif %} matching filters</p>
+  </div>
+  <a href="/workflows/new" class="btn btn-primary">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+    Start workflow
+  </a>
+</div>
+
+<div class="card p-5 mb-6">
+  <form method="get" action="/workflows" class="flex flex-wrap gap-3 items-end text-sm">
+    <label class="flex-1 min-w-[180px]">
+      <div class="eyebrow mb-1.5">Namespace</div>
+      <select name="namespace" class="w-full">
+        {% for ns in namespaces %}
+          <option value="{{ ns }}" {% if ns == namespace %}selected{% endif %}>{{ namespace_display(ns) }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="flex-1 min-w-[180px]">
+      <div class="eyebrow mb-1.5">Status</div>
+      <select name="status" class="w-full">
+        <option value="" {% if not filter_status %}selected{% endif %}>All statuses</option>
+        {% for s in statuses %}
+          <option value="{{ s }}" {% if s == filter_status %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="flex-1 min-w-[260px]">
+      <div class="eyebrow mb-1.5">Workflow type</div>
+      <input type="text" name="type_contains" value="{{ filter_type }}" placeholder="e.g. PipelineWorkflow" class="w-full">
+    </label>
+    <button type="submit" class="btn btn-primary">Apply</button>
+  </form>
+</div>
+
+{% if rows %}
+<div class="card overflow-hidden">
+  <table>
+    <thead>
+      <tr>
+        <th>Workflow</th>
+        <th>Type</th>
+        <th>Status</th>
+        <th>Queue</th>
+        <th>Started</th>
+        <th class="text-right"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td>
+          <a href="/workflows/{{ r.id }}?namespace={{ r.namespace }}" class="mono accent-fg hover:underline font-medium">
+            {{ r.id[:42] }}{% if r.id|length > 42 %}…{% endif %}
+          </a>
+        </td>
+        <td class="mono text-[12.5px]">{{ r.type }}</td>
+        <td><span class="badge badge-{{ r.status_class }}">{{ r.status_label }}</span></td>
+        <td class="mono muted text-[12px]">{{ r.task_queue }}</td>
+        <td class="muted text-xs">{{ r.start.strftime("%b %d · %H:%M:%S") if r.start else "—" }}</td>
+        <td class="text-right">
+          <a href="/workflows/{{ r.id }}?namespace={{ r.namespace }}" class="muted hover:accent-fg inline-block px-2 transition">→</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card p-16 text-center">
+  <div class="inline-flex w-14 h-14 items-center justify-center rounded-full mb-4"
+       style="background: color-mix(in srgb, var(--accent) 10%, transparent)">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="accent-fg">
+      <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+      <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+    </svg>
+  </div>
+  <div class="h-section mb-1">No workflows match these filters</div>
+  <p class="muted text-sm mb-6">Try clearing the filters, or start a new workflow.</p>
+  <div class="flex justify-center gap-2">
+    <a href="/workflows?namespace={{ namespace }}" class="btn btn-ghost">Clear filters</a>
+    <a href="/workflows/new" class="btn btn-primary">Start workflow</a>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

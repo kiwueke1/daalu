@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{% block title %}{{ brand.name }}{% endblock %} · {{ brand.name }}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com?plugins=typography,forms"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'ui-monospace', 'SF Mono', 'Menlo', 'monospace'],
+          },
+        },
+      },
+    };
+  </script>
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <style>
+    :root {
+      color-scheme: dark;
+      --accent: {{ brand.accent }};
+      --bg-0: #07080c;
+      --bg-1: #0c0e14;
+      --bg-2: #12141c;
+      --bg-card: #12141c;
+      --bg-card-hover: #161924;
+      --border: #1c2030;
+      --border-hover: #252a3d;
+      --text-1: #e8eaf0;
+      --text-2: #9da3b3;
+      --text-3: #626878;
+      --success: #4ade80;
+      --warning: #fbbf24;
+      --danger: #f87171;
+      --info: #60a5fa;
+    }
+
+    * { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+
+    body {
+      background:
+        radial-gradient(ellipse 100% 60% at 50% -10%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 60%),
+        radial-gradient(ellipse 70% 50% at 100% 100%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 60%),
+        var(--bg-0);
+      background-attachment: fixed;
+      color: var(--text-1);
+      font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+      font-feature-settings: "cv11", "ss01", "ss03";
+      letter-spacing: -0.01em;
+    }
+
+    ::selection { background: color-mix(in srgb, var(--accent) 35%, transparent); color: var(--text-1); }
+
+    /* ── Cards ───────────────────────────────────────────────────── */
+    .card {
+      background: linear-gradient(180deg, rgba(255,255,255,.02) 0%, transparent 100%), var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      position: relative;
+    }
+    .card-hover { transition: border-color .2s, transform .2s, background .2s; }
+    .card-hover:hover { border-color: var(--border-hover); background: var(--bg-card-hover); }
+    .card-accent {
+      background:
+        linear-gradient(180deg, color-mix(in srgb, var(--accent) 8%, transparent) 0%, transparent 60%),
+        var(--bg-card);
+      border-color: color-mix(in srgb, var(--accent) 25%, var(--border));
+    }
+
+    /* ── Typography ──────────────────────────────────────────────── */
+    .h-display { font-size: 2rem; font-weight: 700; letter-spacing: -0.03em; line-height: 1.15; }
+    .h-section { font-size: 1.125rem; font-weight: 600; letter-spacing: -0.015em; }
+    .eyebrow { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; color: var(--text-3); }
+    .muted { color: var(--text-2); }
+    .subtle { color: var(--text-3); }
+    .accent-fg { color: var(--accent); }
+    .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; }
+
+    /* ── Navigation ──────────────────────────────────────────────── */
+    aside.sidebar {
+      background: color-mix(in srgb, var(--bg-1) 80%, transparent);
+      border-right: 1px solid var(--border);
+      backdrop-filter: blur(12px);
+    }
+    a.nav-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 12px; border-radius: 8px;
+      color: var(--text-2); font-size: 13.5px; font-weight: 500;
+      transition: all .15s; position: relative;
+    }
+    a.nav-item:hover { color: var(--text-1); background: color-mix(in srgb, var(--accent) 6%, transparent); }
+    a.nav-item.active {
+      color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 10%, transparent);
+    }
+    a.nav-item.active::before {
+      content: ""; position: absolute; left: -8px; top: 20%; bottom: 20%;
+      width: 2px; border-radius: 2px; background: var(--accent);
+    }
+    a.nav-item .nav-ico { width: 16px; height: 16px; opacity: 0.7; }
+
+    /* ── Badges ──────────────────────────────────────────────────── */
+    .badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 9px; border-radius: 999px;
+      font-size: 11px; font-weight: 600; letter-spacing: 0.02em;
+      line-height: 1.3;
+    }
+    .badge-neutral { background: color-mix(in srgb, var(--text-2) 15%, transparent); color: var(--text-2); }
+    .badge-success { background: color-mix(in srgb, var(--success) 12%, transparent); color: var(--success); }
+    .badge-warning { background: color-mix(in srgb, var(--warning) 12%, transparent); color: var(--warning); }
+    .badge-danger { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); }
+    .badge-running {
+      background: color-mix(in srgb, var(--accent) 14%, transparent);
+      color: var(--accent);
+      padding-left: 18px;
+      position: relative;
+    }
+    .badge-running::before {
+      content: "";
+      position: absolute; left: 8px; top: 50%;
+      width: 6px; height: 6px; margin-top: -3px;
+      background: currentColor; border-radius: 50%;
+      box-shadow: 0 0 0 0 currentColor;
+      animation: pulse 2s ease-out infinite;
+    }
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 currentColor; opacity: 1; }
+      70% { box-shadow: 0 0 0 8px transparent; opacity: 0.6; }
+      100% { box-shadow: 0 0 0 0 transparent; opacity: 1; }
+    }
+
+    /* ── Buttons ─────────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 13px; font-weight: 500; letter-spacing: -0.005em;
+      border: 1px solid transparent;
+      transition: all .15s;
+      cursor: pointer;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: var(--bg-0);
+      box-shadow: 0 1px 0 0 rgba(255,255,255,0.15) inset, 0 8px 24px -8px color-mix(in srgb, var(--accent) 60%, transparent);
+    }
+    .btn-primary:hover { filter: brightness(1.1); transform: translateY(-1px); }
+    .btn-ghost {
+      background: transparent; color: var(--text-1); border-color: var(--border);
+    }
+    .btn-ghost:hover { background: color-mix(in srgb, var(--accent) 6%, transparent); border-color: var(--border-hover); }
+    .btn-danger { background: var(--danger); color: var(--bg-0); }
+    .btn-danger:hover { filter: brightness(1.1); }
+    .btn-sm { padding: 5px 10px; font-size: 12px; }
+
+    /* ── Forms ───────────────────────────────────────────────────── */
+    input, select, textarea {
+      background: var(--bg-1);
+      border: 1px solid var(--border);
+      color: var(--text-1);
+      border-radius: 8px;
+      padding: 9px 12px;
+      font-size: 13px;
+      transition: all .15s;
+      font-family: inherit;
+    }
+    input:hover, select:hover, textarea:hover { border-color: var(--border-hover); }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: color-mix(in srgb, var(--accent) 70%, var(--border));
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
+      background: var(--bg-2);
+    }
+    textarea { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; line-height: 1.6; }
+
+    /* ── Tables ──────────────────────────────────────────────────── */
+    table { width: 100%; border-collapse: collapse; }
+    th {
+      text-align: left; padding: 10px 14px;
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--text-3); font-weight: 600;
+      border-bottom: 1px solid var(--border);
+      background: color-mix(in srgb, var(--bg-0) 50%, transparent);
+    }
+    td {
+      padding: 13px 14px;
+      font-size: 13px;
+      border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+    }
+    tr:last-child td { border-bottom: 0; }
+    tr:hover td { background: color-mix(in srgb, var(--accent) 3%, transparent); }
+
+    /* ── Stat cards ──────────────────────────────────────────────── */
+    .stat-card {
+      transition: transform .2s cubic-bezier(.2, .9, .3, 1), border-color .2s;
+      cursor: pointer;
+    }
+    .stat-card:hover { transform: translateY(-2px); }
+    .stat-value { font-size: 2rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
+    .stat-value.sm { font-size: 1.25rem; }
+
+    /* ── Timeline ────────────────────────────────────────────────── */
+    .timeline { position: relative; }
+    .timeline::before {
+      content: ""; position: absolute;
+      left: 11px; top: 12px; bottom: 8px; width: 1px;
+      background: linear-gradient(to bottom, var(--border) 0%, var(--border) 80%, transparent 100%);
+    }
+    .timeline-event { position: relative; padding-left: 34px; padding-bottom: 16px; }
+    .timeline-event::before {
+      content: ""; position: absolute;
+      left: 6px; top: 5px; width: 12px; height: 12px;
+      border-radius: 50%;
+      background: var(--bg-card);
+      border: 2px solid var(--border);
+      transition: all .15s;
+    }
+    .timeline-event.accent::before {
+      background: var(--accent);
+      border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+      box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 15%, transparent);
+    }
+    .timeline-event.success::before { background: var(--success); border-color: color-mix(in srgb, var(--success) 40%, transparent); }
+    .timeline-event.danger::before { background: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+    .timeline-event:hover::before { transform: scale(1.15); }
+
+    /* ── Scrollbar ───────────────────────────────────────────────── */
+    .scroll-area { overflow-y: auto; }
+    .scroll-area::-webkit-scrollbar { width: 6px; height: 6px; }
+    .scroll-area::-webkit-scrollbar-track { background: transparent; }
+    .scroll-area::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    .scroll-area::-webkit-scrollbar-thumb:hover { background: var(--border-hover); }
+
+    /* ── View transitions ────────────────────────────────────────── */
+    main > * {
+      animation: slideUp .35s cubic-bezier(.2, .9, .3, 1);
+    }
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Sparkline SVG ───────────────────────────────────────────── */
+    .spark-line { stroke: var(--accent); stroke-width: 1.5; fill: none; }
+    .spark-area { fill: color-mix(in srgb, var(--accent) 20%, transparent); }
+
+    /* ── Kbd ─────────────────────────────────────────────────────── */
+    kbd {
+      font-family: 'JetBrains Mono', monospace; font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: var(--bg-1);
+      border: 1px solid var(--border);
+      border-bottom-width: 2px;
+      color: var(--text-2);
+    }
+
+    /* ── Brand mark ──────────────────────────────────────────────── */
+    .brand-mark {
+      width: 28px; height: 28px; border-radius: 8px;
+      background: linear-gradient(135deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 60%, #7c3aed) 100%);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; color: var(--bg-0);
+      box-shadow: 0 2px 12px -2px color-mix(in srgb, var(--accent) 50%, transparent);
+    }
+  </style>
+</head>
+<body class="h-full">
+  <div class="flex h-full">
+    <aside class="sidebar w-60 shrink-0">
+      <div class="p-5">
+        <a href="/" class="flex items-center gap-2.5">
+          <div class="brand-mark">{{ brand.name[0] | upper }}</div>
+          <div>
+            <div class="text-[15px] font-semibold tracking-tight">{{ brand.name }}</div>
+            <div class="text-[11px] subtle">{{ brand.subtitle }}</div>
+          </div>
+        </a>
+      </div>
+
+      <nav class="px-2 space-y-0.5">
+        {% set nav_items = [
+          ("/", "Dashboard", "M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"),
+          ("/workflows", "Workflows", "M4 4v4h4V4H4zM10 4v4h4V4h-4zm6 0v4h4V4h-4zM4 10v4h4v-4H4zm6 0v4h4v-4h-4zm6 0v4h4v-4h-4zM4 16v4h4v-4H4zm6 0v4h4v-4h-4zm6 0v4h4v-4h-4z"),
+          ("/workflows/start", "Start workflow", "M12 4v16m-8-8h16"),
+          ("/schedules", "Schedules", "M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"),
+        ] %}
+        {% for href, label, icon in nav_items %}
+          {% set active = (href == "/" and current_path == "/") or (href != "/" and current_path.startswith(href)) %}
+          <a href="{{ href }}" class="nav-item {{ 'active' if active else '' }}">
+            <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{ icon }}"/></svg>
+            <span>{{ label }}</span>
+          </a>
+        {% endfor %}
+      </nav>
+
+      <div class="px-3 mt-8 pt-4 border-t border-[color:var(--border)]">
+        <div class="eyebrow mb-2">Namespaces</div>
+        {% for ns in namespaces %}
+          <div class="flex items-center gap-2 py-1">
+            <div class="w-1.5 h-1.5 rounded-full" style="background: var(--accent)"></div>
+            <div class="text-[12.5px] font-medium">{{ namespace_display(ns) }}</div>
+          </div>
+          {% if ns != namespace_display(ns) %}
+            <div class="mono subtle ml-3.5 mb-1">{{ ns }}</div>
+          {% endif %}
+        {% endfor %}
+      </div>
+
+      {% if auth_enabled %}
+      <div class="px-3 mt-auto pt-4 pb-5 border-t border-[color:var(--border)] absolute bottom-0 w-60">
+        <form method="post" action="/auth/logout">
+          <button type="submit" class="nav-item w-full text-left">
+            <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+            <span>Log out</span>
+          </button>
+        </form>
+      </div>
+      {% endif %}
+    </aside>
+
+    <main class="flex-1 overflow-y-auto scroll-area">
+      <div class="mx-auto max-w-[1400px] px-10 py-10">
+        {% block content %}{% endblock %}
+      </div>
+    </main>
+  </div>
+</body>
+</html>

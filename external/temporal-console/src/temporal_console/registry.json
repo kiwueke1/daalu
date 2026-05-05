@@ -1,0 +1,443 @@
+{
+  "workflows": [
+    {
+      "workflow_type": "DeployDaaluCloud",
+      "task_queue": "daalu.deployments",
+      "title": "Deploy Daalu Cloud",
+      "description": "Provision the workload Kubernetes cluster (via Tinkerbell/CAPT or Metal3) and deploy the full OpenStack control plane. Equivalent to running `daalu deploy` from the CLI.",
+      "fields": [
+        {
+          "name": "config_path",
+          "label": "Cluster config",
+          "type": "string",
+          "required": true,
+          "default": "cluster-defs/cluster.yaml",
+          "placeholder": "",
+          "help": "Path to the cluster definition YAML inside the worker workspace.",
+          "choices": null,
+          "advanced": false
+        },
+        {
+          "name": "install",
+          "label": "Install plan",
+          "type": "string",
+          "required": false,
+          "default": "cluster-api,nodes,ceph,csi,infrastructure,openstack",
+          "placeholder": "cluster-api,nodes,ceph,csi,infrastructure,openstack",
+          "help": "Comma-separated stages, or 'all'.",
+          "choices": null,
+          "advanced": false
+        },
+        {
+          "name": "managed_user",
+          "label": "Managed user",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "placeholder": "builder",
+          "help": "Linux user created on workload nodes (defaults to mgmt_cluster.managed_user).",
+          "choices": null,
+          "advanced": false
+        },
+        {
+          "name": "managed_user_password",
+          "label": "Managed user password",
+          "type": "secret",
+          "required": false,
+          "default": null,
+          "placeholder": "",
+          "help": "Password for the managed user (defaults to value in secrets.yaml).",
+          "choices": null,
+          "advanced": false
+        },
+        {
+          "name": "ssh_key",
+          "label": "SSH private key path",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "placeholder": "~/.ssh/openstack-key",
+          "help": "Path to private key on the worker filesystem.",
+          "choices": null,
+          "advanced": false
+        },
+        {
+          "name": "local_registry",
+          "label": "Use local Harbor registry",
+          "type": "bool",
+          "required": false,
+          "default": true,
+          "placeholder": "",
+          "help": "Pull images from the in-cluster Harbor registry (10.10.0.9:30003).",
+          "choices": null,
+          "advanced": false
+        },
+        {
+          "name": "mgmt_kubeconfig",
+          "label": "Management kubeconfig",
+          "type": "string",
+          "required": false,
+          "default": "~/.kube/daalu-mgmt-config",
+          "placeholder": "",
+          "help": "Kubeconfig for the management cluster.",
+          "choices": null,
+          "advanced": false
+        },
+        {
+          "name": "infra",
+          "label": "Infrastructure components",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "placeholder": "metallb,argocd,...",
+          "help": "Restrict which infra components run (default: all).",
+          "choices": null,
+          "advanced": true
+        },
+        {
+          "name": "install_local_registry",
+          "label": "Install Harbor on mgmt cluster first",
+          "type": "bool",
+          "required": false,
+          "default": false,
+          "placeholder": "",
+          "help": "",
+          "choices": null,
+          "advanced": true
+        },
+        {
+          "name": "registry_url",
+          "label": "Override registry URL",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "placeholder": "10.10.0.9:30003",
+          "help": "",
+          "choices": null,
+          "advanced": true
+        },
+        {
+          "name": "cluster_kubeconfig",
+          "label": "Workload kubeconfig",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "placeholder": "/tmp/kubeconfig-<cluster>.yaml",
+          "help": "",
+          "choices": null,
+          "advanced": true
+        },
+        {
+          "name": "context",
+          "label": "Workload kube context",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "placeholder": "",
+          "help": "",
+          "choices": null,
+          "advanced": true
+        },
+        {
+          "name": "mgmt_context",
+          "label": "Management kube context",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "placeholder": "",
+          "help": "",
+          "choices": null,
+          "advanced": true
+        },
+        {
+          "name": "cluster_name",
+          "label": "Cluster name",
+          "type": "string",
+          "required": false,
+          "default": "openstack-infra",
+          "placeholder": "",
+          "help": "",
+          "choices": null,
+          "advanced": true
+        },
+        {
+          "name": "cluster_namespace",
+          "label": "Cluster namespace",
+          "type": "string",
+          "required": false,
+          "default": "default",
+          "placeholder": "",
+          "help": "",
+          "choices": null,
+          "advanced": true
+        },
+        {
+          "name": "node_tags",
+          "label": "Node bootstrap tags",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "placeholder": "apparmor,netplan,ssh,inotify,istio",
+          "help": "Restrict which node-bootstrap roles run.",
+          "choices": null,
+          "advanced": true
+        },
+        {
+          "name": "ssh_username",
+          "label": "SSH username (initial)",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "placeholder": "ubuntu",
+          "help": "",
+          "choices": null,
+          "advanced": true
+        },
+        {
+          "name": "ssh_password",
+          "label": "SSH password",
+          "type": "secret",
+          "required": false,
+          "default": null,
+          "placeholder": "",
+          "help": "",
+          "choices": null,
+          "advanced": true
+        },
+        {
+          "name": "domain_suffix",
+          "label": "Domain suffix",
+          "type": "string",
+          "required": false,
+          "default": "net.daalu.io",
+          "placeholder": "",
+          "help": "",
+          "choices": null,
+          "advanced": true
+        },
+        {
+          "name": "ceph_version",
+          "label": "Ceph version",
+          "type": "string",
+          "required": false,
+          "default": "20.2.0",
+          "placeholder": "",
+          "help": "",
+          "choices": null,
+          "advanced": true
+        },
+        {
+          "name": "ceph_image",
+          "label": "Ceph image override",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "placeholder": "",
+          "help": "",
+          "choices": null,
+          "advanced": true
+        },
+        {
+          "name": "phase",
+          "label": "Phase",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "placeholder": "",
+          "help": "Run only one phase across all components.",
+          "choices": [
+            "",
+            "pre_install",
+            "helm",
+            "post_install"
+          ],
+          "advanced": true
+        },
+        {
+          "name": "dry_run",
+          "label": "Dry run",
+          "type": "bool",
+          "required": false,
+          "default": false,
+          "placeholder": "",
+          "help": "",
+          "choices": null,
+          "advanced": true
+        },
+        {
+          "name": "debug",
+          "label": "Verbose logging",
+          "type": "bool",
+          "required": false,
+          "default": false,
+          "placeholder": "",
+          "help": "",
+          "choices": null,
+          "advanced": true
+        }
+      ],
+      "workflow_id_template": "{workflow_type}-{timestamp}"
+    },
+    {
+      "workflow_type": "CleanDaaluCloud",
+      "task_queue": "daalu.deployments",
+      "title": "Tear down Daalu Cloud",
+      "description": "Delete the workload cluster and reset the management cluster. Equivalent to `daalu clean`. Destructive \u2014 confirm before running.",
+      "fields": [
+        {
+          "name": "config_path",
+          "label": "Cluster config",
+          "type": "string",
+          "required": true,
+          "default": "cluster-defs/cluster.yaml",
+          "placeholder": "",
+          "help": "",
+          "choices": null,
+          "advanced": false
+        },
+        {
+          "name": "mgmt_kubeconfig",
+          "label": "Management kubeconfig",
+          "type": "string",
+          "required": false,
+          "default": "~/.kube/daalu-mgmt-config",
+          "placeholder": "",
+          "help": "",
+          "choices": null,
+          "advanced": false
+        },
+        {
+          "name": "ssh_key",
+          "label": "SSH private key path",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "placeholder": "~/.ssh/openstack-key",
+          "help": "",
+          "choices": null,
+          "advanced": false
+        },
+        {
+          "name": "skip_workload_cluster",
+          "label": "Skip workload cluster delete",
+          "type": "bool",
+          "required": false,
+          "default": false,
+          "placeholder": "",
+          "help": "Use when the workload cluster is already gone.",
+          "choices": null,
+          "advanced": false
+        },
+        {
+          "name": "no_wait",
+          "label": "Don't wait for deprovisioning",
+          "type": "bool",
+          "required": false,
+          "default": false,
+          "placeholder": "",
+          "help": "",
+          "choices": null,
+          "advanced": false
+        },
+        {
+          "name": "wipe_mgmt",
+          "label": "Wipe management cluster",
+          "type": "bool",
+          "required": false,
+          "default": false,
+          "placeholder": "",
+          "help": "Also kubeadm-reset the management node.",
+          "choices": null,
+          "advanced": false
+        },
+        {
+          "name": "install",
+          "label": "Install plan filter",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "placeholder": "",
+          "help": "",
+          "choices": null,
+          "advanced": true
+        },
+        {
+          "name": "infra",
+          "label": "Infra filter",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "placeholder": "",
+          "help": "",
+          "choices": null,
+          "advanced": true
+        },
+        {
+          "name": "kubeconfig",
+          "label": "Workload kubeconfig",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "placeholder": "",
+          "help": "",
+          "choices": null,
+          "advanced": true
+        },
+        {
+          "name": "ssh_password",
+          "label": "SSH password",
+          "type": "secret",
+          "required": false,
+          "default": null,
+          "placeholder": "",
+          "help": "",
+          "choices": null,
+          "advanced": true
+        },
+        {
+          "name": "debug",
+          "label": "Verbose logging",
+          "type": "bool",
+          "required": false,
+          "default": false,
+          "placeholder": "",
+          "help": "",
+          "choices": null,
+          "advanced": true
+        }
+      ],
+      "workflow_id_template": "{workflow_type}-{timestamp}"
+    },
+    {
+      "workflow_type": "MirrorImages",
+      "task_queue": "daalu.deployments",
+      "title": "Mirror images to Harbor",
+      "description": "Pull all required images from public registries and push to local Harbor.",
+      "fields": [
+        {
+          "name": "harbor_url",
+          "label": "Harbor URL",
+          "type": "string",
+          "required": true,
+          "default": "10.10.0.9:30003",
+          "placeholder": "",
+          "help": "",
+          "choices": null,
+          "advanced": false
+        },
+        {
+          "name": "config_path",
+          "label": "Cluster config",
+          "type": "string",
+          "required": false,
+          "default": "cluster-defs/cluster.yaml",
+          "placeholder": "",
+          "help": "",
+          "choices": null,
+          "advanced": false
+        }
+      ],
+      "workflow_id_template": "{workflow_type}-{timestamp}"
+    }
+  ]
+}

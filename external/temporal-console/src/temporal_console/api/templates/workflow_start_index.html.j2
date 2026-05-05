@@ -1,0 +1,55 @@
+{% extends "base.html.j2" %}
+{% block title %}Start workflow{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl">
+  <div class="mb-8">
+    <div class="eyebrow mb-2">Start</div>
+    <h1 class="h-display">Start a workflow</h1>
+    <p class="muted text-sm mt-3">
+      Pick the workflow you want to run. The form on the next page mirrors the equivalent CLI command.
+    </p>
+  </div>
+
+  {% if workflows %}
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10">
+      {% for w in workflows %}
+        <a href="/workflows/start/{{ w.workflow_type }}" class="card card-hover p-6 block">
+          <div class="flex items-start gap-3">
+            <div class="brand-mark shrink-0" style="width:36px;height:36px;border-radius:10px;font-size:13px">
+              {{ w.title[0] | upper }}
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="h-section mb-1">{{ w.title }}</div>
+              <div class="mono subtle mb-2 truncate">{{ w.workflow_type }} · {{ w.task_queue }}</div>
+              <p class="muted text-sm">{{ w.description }}</p>
+            </div>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 mt-1.5 subtle">
+              <path d="M9 18l6-6-6-6"/>
+            </svg>
+          </div>
+        </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="card p-6 text-sm muted mb-10">
+      The workflow registry is empty. Bake <span class="mono">registry.json</span> into the
+      console image, or set <span class="mono">REGISTRY_FILE</span> to a path with the
+      schemas. Generate one with: <span class="mono">daalu-registry &gt; registry.json</span>.
+    </div>
+  {% endif %}
+
+  <div class="card p-5 flex items-center justify-between gap-4">
+    <div>
+      <div class="h-section">Need a workflow not listed here?</div>
+      <p class="muted text-sm mt-1">
+        Use the raw-JSON form to start any registered workflow type with an arbitrary payload.
+      </p>
+    </div>
+    <a href="/workflows/new" class="btn btn-ghost shrink-0">
+      Raw JSON form
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+    </a>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,90 @@
+{% extends "base.html.j2" %}
+{% block title %}Schedules{% endblock %}
+
+{% block content %}
+<div class="flex items-end justify-between mb-8">
+  <div>
+    <div class="eyebrow mb-2">{{ namespace_display(namespace) }}</div>
+    <h1 class="h-display">Schedules</h1>
+    <p class="muted text-sm mt-2">
+      {{ rows|length }} schedule{% if rows|length != 1 %}s{% endif %} registered
+    </p>
+  </div>
+</div>
+
+<div class="card p-5 mb-6">
+  <form method="get" action="/schedules" class="flex items-end gap-3 text-sm">
+    <label class="flex-1 max-w-xs">
+      <div class="eyebrow mb-1.5">Namespace</div>
+      <select name="namespace" class="w-full">
+        {% for ns in namespaces %}
+          <option value="{{ ns }}" {% if ns == namespace %}selected{% endif %}>{{ namespace_display(ns) }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="btn btn-ghost">Apply</button>
+  </form>
+</div>
+
+{% if rows %}
+<div class="card overflow-hidden">
+  <table>
+    <thead>
+      <tr>
+        <th>Schedule</th>
+        <th>Cron</th>
+        <th>State</th>
+        <th class="text-right">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td class="mono font-medium">{{ r.id }}</td>
+        <td class="mono text-xs subtle">{{ r.cron_exprs | join(', ') if r.cron_exprs else '—' }}</td>
+        <td>
+          {% if r.paused %}
+            <span class="badge badge-warning">Paused</span>
+          {% else %}
+            <span class="badge badge-success">Active</span>
+          {% endif %}
+        </td>
+        <td class="text-right">
+          <div class="flex gap-1 justify-end">
+            {% if r.paused %}
+              <form method="post" action="/schedules/{{ r.id }}/unpause" class="inline">
+                <input type="hidden" name="namespace" value="{{ r.namespace }}">
+                <button class="btn btn-ghost btn-sm">Resume</button>
+              </form>
+            {% else %}
+              <form method="post" action="/schedules/{{ r.id }}/pause" class="inline">
+                <input type="hidden" name="namespace" value="{{ r.namespace }}">
+                <button class="btn btn-ghost btn-sm">Pause</button>
+              </form>
+            {% endif %}
+            <form method="post" action="/schedules/{{ r.id }}/trigger" class="inline">
+              <input type="hidden" name="namespace" value="{{ r.namespace }}">
+              <button class="btn btn-primary btn-sm">Run now</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card p-16 text-center">
+  <div class="inline-flex w-14 h-14 items-center justify-center rounded-full mb-4"
+       style="background: color-mix(in srgb, var(--accent) 10%, transparent)">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="accent-fg">
+      <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>
+    </svg>
+  </div>
+  <div class="h-section mb-1">No schedules in this namespace</div>
+  <p class="muted text-sm">
+    Schedules are created by your app code. Phase 8's daily usage aggregation will be the first one.
+  </p>
+</div>
+{% endif %}
+{% endblock %}

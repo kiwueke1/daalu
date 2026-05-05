@@ -131,29 +131,30 @@ class TemporalConfig(BaseModel):
     """
     enabled: bool = True
 
-    # Temporal server
+    # Temporal server — pulled from the official helm repo into assets/temporal/
+    # charts/ by the operator (same pattern as metallb/ingress/keycloak).
+    # See README "Helm Charts" section for the pull command.
     namespace: str = "temporal"
-    chart_version: str = "0.62.0"           # github.com/temporalio/helm-charts
+    server_chart_path: str = "assets/temporal/charts/temporal"
     server_image_tag: str = "1.27.0"
 
     # Persistence — Temporal needs a SQL backend. The chart defaults to a
-    # bundled Cassandra; we set sql.enabled=false in the installer and use
-    # the bundled Postgres which is lighter and easier to debug.
+    # bundled Cassandra; we set cassandra.enabled=false in the installer and
+    # use the bundled Postgres which is lighter and easier to debug.
     storage: str = "postgresql"             # "postgresql" | "cassandra" | "mysql"
 
-    # Daalu worker
+    # Daalu worker — first-party chart shipped in this repo.
     worker_namespace: str = "daalu"
     worker_chart_path: str = "deployments/daalu-worker/chart"
     worker_image: str = "10.10.0.9:30003/daalu/daalu-worker:latest"
     worker_replicas: int = 1
     worker_threads: int = 4
 
-    # temporal-console UI
+    # temporal-console UI — source + chart ship in this repo at
+    # external/temporal-console/ so a single `git clone daalu` gets everything.
     console_enabled: bool = True
     console_namespace: str = "daalu"
-    # Path to the temporal-console helm chart, relative to workspace_root or
-    # absolute. The chart lives in a sibling repo by default.
-    console_chart_path: str = "../temporal-console/chart"
+    console_chart_path: str = "external/temporal-console/chart"
     console_image: str = "10.10.0.9:30003/daalu/temporal-console:latest"
     console_brand_name: str = "Daalu Workflows"
     console_brand_subtitle: str = "operator console"
