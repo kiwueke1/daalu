@@ -19,7 +19,7 @@ class ImageExtractor:
     images.tags.* entries and returns a sorted, deduplicated list of image references.
 
     Also reads assets/*/extra_images.yaml files for components whose charts don't use
-    the images.tags.* convention (e.g. ArgoCD, GPU Operator, vLLM).
+    the images.tags.* convention (e.g. ArgoCD).
 
     extra_images.yaml supports two formats:
 
@@ -28,10 +28,9 @@ class ImageExtractor:
         - quay.io/baz:tag
 
       Project-keyed dict (goes to the named Harbor project):
-        project: ai
+        project: myproject
         images:
-          - nvcr.io/nvidia/gpu-operator:v25.10.1
-          - vllm/vllm-openai:v0.7.3
+          - example.io/some/image:tag
 
     Placeholder strings like CHANGE_ME_* are excluded.
     Custom/local registry images (IP:port style) are included — the caller decides

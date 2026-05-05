@@ -332,7 +332,7 @@ class KubectlRunner:
 
 
     def run(self, args: list[str]) -> tuple[int, str, str]:
-        cmd = ["kubectl"] + args
+        cmd = ["kubectl", "--kubeconfig", self.kubeconfig] + args
 
         proc = subprocess.run(
             cmd,

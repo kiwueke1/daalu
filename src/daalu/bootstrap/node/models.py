@@ -36,6 +36,9 @@ class NodeBootstrapPlan:
     run_inotify_limits: bool = True
     run_istio_modules: bool = True
     run_containerd_registry: bool = True
+    # Install linux-headers and blacklist nouveau so the NVIDIA GPU Operator's
+    # unsigned kernel module can build and load. No-op on nodes without nouveau.
+    run_nvidia_prereqs: bool = True
     # Move the provisioning Linux bridge uplink from the raw NIC to a VLAN
     # subinterface, freeing the raw NIC for OVS br-ex.  Disabled by default;
     # enable after Metal3 provisioning is complete and before OVS deployment.

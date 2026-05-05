@@ -301,6 +301,31 @@ class KubeCoreDNSPatchComponent(InfraComponent):
     # Step 4 — Wait for the reload plugin to pick up the new Corefile
     # -----------------------------------------------------------------
 
+    def teardown_extra(self, kubectl) -> None:
+        """Remove the daalu-injected hosts block from the CoreDNS Corefile."""
+        rc, out, err = kubectl._run(
+            "get cm coredns -n kube-system -o jsonpath='{.data.Corefile}'"
+        )
+        if rc != 0:
+            log.warning("[kube-coredns-patch] Could not read Corefile during teardown: %s", err)
+            return
+
+        existing = out.strip().strip("'\"")
+        cleaned = _strip_hosts_block(existing)
+
+        if cleaned == existing:
+            log.debug("[kube-coredns-patch] No hosts block to remove")
+            return
+
+        kubectl.patch(
+            api_version="v1",
+            kind="ConfigMap",
+            name="coredns",
+            namespace="kube-system",
+            patch={"data": {"Corefile": cleaned}},
+        )
+        log.info("[kube-coredns-patch] Hosts block removed from CoreDNS Corefile")
+
     def _restart_coredns(self, kubectl) -> None:
         """
         CoreDNS's `reload` plugin automatically detects ConfigMap changes and

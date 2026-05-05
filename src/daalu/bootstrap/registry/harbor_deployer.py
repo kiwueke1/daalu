@@ -774,6 +774,11 @@ class HarborDeployer:
 
         Call this after deploying Harbor, passing the infra cluster's kubeconfig.
         """
+        import os
+        if not os.path.isfile(cluster_kubeconfig):
+            raise FileNotFoundError(
+                f"[registry] Kubeconfig not found: {cluster_kubeconfig}"
+            )
         registry = self._access_url or f"{self._get_mgmt_node_ip()}:30003"
         log.info(
             "[registry] Configuring infra cluster nodes to trust Harbor at %s...",
@@ -855,27 +860,26 @@ class HarborDeployer:
 
         # Delete any leftover from a previous run
         subprocess.run(
-            ["kubectl", "--kubeconfig", cluster_kubeconfig,
+            ["kubectl", "--kubeconfig", cluster_kubeconfig, "--insecure-skip-tls-verify",
              "delete", "daemonset", ds_name, "-n", "kube-system"],
             capture_output=True, check=False,
         )
 
         result = subprocess.run(
-            ["kubectl", "--kubeconfig", cluster_kubeconfig, "apply", "-f", "-"],
+            ["kubectl", "--kubeconfig", cluster_kubeconfig, "--insecure-skip-tls-verify",
+             "apply", "--validate=false", "-f", "-"],
             input=yaml.dump(daemonset), text=True, check=False, capture_output=True,
         )
         if result.returncode != 0:
-            log.warning(
-                "[registry] Failed to deploy containerd-config DaemonSet: %s",
-                result.stderr.strip(),
+            raise RuntimeError(
+                f"[registry] Failed to deploy containerd-config DaemonSet: {result.stderr.strip()}"
             )
-            return
 
         log.info("[registry] Waiting for all nodes to be configured (timeout 3m)...")
         deadline = time.time() + 180
         while time.time() < deadline:
             r = subprocess.run(
-                ["kubectl", "--kubeconfig", cluster_kubeconfig,
+                ["kubectl", "--kubeconfig", cluster_kubeconfig, "--insecure-skip-tls-verify",
                  "get", "daemonset", ds_name, "-n", "kube-system",
                  "-o", "jsonpath={.status.numberReady}/{.status.desiredNumberScheduled}"],
                 capture_output=True, text=True, check=False,
@@ -895,7 +899,7 @@ class HarborDeployer:
 
         # Clean up
         subprocess.run(
-            ["kubectl", "--kubeconfig", cluster_kubeconfig,
+            ["kubectl", "--kubeconfig", cluster_kubeconfig, "--insecure-skip-tls-verify",
              "delete", "daemonset", ds_name, "-n", "kube-system"],
             capture_output=True, check=False,
         )

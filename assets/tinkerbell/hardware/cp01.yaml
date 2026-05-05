@@ -38,6 +38,10 @@ spec:
     name: cp01
   disks:
     - device: /dev/sda
+  metadata:
+    instance:
+      id: "ac:1f:6b:01:b7:21"
+      hostname: cp01
   interfaces:
     - dhcp:
         arch: x86_64

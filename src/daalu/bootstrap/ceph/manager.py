@@ -96,15 +96,16 @@ class CephManager:
                     # Try ECDSA as last fallback
                     pkey = paramiko.ECDSAKey.from_private_key_file(host.pkey_path)
 
+        using_password = not pkey
         client.connect(
             hostname=host.address,
             port=host.port,
             username=host.username,
-            password=host.password if not pkey else None,
+            password=host.password if using_password else None,
             pkey=pkey,
             timeout=self.connect_timeout,
-            allow_agent=True,
-            look_for_keys=True,
+            allow_agent=not using_password,
+            look_for_keys=not using_password,
         )
         return client
 
@@ -315,6 +316,7 @@ class CephManager:
             log.debug("[ceph] step 5/6: distributing SSH keys to %d host(s)", len(others))
             self._distribute_ssh_keys(primary, others)
             self._configure_global_image(cli, image)
+            self._configure_public_network(cli, cfg, hosts)
             log.debug("[ceph] adding %d additional host(s) to cluster", len(others))
             self._add_hosts(cli, primary, others, cfg.version)
 
@@ -340,7 +342,7 @@ class CephManager:
             self._wait_for_osds(cli, hosts)
 
             # 5. Post-OSD cleanup
-            self._post_osd_cleanup(cli)
+            self._post_osd_cleanup(cli, cfg)
 
             # 6. Health check
             self._check_health(cli)
@@ -500,6 +502,50 @@ class CephManager:
     def _configure_global_image(self, cli, image: str):
         """Set the Ceph global container image."""
         self._run(cli, f"cephadm shell -- ceph config set global container_image {image}", sudo=True)
+
+    # ----------------------------------------------------------------------
+    def _configure_public_network(self, cli, cfg: "CephConfig", hosts: list) -> None:
+        """Set public_network in the Ceph config so OSD daemons on all hosts can
+        select a local interface to bind to.
+
+        Without this, cephadm derives public_network from the mon-ip subnet.
+        When external OSD-only hosts (e.g. baremetal-server-02) are on a
+        different subnet from the mon-ip, their OSD daemons crash with
+        'Failed to pick public address'.
+
+        If cfg.public_network is set, use it directly.
+        Otherwise, auto-compute the /24 subnets of all host addresses.
+        """
+        import ipaddress as _ip
+
+        if cfg.public_network:
+            network = cfg.public_network
+            log.debug("[ceph] Setting public_network from config: %s", network)
+        else:
+            subnets: list[str] = []
+            for h in hosts:
+                try:
+                    iface = _ip.ip_interface(f"{h.address}/24")
+                    subnet = str(iface.network)
+                    if subnet not in subnets:
+                        subnets.append(subnet)
+                except ValueError:
+                    pass
+            if not subnets:
+                log.warning("[ceph] Could not determine public_network from host addresses — skipping")
+                return
+            network = ",".join(subnets)
+            log.debug("[ceph] Auto-computed public_network from host addresses: %s", network)
+
+        rc, _, err = self._run(
+            cli,
+            f"cephadm shell -- ceph config set osd public_network {network}",
+            sudo=True, timeout=30,
+        )
+        if rc != 0:
+            log.warning("[ceph] Failed to set public_network %s: %s", network, err)
+        else:
+            log.info("[ceph] public_network set to %s", network)
 
     # ----------------------------------------------------------------------
     def _add_hosts(self, primary_cli, primary: CephHost, others: List[CephHost], version: str = "20.2.0"):
@@ -665,16 +711,28 @@ class CephManager:
     # ----------------------------------------------------------------------
 
     def _discover_available_devices(self, cli, hostname: str) -> List[str]:
-        """Query ceph orch device ls for available (unused) block devices on a host.
+        """Query ceph orch device ls for block devices on a host that can be used for OSDs.
 
-        Returns a list of device paths (e.g. ["/dev/sdb", "/dev/sdc"]) that
-        Ceph considers available for OSD provisioning.
+        Returns device paths that are either:
+        - ``available=True`` — ready to add directly, or
+        - ``available=False`` with LVM/filesystem signatures but no active Ceph OSD — will be
+          zapped by ``_apply_osds`` before adding (classified as ``needs_zap``).
+
+        Devices that are actively used by a running Ceph OSD (bluestore/locking) are excluded.
+
+        NOTE: ``ceph orch device ls`` uses the short hostname (e.g. ``cp01``) even when the
+        node was registered with an FQDN.  We normalise both sides to the short name so that
+        inventory FQDNs like ``cp01.net.daalu.io`` correctly match the Ceph-side ``cp01``.
         """
         import json as _json
 
+        short_hostname = hostname.split(".")[0].lower()
+
+        # Omit --hostname flag: passing the FQDN returns empty results when Ceph
+        # registered the host under its short name.  Fetch all hosts and filter below.
         rc, out, err = self._run(
             cli,
-            f"cephadm shell -- ceph orch device ls --hostname {hostname} --format json",
+            "cephadm shell -- ceph orch device ls --format json",
             sudo=True,
             timeout=60,
         )
@@ -690,16 +748,17 @@ class CephManager:
 
         # ceph orch device ls --format json returns a list of per-host objects.
         # The hostname field may be keyed as "hostname", "name", or "addr"
-        # depending on the Ceph version.
+        # depending on the Ceph version.  Always compare short names.
         devices = []
         for entry in data:
             host_key = entry.get("hostname") or entry.get("name") or entry.get("addr") or ""
-            if host_key != hostname:
+            if host_key.split(".")[0].lower() != short_hostname:
                 continue
             for dev in entry.get("devices", []):
                 path = dev.get("path", "")
                 available = dev.get("available", False)
                 reasons = dev.get("rejected_reasons", [])
+                reasons_str = " ".join(str(r) for r in reasons).lower()
                 dev_type = dev.get("human_readable_type", "unknown")
                 size = dev.get("sys_api", {}).get("human_readable_size", "?")
                 if available:
@@ -709,15 +768,26 @@ class CephManager:
                     )
                     devices.append(path)
                 else:
-                    log.debug(
-                        "[ceph] [%s] device %s (%s, %s) — not available: %s",
-                        hostname, path, dev_type, size, ", ".join(reasons) or "no reason given",
-                    )
+                    # Include devices with old LVM/filesystem data that can be zapped,
+                    # but exclude devices actively in use by a running Ceph OSD daemon.
+                    is_active_ceph = any(kw in reasons_str for kw in ("bluestore", "locking"))
+                    has_wipeable_data = any(kw in reasons_str for kw in ("lvm", "filesystem"))
+                    if has_wipeable_data and not is_active_ceph:
+                        log.debug(
+                            "[ceph] [%s] device %s (%s, %s) — needs_zap (will be zapped): %s",
+                            hostname, path, dev_type, size, reasons_str,
+                        )
+                        devices.append(path)
+                    else:
+                        log.debug(
+                            "[ceph] [%s] device %s (%s, %s) — skipping: %s",
+                            hostname, path, dev_type, size, reasons_str or "no reason given",
+                        )
 
         if not devices:
-            log.debug("[ceph] [%s] no available devices discovered", hostname)
+            log.debug("[ceph] [%s] no usable devices discovered", hostname)
         else:
-            log.debug("[ceph] [%s] discovered %d available device(s): %s", hostname, len(devices), devices)
+            log.debug("[ceph] [%s] discovered %d usable device(s): %s", hostname, len(devices), devices)
 
         return devices
 
@@ -773,7 +843,7 @@ class CephManager:
         rc, out, err = self._run(
             cli,
             f"cephadm shell -- ceph orch device zap {hostname} {device} --force",
-            sudo=True, timeout=120,
+            sudo=True, timeout=300,
         )
         if rc != 0:
             log.warning("[ceph] Device zap failed for %s:%s (rc=%d): %s", hostname, device, rc, err or out)
@@ -797,6 +867,7 @@ class CephManager:
             cli,
             f"cephadm shell -- ceph orch daemon add osd {hostname}:{device}",
             sudo=True,
+            timeout=900,  # OSD creation (LVM setup + daemon start) can take >5 min on large HDDs
         )
         if rc == 0:
             return True
@@ -851,20 +922,26 @@ class CephManager:
                 **self.run_ctx,
             ))
 
-            # Count OSD daemons on this host before we start so we can detect
-            # whether a new daemon appeared after each daemon add.
-            def _running_osd_count(hostname: str) -> int:
+            # Count OSDs that are truly "up" in the cluster (reported by the mon,
+            # not just by cephadm).  ceph orch ps reflects cephadm's view of the
+            # container and can briefly show "running" while the activate container
+            # is still executing, before the actual OSD process binds and connects
+            # to the mons.  Counting "up" OSDs from `ceph osd dump` avoids this
+            # false positive and ensures the OSD has actually joined the cluster.
+            def _running_osd_count(host_ip: str) -> int:
                 rc2, out2, _ = self._run(
                     cli,
-                    f"cephadm shell -- ceph orch ps {hostname} --daemon-type osd --format json",
-                    sudo=True, timeout=30,
+                    "cephadm shell -- ceph osd dump --format json",
+                    sudo=True, timeout=60,
                 )
                 if rc2 != 0:
                     return 0
                 try:
+                    data = _json.loads(out2.strip())
                     return sum(
-                        1 for d in _json.loads(out2.strip())
-                        if d.get("status_desc", "").lower() == "running"
+                        1 for osd in data.get("osds", [])
+                        if osd.get("up") == 1
+                        and host_ip in osd.get("public_addr", "")
                     )
                 except _json.JSONDecodeError:
                     return 0
@@ -904,7 +981,7 @@ class CephManager:
                         continue
 
                 # ── Step 2: submit daemon add ───────────────────────────────
-                before_count = _running_osd_count(host.hostname)
+                before_count = _running_osd_count(host.address)
                 accepted = self._daemon_add_osd(cli, host.hostname, device)
                 if not accepted:
                     # Not accepted → try a zap then retry once
@@ -924,7 +1001,7 @@ class CephManager:
                 _osd_up = False
                 for _ in range(9):
                     _time.sleep(10)
-                    if _running_osd_count(host.hostname) > before_count:
+                    if _running_osd_count(host.address) > before_count:
                         _osd_up = True
                         break
 
@@ -941,11 +1018,11 @@ class CephManager:
                         **self.run_ctx,
                     ))
                     if self._zap_device(cli, host.hostname, device):
-                        before_count2 = _running_osd_count(host.hostname)
+                        before_count2 = _running_osd_count(host.address)
                         if self._daemon_add_osd(cli, host.hostname, device):
                             for _ in range(9):
                                 _time.sleep(10)
-                                if _running_osd_count(host.hostname) > before_count2:
+                                if _running_osd_count(host.address) > before_count2:
                                     _osd_up = True
                                     break
 
@@ -970,7 +1047,7 @@ class CephManager:
 
 
     # ----------------------------------------------------------------------
-    def _post_osd_cleanup(self, cli) -> None:
+    def _post_osd_cleanup(self, cli, cfg: "CephConfig") -> None:
         """Fix common post-OSD health warnings.
 
         1. Remove OSD service specs with 0 managed OSDs (leftover ``osd.default``
@@ -1045,6 +1122,24 @@ class CephManager:
                     f"cephadm shell -- ceph osd pool application enable {pool_name} {app}",
                     sudo=True, timeout=30,
                 )
+
+        # --- 3. Apply pool replication size from config ---
+        size = cfg.pool_replication_size
+        min_size = cfg.pool_min_size
+        log.debug("[ceph] Setting osd_pool_default_size=%d min_size=%d", size, min_size)
+        self._run(cli, f"cephadm shell -- ceph config set global osd_pool_default_size {size}", sudo=True, timeout=30)
+        self._run(cli, f"cephadm shell -- ceph config set global osd_pool_default_min_size {min_size}", sudo=True, timeout=30)
+
+        rc, out, _ = self._run(cli, "cephadm shell -- ceph osd pool ls", sudo=True, timeout=30)
+        if rc == 0:
+            for pool_name in out.strip().splitlines():
+                pool_name = pool_name.strip()
+                if not pool_name:
+                    continue
+                log.debug("[ceph] Setting pool '%s' size=%d min_size=%d", pool_name, size, min_size)
+                self._run(cli, f"cephadm shell -- ceph osd pool set {pool_name} size {size}", sudo=True, timeout=30)
+                self._run(cli, f"cephadm shell -- ceph osd pool set {pool_name} min_size {min_size}", sudo=True, timeout=30)
+        self.bus.emit(CephProgress(stage="pool_config", message=f"Pool replication size set to {size}/{min_size}", **self.run_ctx))
 
     # ----------------------------------------------------------------------
     def _check_health(self, cli):

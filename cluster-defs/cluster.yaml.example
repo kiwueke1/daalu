@@ -3,7 +3,7 @@ context: kubernetes-admin@kubernetes   # kubectl context or leave null and pass 
 
 cluster_api:
   cluster_name: auto-openstack-infra
-  namespace: baremetal-operator-system
+  namespace: tinkerbell
 
   # Kubernetes pod network (unchanged – internal to cluster)
   pod_cidr: 10.201.0.0/16
@@ -23,8 +23,8 @@ cluster_api:
   gateway: 10.10.0.100
   prefix: 16
 
-  # Interface used for VIP + kube-apiserver traffic
-  vip_interface: ens19
+  # Interface used for VIP + kube-apiserver traffic on the workload nodes
+  vip_interface: eno2
 
   # SANs for kube-apiserver cert
   cert_sans:
@@ -59,7 +59,7 @@ cluster_api:
   proxmox_url: ""                 # e.g. https://<proxmox-host>:8006
   proxmox_token: ""               # e.g. root@pam!<token-name>
   proxmox_secret: ""              # Proxmox API token secret
-  provider: metal3
+  provider: tinkerbell                # 'tinkerbell' (recommended) or 'metal3'
   image_os: ubuntu
   image_flavor: ubuntu
   image_version: "24.04"
@@ -74,7 +74,8 @@ cluster_api:
   mgmt_host: ""                  # Management host IP
   mgmt_user: ""                   # Management host SSH username
   ironic_http_base: http://10.10.0.9
-  image_url: http://10.10.0.9/UBUNTU_24.04_NODE_IMAGE_K8S_v1.33.0-raw.img
+  image_url: http://10.10.0.9/UBUNTU_24.04_NODE_IMAGE_K8S_v1.35.0.raw.gz
+  cilium_version: "1.16.0"            # CNI installed on the workload cluster after KCP init
 
 
 repos: []                    # local charts don't need repos
@@ -150,6 +151,23 @@ ceph:
   # Pool replication settings — set to 1 for dev (single OSD), 3 for production
   pool_replication_size: 1
   pool_min_size: 1
+  # public_network must contain every Ceph host's mon-IP. When all storage and
+  # compute nodes are on the same provisioning subnet, this matches that subnet.
+  public_network: "10.10.0.0/24"
+
+  # Dedicated storage hosts NOT part of the Kubernetes cluster.
+  # Credentials (address, password, pkey_path) must be set in secrets.yaml —
+  # the entire list there replaces this template at load time.
+  additional_ceph_hosts: []
+    # - hostname: storage-01
+    #   address: ""               # Set in secrets.yaml
+    #   username: ubuntu
+    #   port: 22
+    #   password: ""              # Set in secrets.yaml
+    #   pkey_path: ""             # Set in secrets.yaml
+    #   osd_devices:
+    #     - /dev/sdb
+    #     - /dev/sdc
 
 openstack:
   network_backend: ovn
@@ -161,3 +179,65 @@ monitoring:
     endpoint: thanos-minio.monitoring.svc.cluster.local:9000
     access_key: ""                # Set in secrets.yaml (thanos_s3_access_key)
     secret_key: ""                # Set in secrets.yaml (thanos_s3_secret_key)
+
+# ---------------------------------------------------------------------------
+# Management cluster bootstrap
+# ---------------------------------------------------------------------------
+# Used by: daalu mgmt cluster-defs/cluster.yaml
+mgmt_cluster:
+  host: "192.168.0.171"              # IP of the fresh Ubuntu node
+  ssh_username: "ubuntu"
+  kubernetes_version: "1.30"
+  pod_cidr: "172.16.0.0/16"
+  service_cidr: "10.96.0.0/12"
+  cilium_version: "1.16.0"
+  capi_version: "v1.12.0"
+  capm3_version: "v1.12.1"
+  ironic_name: "daalu-ironic"
+  ironic_namespace: "baremetal-operator-system"
+  provisioning_interface: "ens19"    # NIC on the 10.10.x.x provisioning network
+  provisioning_ip: "10.10.0.9"       # Static IP assigned to provisioning_interface
+  provisioning_prefix: "16"          # CIDR prefix for the provisioning network
+  dhcp_range_begin: "10.10.0.200"    # IrSO dnsmasq DHCP pool start
+  dhcp_range_end: "10.10.0.250"      # IrSO dnsmasq DHCP pool end
+  dhcp_gateway: "10.10.0.9"          # Gateway for bare-metal PXE clients (mgmt node ens19 = NAT gateway)
+  dhcp_dns: "8.8.8.8"
+  kubeconfig_output_path: "~/.kube/daalu-mgmt-config"
+  install_harbor: true
+  managed_user: "builder"            # Linux user created on bare-metal nodes
+
+  # Bare-metal hardware inventory consumed by the Tinkerbell stack to
+  # render Hardware/Workflow/BMC manifests under assets/tinkerbell/. Replace
+  # the placeholders below with the real MAC of each node's PXE-boot NIC and
+  # the BMC (Redfish/IPMI) endpoint + credentials. Set `uefi: false` for nodes
+  # that legacy-PXE only.
+  hardware:
+    - name: cp01
+      mac: "<PXE-NIC-MAC>"             # e.g. "ac:1f:6b:01:b7:21"
+      ip: "10.10.0.170"
+      bmc_endpoint: "https://<BMC-IP>" # e.g. "https://192.168.0.70"
+      bmc_username: "<bmc-user>"
+      bmc_password: "<bmc-password>"
+      disk: "/dev/sda"
+    - name: cp02
+      mac: "<PXE-NIC-MAC>"
+      ip: "10.10.0.171"
+      bmc_endpoint: "https://<BMC-IP>"
+      bmc_username: "<bmc-user>"
+      bmc_password: "<bmc-password>"
+      disk: "/dev/sda"
+      uefi: false
+
+# ---------------------------------------------------------------------------
+# Harbor container registry (deployed on the mgmt cluster)
+# ---------------------------------------------------------------------------
+# Secrets (admin_password, disk_device, docker_username, docker_token)
+# are in cloud-config/secrets.yaml under the `registry:` key.
+registry:
+  harbor_hostname: "10.10.0.9"       # provisioning IP — reachable by workload cluster nodes
+  harbor_namespace: "harbor"
+  harbor_storage_size: "100Gi"
+  project: "openstack"
+  mgmt_kubeconfig: "~/.kube/daalu-mgmt-config"
+  storage_mount_path: "/mnt/harbor-storage"
+  storage_class: "local-path"

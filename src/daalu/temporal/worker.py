@@ -2,60 +2,107 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # src/daalu/temporal/worker.py
+"""
+Daalu Temporal worker.
 
-# src/daalu/temporal/worker.py
+A long-running process that connects to the Temporal frontend, registers
+the daalu workflows + activities, and pumps the task queue.
+
+Run inside a pod on the management cluster, with the daalu CLI on PATH and
+``cluster-defs/`` + ``cloud-config/secrets.yaml`` mounted into ``/workspace``.
+
+Activities are blocking (they shell out to ``daalu``), so we use a
+ThreadPoolExecutor sized for the maximum number of concurrent stages we
+expect — currently 4 (one in-flight workflow has at most one stage running,
+but several workflows may run in parallel).
+"""
 from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import logging
+import os
+import signal
 
+from temporalio.client import Client
 from temporalio.worker import Worker
 
-from .client import get_temporal_client
-from .settings import load_temporal_settings
-from .workflows import DaaluDeployWorkflow
-from .activities import (
-    activity_deploy_cluster_api,
-    activity_deploy_nodes,
-    activity_deploy_ceph,
-    activity_deploy_csi,
-    activity_deploy_infrastructure,
-)
+from daalu.temporal.activities import ALL_ACTIVITIES
+from daalu.temporal.settings import load_temporal_settings
+from daalu.temporal.workflows import ALL_WORKFLOWS
+
+log = logging.getLogger("daalu.worker")
 
 
-async def main() -> None:
+async def _run() -> None:
     settings = load_temporal_settings()
-    client = await get_temporal_client()
+    log.info(
+        "[daalu-worker] connecting address=%s namespace=%s task_queue=%s",
+        settings.address, settings.namespace, settings.task_queue,
+    )
 
-    # Thread pool for BLOCKING activities (SSH, Helm, Ceph, Metal3, etc.)
-    with concurrent.futures.ThreadPoolExecutor(
-        max_workers=8  # tune later
-    ) as activity_executor:
+    client = await Client.connect(settings.address, namespace=settings.namespace)
 
-        worker = Worker(
-            client,
-            task_queue=settings.task_queue,
-            workflows=[DaaluDeployWorkflow],
-            activities=[
-                activity_deploy_cluster_api,
-                activity_deploy_nodes,
-                activity_deploy_ceph,
-                activity_deploy_csi,
-                activity_deploy_infrastructure,
-            ],
-            activity_executor=activity_executor,
-        )
+    # ThreadPool for blocking activities (subprocess + SSH).
+    max_workers = int(os.getenv("DAALU_WORKER_THREADS", "4"))
+    activity_executor = concurrent.futures.ThreadPoolExecutor(
+        max_workers=max_workers, thread_name_prefix="daalu-act-",
+    )
 
-        print(
-            "[daalu-worker] starting. "
-            f"address={settings.address} "
-            f"ns={settings.namespace} "
-            f"tq={settings.task_queue}"
-        )
+    worker = Worker(
+        client,
+        task_queue=settings.task_queue,
+        workflows=ALL_WORKFLOWS,
+        activities=ALL_ACTIVITIES,
+        activity_executor=activity_executor,
+    )
 
-        # Blocks forever until SIGINT / SIGTERM
-        await worker.run()
+    log.info(
+        "[daalu-worker] ready task_queue=%s workflows=%s activities=%s threads=%d",
+        settings.task_queue,
+        [w.__name__ for w in ALL_WORKFLOWS],
+        [getattr(a, "__name__", str(a)) for a in ALL_ACTIVITIES],
+        max_workers,
+    )
+
+    # Graceful shutdown on SIGTERM (Kubernetes pod stop) / SIGINT.
+    loop = asyncio.get_running_loop()
+    stop_event = asyncio.Event()
+
+    def _stop(*_args: object) -> None:
+        log.info("[daalu-worker] received stop signal")
+        stop_event.set()
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            loop.add_signal_handler(sig, _stop)
+        except NotImplementedError:
+            # add_signal_handler is unavailable on Windows / inside some
+            # test runners — those don't matter for prod use.
+            pass
+
+    worker_task = asyncio.create_task(worker.run())
+    stopped = asyncio.create_task(stop_event.wait())
+    done, pending = await asyncio.wait(
+        {worker_task, stopped}, return_when=asyncio.FIRST_COMPLETED,
+    )
+
+    if stopped in done:
+        log.info("[daalu-worker] shutting down...")
+        await worker.shutdown()
+    for t in pending:
+        t.cancel()
+    activity_executor.shutdown(wait=True)
+
+
+def main() -> None:
+    """``daalu-worker`` console entry point."""
+    logging.basicConfig(
+        level=os.getenv("LOG_LEVEL", "INFO"),
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
+    asyncio.run(_run())
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

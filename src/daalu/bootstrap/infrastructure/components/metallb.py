@@ -78,3 +78,14 @@ class MetalLBComponent(InfraComponent):
             content=content,
             remote_path="/tmp/metallb-config.yaml",
         )
+
+    def teardown_extra(self, kubectl) -> None:
+        """Delete IPAddressPool and L2Advertisement CRD objects before helm uninstall."""
+        for kind in ("l2advertisements", "ipaddresspools"):
+            rc, out, _ = kubectl._run(
+                f"get {kind}.metallb.io -n {self.namespace} -o name --ignore-not-found"
+            )
+            if rc == 0 and out.strip():
+                for resource in out.strip().splitlines():
+                    log.debug("[metallb] Deleting %s", resource)
+                    kubectl._run(f"delete {resource} -n {self.namespace} --ignore-not-found")

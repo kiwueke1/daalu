@@ -1,0 +1,58 @@
+replicaCount: 1
+
+image:
+  repository: 10.10.0.9:30003/daalu/daalu-worker
+  tag: latest
+  pullPolicy: Always
+
+# Connect details for the Temporal frontend reachable from the mgmt cluster.
+temporal:
+  address: temporal-frontend.temporal.svc.cluster.local:7233
+  namespace: default
+  taskQueue: daalu.deployments
+
+# How many activities can run concurrently in this worker.
+threads: 4
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    cpu: "2"
+    memory: 2Gi
+
+# The worker needs the daalu workspace mounted (cluster-defs/, helm-charts/,
+# helm-values/, assets/, scripts/). The simplest deployment uses a hostPath
+# pointing at the cloned repo on the mgmt node — that's how `daalu mgmt`
+# already lays files out.
+workspace:
+  hostPath: /home/kez/Documents/python_projects/daalu_full_python/daalu_io/daalu
+
+# Mgmt cluster kubeconfig — the worker uses this to talk to the workload
+# cluster (it's also referenced by daalu's --mgmt-kubeconfig flag).
+mgmtKubeconfig:
+  hostPath: /home/kez/.kube/daalu-mgmt-config
+
+# SSH keys + known_hosts for SSH into bare-metal nodes during the deploy.
+sshKeys:
+  hostPath: /home/kez/.ssh
+
+# Extra environment variables (e.g. registry credentials, SSH passphrase).
+extraEnv: []
+# - name: DAALU_BUILDER_PASSWORD
+#   valueFrom:
+#     secretKeyRef:
+#       name: daalu-worker-secrets
+#       key: builder_password
+
+serviceAccount:
+  create: true
+  name: ""
+
+# Run the pod as root so it can use the SSH keys mounted from the host
+# (which on the mgmt node belong to the operator user, mode 0600). The
+# image creates no other writable state so root inside the pod is fine.
+podSecurityContext:
+  runAsUser: 0
+  fsGroup: 0

@@ -5,14 +5,19 @@
 
 from __future__ import annotations
 
+import json
 import secrets
 import string
+import time
+import logging
 from pathlib import Path
 from typing import Optional
 
 import yaml
 
 from daalu.bootstrap.engine.component import InfraComponent
+
+log = logging.getLogger("daalu")
 
 
 def _gen_password(length: int = 32) -> str:
@@ -137,7 +142,10 @@ class PerconaXtraDBClusterComponent(InfraComponent):
             }
         ])
 
-        # HAProxy metrics service
+        self._wait_for_pxc_ready(kubectl)
+        self._patch_fsgroupchangepolicy(kubectl)
+
+        # HAProxy metrics service — only reached after cluster is ready
         kubectl.apply_objects([
             {
                 "apiVersion": "v1",
@@ -166,3 +174,101 @@ class PerconaXtraDBClusterComponent(InfraComponent):
                 },
             }
         ])
+
+    # ------------------------------------------------------------------
+    def _patch_fsgroupchangepolicy(self, kubectl) -> None:
+        """
+        Patch the PXC StatefulSet to use fsGroupChangePolicy: OnRootMismatch.
+
+        The PXC operator default (omitting this field) means Kubernetes uses
+        'Always', which recursively chowns the entire 160Gi RBD volume on every
+        pod start — this stalls startup for minutes and can cause liveness kills
+        during crash recovery.  OnRootMismatch skips the chown when the root
+        dir already has the correct ownership, cutting restart time to seconds.
+
+        The operator overwrites the StatefulSet on every reconciliation, so this
+        patch must be re-applied after each deploy rather than done once manually.
+        """
+        sts_name = "percona-xtradb-pxc"
+        patch = {
+            "spec": {
+                "template": {
+                    "spec": {
+                        "securityContext": {
+                            "fsGroupChangePolicy": "OnRootMismatch",
+                        }
+                    }
+                }
+            }
+        }
+        rc, out, err = kubectl.run([
+            "patch", "statefulset", sts_name,
+            "-n", self.namespace,
+            "--type=merge",
+            "-p", json.dumps(patch),
+        ])
+        if rc != 0:
+            log.warning(
+                "[percona-xtradb-cluster] Could not patch fsGroupChangePolicy "
+                "on StatefulSet %s: %s", sts_name, err or out,
+            )
+        else:
+            log.info(
+                "[percona-xtradb-cluster] Patched StatefulSet %s: "
+                "fsGroupChangePolicy=OnRootMismatch", sts_name,
+            )
+
+    # ------------------------------------------------------------------
+    def _wait_for_pxc_ready(
+        self,
+        kubectl,
+        timeout_seconds: int = 1200,
+        poll_interval: int = 15,
+    ) -> None:
+        """
+        Block until the PerconaXtraDBCluster CR reports status.state == 'ready'.
+
+        The PXC operator sets this only when all members are synced and
+        HAProxy is serving — safe for downstream consumers (e.g. Keycloak
+        bootstrap job) to connect immediately after this returns.
+        """
+        cluster_name = self.cluster_spec.get("clusterName", "percona-xtradb")
+        log.info(
+            "[percona-xtradb-cluster] Waiting for PXC cluster '%s' to be ready "
+            "(timeout %ds)...",
+            cluster_name, timeout_seconds,
+        )
+
+        deadline = time.monotonic() + timeout_seconds
+        attempt = 0
+
+        while time.monotonic() < deadline:
+            rc, out, _ = kubectl.run(
+                [
+                    "get", "perconaxtradbcluster", cluster_name,
+                    "-n", self.namespace,
+                    "-o", "jsonpath={.status.state}",
+                ]
+            )
+            state = out.strip() if rc == 0 else ""
+
+            if state == "ready":
+                log.info(
+                    "[percona-xtradb-cluster] PXC cluster '%s' is ready", cluster_name
+                )
+                return
+
+            if attempt % 4 == 0:  # log every ~60s
+                log.info(
+                    "[percona-xtradb-cluster] PXC cluster '%s' state='%s', "
+                    "still waiting...",
+                    cluster_name, state or "<unknown>",
+                )
+
+            time.sleep(poll_interval)
+            attempt += 1
+
+        raise RuntimeError(
+            f"PXC cluster '{cluster_name}' did not reach 'ready' state "
+            f"within {timeout_seconds}s (last state: '{state}')"
+        )

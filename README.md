@@ -12,7 +12,7 @@ To understand the motivation behind this project, see [The NoCloud (Not Only Clo
 
 ## What It Does
 
-- **Bare-metal provisioning** — Onboards bare metal servers into Kubernetes with Metal3 ClusterAPI provider
+- **Bare-metal provisioning** — Onboards bare-metal servers into Kubernetes using Tinkerbell (PXE/iPXE) and Cluster API Provider Tinkerbell (CAPT)
 - **OpenStack deployment** — Deploys a full OpenStack control plane (Keystone, Nova, Neutron, Glance, Heat, Cinder, Horizon, and more) via Helm charts
 - **Ceph storage** — Bootstraps Ceph clusters and configures RBD CSI drivers
 - **Identity management** — Integrates Keycloak for SSO/OIDC across Grafana and OpenStack
@@ -24,10 +24,10 @@ To understand the motivation behind this project, see [The NoCloud (Not Only Clo
 
 ## Final End Product
 
-- **Kubernetes control plane** — A production Kubernetes cluster running directly on bare-metal servers using Cluster API and Metal3.
-- **OpenStack cloud layer** — A fully operational OpenStack control plane providing compute (Nova), networking (Neutron), image services (Glance), block and object storage (Cinder), and orchestration capabilities.
-- **Distributed storage backend** — A Ceph-backed storage system with RBD CSI integration for persistent volumes and cloud storage services.
-- **Integrated operations stack** — Centralized identity (OIDC/SSO), monitoring, logging, and GitOps-based lifecycle management.
+- **Kubernetes control plane** — A production Kubernetes cluster running directly on bare-metal servers using Cluster API and Tinkerbell
+- **OpenStack cloud layer** — A fully operational OpenStack control plane providing compute (Nova), networking (Neutron), image services (Glance), block and object storage (Cinder), and orchestration capabilities
+- **Distributed storage backend** — A Ceph-backed storage system with RBD CSI integration for persistent volumes and cloud storage services
+- **Integrated operations stack** — Centralized identity (OIDC/SSO), monitoring, logging, and GitOps-based lifecycle management
 
 ---
 
@@ -40,8 +40,9 @@ daalu/
 │   ├── config/                 # YAML config loading and Pydantic models
 │   ├── bootstrap/              # Core provisioning logic
 │   │   ├── mgmt/               # Management cluster bootstrap + teardown
-│   │   ├── metal3/             # Metal3 Cluster API provider
-│   │   ├── node/               # SSH-based node bootstrap
+│   │   │   ├── tinkerbell_installer.py  # Tinkerbell/CAPT stack installer
+│   │   │   ├── capt_provisioner.py      # CAPT workload cluster provisioning
+│   │   │   └── k8s_installer.py         # kubeadm-based mgmt k8s install
 │   │   ├── ceph/               # Ceph deployment
 │   │   ├── csi/                # Container Storage Interface
 │   │   ├── openstack/          # OpenStack service components
@@ -57,8 +58,9 @@ daalu/
 ├── cloud-config/               # Cloud configuration
 │   ├── secrets.yaml            # Your secrets (git-ignored)
 │   └── secrets.yaml.example    # Template showing required keys
-├── assets/                     # Helm values and chart directories
-├── artifacts/                  # Generated manifests (git-ignored)
+├── assets/                     # Helm values, chart directories, and CAPT manifests
+│   └── tinkerbell/
+│       └── cluster-api/        # CAPT workload cluster manifests
 └── tests/                      # Test suites
 ```
 
@@ -74,20 +76,27 @@ The following must be installed on the machine where you run `daalu`:
 - [`kubectl`](https://kubernetes.io/docs/tasks/tools/)
 - [`clusterctl`](https://cluster-api.sigs.k8s.io/clusterctl/overview.html)
 - [`helm` 3.x](https://helm.sh/docs/intro/install/)
+- [`cilium` CLI](https://docs.cilium.io/en/stable/gettingstarted/k8s-install-default/#install-the-cilium-cli)
 - SSH client (preinstalled on Linux/macOS)
 
 ```bash
 kubectl version --client
 clusterctl version
 helm version
+cilium version
 python --version
 ```
 
 ### Hardware requirements
 
-- **Management node** — A bare-metal machine or VM running Ubuntu 22.04/24.04. This hosts the management Kubernetes cluster, Metal3/Ironic, and Harbor registry.
-- **Workload nodes** — One or more bare-metal servers with IPMI/Redfish BMC access for PXE provisioning via Metal3.
-- **Storage node** *(optional)* — A dedicated server for Ceph OSDs.
+- **Management node** — A bare-metal machine or VM running Ubuntu 22.04/24.04, with two NICs:
+  - **Home/management NIC** — For SSH access and internet connectivity (e.g. `192.168.0.x`)
+  - **Provisioning NIC** — Dedicated L2 network for PXE booting workload nodes (e.g. `10.10.0.x`)
+- **Workload nodes** — One or more bare-metal servers with:
+  - IPMI/Redfish BMC access (for Rufio power control)
+  - PXE boot capability on the provisioning network
+  - A dedicated disk for the OS (`/dev/sda` by default)
+- **Storage node** *(optional)* — A dedicated server with additional disks for Ceph OSDs
 
 ---
 
@@ -154,7 +163,7 @@ Key sections:
 
 ```yaml
 mgmt_cluster:
-  host: "192.168.0.163"         # IP of the Ubuntu machine for the mgmt cluster
+  host: "192.168.0.171"          # IP of the Ubuntu management node
   ssh_username: "kez"
   provisioning_ip: "10.10.0.9"  # Static IP on the provisioning NIC
   provisioning_interface: "ens19"
@@ -165,14 +174,21 @@ registry:
   harbor_storage_size: "100Gi"
 
 cluster_api:
+  provider: tinkerbell
   cluster_name: auto-openstack-infra
-  control_plane_vip: "10.10.0.249"
-  # ...
+  namespace: tinkerbell
+  control_plane_vip: "10.10.0.249"  # Virtual IP for the workload API server
+  kubernetes_version: v1.35.0
+  cilium_version: "1.16.0"
+  ironic_http_base: http://10.10.0.9  # Image server (also used as Hegel base URL)
+  image_url: http://10.10.0.9/UBUNTU_24.04_NODE_IMAGE_K8S_v1.35.0.raw.gz
+  control_plane_replicas: 1
+  worker_replicas: 1
 
 ceph:
   additional_ceph_hosts:
     - hostname: storage-01
-      osd_devices: [/dev/sdb, /dev/sdc, /dev/sdd, /dev/sde]
+      osd_devices: [/dev/sdb, /dev/sdc]
 ```
 
 ### 2. Secrets file
@@ -184,6 +200,10 @@ cp cloud-config/secrets.yaml.example cloud-config/secrets.yaml
 
 The config loader automatically finds `cloud-config/secrets.yaml` and deep-merges it into the cluster definition at runtime. The file is git-ignored.
 
+### 3. Hardware CRs
+
+Each bare-metal workload node must have a Hardware CR in `assets/tinkerbell/hardware/`. These define the node's MAC address, BMC credentials, and provisioning network settings. See the example files in that directory.
+
 ---
 
 ## Usage
@@ -192,23 +212,35 @@ The config loader automatically finds `cloud-config/secrets.yaml` and deep-merge
 
 #### Step 1 — Bootstrap the management cluster
 
-Installs Kubernetes on a fresh Ubuntu node, then deploys the full Metal3 stack (cert-manager → CAPI → IrSO → Ironic → BMO → CAPM3) and Harbor registry (formats dedicated disk, mirrors OpenStack images):
-
 ```bash
 daalu mgmt cluster-defs/cluster.yaml
 ```
+
+This single command provisions the entire management stack on a fresh Ubuntu node over SSH:
+
+| Stage | What it installs |
+|---|---|
+| **Kubernetes** | kubeadm-based single-node cluster |
+| **cert-manager** | TLS certificate management (prerequisite for CAPI) |
+| **Cluster API core** | CAPI controllers and CRDs |
+| **Tinkerbell stack** | Tink Server + Tink Controller, Hegel (metadata server), SMEE (DHCP/iPXE server), Rufio (BMC controller) |
+| **CAPT** | Cluster API Provider Tinkerbell — manages workload cluster lifecycle |
+| **Image server** | HTTP file server serving OS images to PXE-booting nodes |
+| **Hegel patch** | Exposes Hegel on the provisioning IP so bare-metal nodes can reach it from HookOS |
+| **Hardware registration** | Creates Hardware CRs for each workload node (MAC, BMC, network config) |
+| **Harbor registry** | Formats dedicated storage, deploys Harbor, mirrors all required images |
 
 Optional overrides:
 
 ```bash
 daalu mgmt cluster-defs/cluster.yaml \
-  --ssh-host 192.168.0.163 \
-  --ssh-password admin123 \
+  --ssh-host 192.168.0.171 \
+  --ssh-password yourpassword \
   --provisioning-interface ens19 \
   --kubeconfig-out ~/.kube/daalu-mgmt-config
 ```
 
-When complete, you will see:
+When complete:
 
 ```
 Management cluster is ready!
@@ -218,119 +250,91 @@ Management cluster is ready!
   Harbor creds: admin / <registry.admin_password from secrets.yaml>
 ```
 
-#### Step 2 — Deploy OpenStack on bare-metal workload cluster
+---
 
-Provisions bare-metal nodes via Metal3/Ironic, bootstraps Kubernetes on them, deploys Ceph, CSI, infrastructure components, and the full OpenStack control plane:
+#### Step 2 — Deploy everything (single command)
+
+Once the management cluster is up, deploy the full workload cluster and all components with one command:
 
 ```bash
 daalu deploy cluster-defs/cluster.yaml \
-  --managed-user builder \
-  --managed-user-password <password> \
-  --ssh-key ~/.ssh/openstack-key \
-  --local-registry \
-  --mgmt-kubeconfig ~/.kube/daalu-mgmt-config
+  --install cluster-api,nodes,ceph,csi,infrastructure,openstack
 ```
 
-#### Step 3 — Tear everything down
+This runs all stages in sequence:
 
-```bash
-daalu clean cluster-defs/cluster.yaml \
-  --mgmt-kubeconfig ~/.kube/daalu-mgmt-config
-```
+| Stage | What happens |
+|---|---|
+| **cluster-api** | Applies CAPT manifests, PXE-boots nodes via Rufio into HookOS, streams OS image to disk, reboots into Ubuntu, waits for kubeadm init, installs Cilium CNI, waits for all nodes Ready |
+| **nodes** | SSH into workload nodes: creates managed user, sets hostname, configures containerd to trust Harbor |
+| **ceph** | Deploys Rook-Ceph operator, bootstraps Ceph cluster, adds OSD disks |
+| **csi** | Installs Ceph RBD CSI driver and creates StorageClasses |
+| **infrastructure** | Deploys MetalLB, Ingress-NGINX, ArgoCD, cert-manager, Keycloak, Istio, CoreDNS patches |
+| **openstack** | Deploys full OpenStack control plane: Keystone, Glance, Neutron, Nova, Cinder, Horizon, Heat, Octavia, and more. Runs cloud smoke test at the end. |
 
 ---
 
 ### Selective deployment
 
-Install only specific components using `--install`:
+Re-run or deploy individual stages in isolation:
 
 ```bash
-# Re-run only Ceph (e.g. to add OSDs)
-daalu deploy cluster-defs/cluster.yaml \
-  --install ceph \
-  --managed-user builder \
-  --managed-user-password <password> \
-  --ssh-key ~/.ssh/openstack-key \
-  --local-registry \
-  --mgmt-kubeconfig ~/.kube/daalu-mgmt-config
+# Provision the workload Kubernetes cluster only
+daalu deploy cluster-defs/cluster.yaml --install cluster-api
+
+# Bootstrap nodes only (after cluster-api is done)
+daalu deploy cluster-defs/cluster.yaml --install nodes
+
+# Re-run Ceph only (e.g. to add OSDs)
+daalu deploy cluster-defs/cluster.yaml --install ceph
 
 # Re-run infrastructure + OpenStack only
-daalu deploy cluster-defs/cluster.yaml \
-  --install infrastructure,openstack \
-  --managed-user builder \
-  --managed-user-password <password> \
-  --ssh-key ~/.ssh/openstack-key \
-  --local-registry \
-  --mgmt-kubeconfig ~/.kube/daalu-mgmt-config
+daalu deploy cluster-defs/cluster.yaml --install infrastructure,openstack
+
+# Deploy everything
+daalu deploy cluster-defs/cluster.yaml --install all
 ```
 
 ### Available install targets
 
-| Target           | Description                                       |
-|------------------|---------------------------------------------------|
-| `cluster-api`    | Provision Kubernetes workload cluster via Metal3  |
-| `nodes`          | Bootstrap nodes (SSH, hostname, apparmor, netplan)|
-| `ceph`           | Deploy Ceph storage cluster and add OSDs          |
-| `csi`            | Install RBD CSI drivers                           |
-| `infrastructure` | MetalLB, Ingress, CoreDNS patches, Keycloak, etc. |
-| `monitoring`     | Prometheus, Grafana, Loki, OpenSearch, Thanos     |
-| `openstack`      | Full OpenStack control plane                      |
+| Target | Description |
+|---|---|
+| `cluster-api` | Provision Kubernetes workload cluster via Tinkerbell/CAPT. PXE-boots nodes, streams OS image, runs kubeadm, installs Cilium. |
+| `nodes` | SSH-based node bootstrap: managed user, hostname, containerd trust |
+| `ceph` | Deploy Rook-Ceph operator and cluster, add OSD disks |
+| `csi` | Install Ceph RBD CSI driver and StorageClasses |
+| `infrastructure` | MetalLB, Ingress-NGINX, ArgoCD, cert-manager, Keycloak, Istio |
+| `monitoring` | Prometheus, Grafana, Loki, OpenSearch, Thanos |
+| `openstack` | Full OpenStack control plane + cloud smoke test |
 
 ### Cloud smoke test (cloud-setup)
 
-After the OpenStack control plane is deployed, the `cloud-setup` component runs automatically as the final step. It verifies the cloud is functional by creating:
+After OpenStack deploys, the `cloud-setup` component runs automatically as the final step. It verifies the cloud is functional by creating:
 
 - **Glance image** — Ubuntu 22.04 (downloaded from Ubuntu cloud-images and uploaded to Glance)
 - **Private network + subnet** — `private-net` / `10.0.2.0/24`
 - **Public (external) network + subnet** — `public-net` flat provider network with a floating-IP pool
-- **Router** — connects private subnet to the public network (provides outbound internet access to VMs)
-- **Security group** — `vm-secgroup` with ICMP (ping) and TCP 22 (SSH) rules
+- **Router** — connects private subnet to the public network
+- **Security group** — `vm-secgroup` with ICMP and TCP 22 rules
 - **Test VM** — (optional) if `vm_key_name` is configured in `cluster.yaml`
 
 All steps are idempotent: if a resource already exists it is silently skipped.
 
-#### Running the smoke test standalone
-
-To re-run only the cloud smoke test (e.g. after a partial failure):
+To re-run the smoke test standalone:
 
 ```bash
-daalu deploy cluster-defs/cluster.yaml \
-  --install openstack \
-  --infra cloud-setup \
-  --managed-user builder \
-  --managed-user-password <password> \
-  --ssh-key ~/.ssh/openstack-key \
-  --local-registry \
-  --mgmt-kubeconfig ~/.kube/daalu-mgmt-config
+daalu deploy cluster-defs/cluster.yaml --install openstack --infra cloud-setup
 ```
 
-#### Skipping the smoke test
+---
 
-To deploy OpenStack without running the smoke test, use `--infra` to list only the components you want:
+#### Step 3 — Tear everything down
 
 ```bash
-# Deploy all OpenStack components except cloud-setup
-daalu deploy cluster-defs/cluster.yaml \
-  --install openstack \
-  --infra keystone,glance,neutron,nova \
-  --managed-user builder \
-  --managed-user-password <password> \
-  --ssh-key ~/.ssh/openstack-key
+daalu clean cluster-defs/cluster.yaml \
+  --mgmt-kubeconfig ~/.kube/daalu-mgmt-config \
+  --yes
 ```
-
-#### Configuring cloud-setup defaults
-
-The smoke test uses sensible defaults but the key parameters can be overridden in `cluster.yaml` (support coming soon). Current defaults:
-
-| Parameter | Default |
-|---|---|
-| Image | Ubuntu 22.04 (jammy cloud image) |
-| Private network | `private-net` / `10.0.2.0/24` gateway `10.0.2.1` |
-| Public network | `public-net` flat provider on `provider` physical net |
-| Public subnet | `192.168.0.0/24`, allocation pool `192.168.0.200–250` |
-| Router | `router1` |
-| Security group | `vm-secgroup` (ICMP + TCP 22) |
-| VM | `test-vm1`, flavor `m1.large` (only if `vm_key_name` set) |
 
 ---
 
@@ -338,7 +342,7 @@ The smoke test uses sensible defaults but the key parameters can be overridden i
 
 ### `daalu mgmt`
 
-Bootstrap a management Kubernetes cluster on a fresh Ubuntu node.
+Bootstrap a management Kubernetes cluster on a fresh Ubuntu node, then install the full Tinkerbell provisioning stack and Harbor registry.
 
 ```
 daalu mgmt cluster-defs/cluster.yaml [OPTIONS]
@@ -350,13 +354,13 @@ daalu mgmt cluster-defs/cluster.yaml [OPTIONS]
 | `--ssh-username` | Override SSH username |
 | `--ssh-password` | SSH password |
 | `--ssh-key` | Path to SSH private key |
-| `--provisioning-interface` | NIC for bare-metal provisioning network |
-| `--kubeconfig-out` | Local path to save generated kubeconfig |
+| `--provisioning-interface` | NIC dedicated to the bare-metal provisioning network |
+| `--kubeconfig-out` | Local path to save the generated kubeconfig |
 | `--skip-harbor` | Skip Harbor deployment |
 
 ### `daalu deploy`
 
-Deploy OpenStack and related components onto the workload cluster.
+Deploy the workload cluster and OpenStack components.
 
 ```
 daalu deploy cluster-defs/cluster.yaml [OPTIONS]
@@ -364,16 +368,16 @@ daalu deploy cluster-defs/cluster.yaml [OPTIONS]
 
 | Option | Description |
 |---|---|
-| `--install` | Comma-separated targets, or `all` (default) |
+| `--install` | Comma-separated targets or `all` — e.g. `cluster-api,nodes,ceph,csi,infrastructure,openstack` |
 | `--infra` | Filter infrastructure sub-components |
-| `--managed-user` | **(required)** SSH username on provisioned nodes |
-| `--managed-user-password` | **(required)** Password for managed user |
-| `--ssh-key` | Path to SSH private key |
+| `--managed-user` | Linux user to create on workload nodes (default: from config) |
+| `--managed-user-password` | Password for managed user |
+| `--ssh-key` | Path to SSH private key for workload nodes |
 | `--local-registry` | Pull images from local Harbor registry |
 | `--mgmt-kubeconfig` | Path to management cluster kubeconfig |
 | `--dry-run` | Preview without applying |
 | `--debug` | Verbose logging |
-| `--phase` | Run specific phase: `pre_install`, `helm`, `post_install` |
+| `--phase` | Run specific phase: `pre_install`, `helm`, or `post_install` |
 
 ### `daalu clean`
 
@@ -394,15 +398,15 @@ daalu clean cluster-defs/cluster.yaml [OPTIONS]
 
 **What `daalu clean` does:**
 
-1. Deletes the workload CAPI cluster — triggers Metal3/Ironic to wipe and power off bare-metal nodes
-2. Waits up to 5 minutes for all BareMetalHosts to reach `available` state
+1. Deletes the CAPI workload cluster — CAPT powers off workload nodes via Rufio
+2. Waits for all Hardware CRs to reach deprovisioned state
 3. SSH to mgmt node: `kubeadm reset`, flush CNI/iptables, remove k8s data dirs
 4. Unmounts Harbor disk, removes fstab entry, runs `wipefs` to clear filesystem signatures
-5. Removes Metal3/Ironic state and Docker containers
+5. Removes Tinkerbell/Rufio state
 6. Removes local kubeconfigs and `known_hosts` entries
 
 ```bash
-# Full teardown (recommended — waits for clean deprovisioning)
+# Full teardown
 daalu clean cluster-defs/cluster.yaml \
   --mgmt-kubeconfig ~/.kube/daalu-mgmt-config \
   --yes
@@ -467,11 +471,12 @@ Daalu follows a component-based architecture:
 
 1. **Config loader** (`src/daalu/config/loader.py`) — Reads cluster YAML + secrets.yaml, expands env vars, deep-merges, validates with Pydantic
 2. **CLI layer** (`src/daalu/cli/app.py`) — Typer CLI orchestrating the deployment pipeline
-3. **Mgmt bootstrap** (`src/daalu/bootstrap/mgmt/`) — Installs k8s + Metal3 stack on mgmt node; `MgmtClusterCleaner` for teardown
-4. **Bootstrap engine** (`src/daalu/bootstrap/engine/`) — Base `InfraComponent` class with `pre_install()`, `helm_values()`, `post_install()` hooks
-5. **Managers** — `CephManager`, `InfrastructureManager`, `MonitoringManager`, `OpenStackManager` coordinate component groups
-6. **Helm runner** (`src/daalu/helm/`) — Wraps Helm CLI for SSH-based install/upgrade
-7. **Event bus** (`src/daalu/observers/`) — Lifecycle events dispatched to console, log file, and JSON observers
+3. **Mgmt bootstrap** (`src/daalu/bootstrap/mgmt/`) — Installs k8s on mgmt node; installs Tinkerbell stack, CAPT, Harbor; `MgmtClusterCleaner` for teardown
+4. **CAPT provisioner** (`src/daalu/bootstrap/mgmt/capt_provisioner.py`) — Drives the bare-metal workload cluster lifecycle: Rufio PXE jobs, Workflow waits, Cilium install, node readiness
+5. **Bootstrap engine** (`src/daalu/bootstrap/engine/`) — Base `InfraComponent` class with `pre_install()`, `helm_values()`, `post_install()` hooks
+6. **Managers** — `CephManager`, `InfrastructureManager`, `MonitoringManager`, `OpenStackManager` coordinate component groups
+7. **Helm runner** (`src/daalu/helm/`) — Wraps Helm CLI for install/upgrade
+8. **Event bus** (`src/daalu/observers/`) — Lifecycle events dispatched to console, log file, and JSON observers
 
 ---
 

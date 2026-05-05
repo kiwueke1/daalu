@@ -1,0 +1,3 @@
+
+[worker]
+temporalio>=1.6.0

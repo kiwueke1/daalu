@@ -1,2 +1,4 @@
 [console_scripts]
 daalu = daalu.cli.app:app
+daalu-registry = daalu.temporal.cli:dump_registry
+daalu-worker = daalu.temporal.worker:main

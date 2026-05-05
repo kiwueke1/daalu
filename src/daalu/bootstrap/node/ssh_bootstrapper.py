@@ -632,6 +632,164 @@ class SshBootstrapper(NodeBootstrapper):
                 host.hostname,
             )
 
+    def _wait_for_reboot(
+        self,
+        host: Host,
+        *,
+        down_timeout: int = 180,
+        up_timeout: int = 600,
+        progress_every: int = 15,
+    ) -> Optional[_SSHHandles]:
+        """
+        Wait for a node to reboot:
+          1. Wait until TCP :22 stops accepting connections (node going down).
+          2. Wait until TCP :22 accepts again AND sshd is serving a banner
+             (i.e. a real SSH connection succeeds), with periodic CLI updates.
+
+        Paramiko's background Transport thread prints tracebacks to stderr on
+        banner-read errors; we suppress them while the node is rebooting by
+        muting the 'paramiko.transport' logger for the duration of the wait.
+        """
+        import socket
+        import logging as _logging
+
+        paramiko_log = _logging.getLogger("paramiko.transport")
+        prev_level = paramiko_log.level
+        paramiko_log.setLevel(_logging.CRITICAL)
+
+        def _port_open(timeout: float = 3.0) -> bool:
+            try:
+                with socket.create_connection((host.address, host.port), timeout=timeout):
+                    return True
+            except (OSError, socket.timeout):
+                return False
+
+        try:
+            # Phase 1: wait for SSH to go DOWN.
+            log.info("[%s] waiting for SSH port to go down...", host.hostname)
+            start = time.time()
+            went_down = False
+            while time.time() - start < down_timeout:
+                if not _port_open():
+                    went_down = True
+                    log.info("[%s] node is down — waiting for it to come back up", host.hostname)
+                    break
+                elapsed = int(time.time() - start)
+                if elapsed and elapsed % progress_every == 0:
+                    log.info("[%s] still up after %ds — waiting for reboot...", host.hostname, elapsed)
+                time.sleep(2)
+            if not went_down:
+                log.warning(
+                    "[%s] port 22 never went down after %ds — node may have skipped reboot",
+                    host.hostname, down_timeout,
+                )
+
+            # Phase 2: wait for SSH to come UP and serve a banner.
+            start = time.time()
+            last_progress = 0
+            while time.time() - start < up_timeout:
+                elapsed = int(time.time() - start)
+                if elapsed - last_progress >= progress_every:
+                    log.info(
+                        "[%s] waiting for SSH to accept connections (%ds elapsed)...",
+                        host.hostname, elapsed,
+                    )
+                    last_progress = elapsed
+
+                if not _port_open():
+                    time.sleep(3)
+                    continue
+
+                # Port is open — try a real SSH handshake
+                try:
+                    return self._connect(host)
+                except (paramiko.ssh_exception.AuthenticationException,
+                        paramiko.ssh_exception.SSHException,
+                        OSError) as e:
+                    log.debug("[%s] SSH handshake not ready yet: %s: %s",
+                              host.hostname, type(e).__name__, e)
+                    time.sleep(5)
+
+            return None
+        finally:
+            paramiko_log.setLevel(prev_level)
+
+    def role_nvidia_prereqs(self, h: _SSHHandles, host: Host, opts: NodeBootstrapOptions):
+        """
+        Prepare a node for the NVIDIA GPU Operator's driver container:
+          1. Install kernel headers matching the running kernel so the operator
+             can build the nvidia.ko module.
+          2. If nouveau is currently loaded, blacklist it, rebuild initramfs,
+             and reboot so it is unloaded on next boot. Non-GPU nodes (where
+             nouveau is never loaded) skip the reboot.
+          3. Check Secure Boot state — the operator-built module is unsigned,
+             so Secure Boot must be disabled. Warn loudly if it is enabled
+             (cannot be fixed remotely — requires BIOS/UEFI change).
+        """
+        # 1. Kernel headers
+        self._run(h, "apt-get update -y", sudo=True)
+        rc, _, err = self._run(
+            h,
+            "DEBIAN_FRONTEND=noninteractive apt-get install -y linux-headers-$(uname -r)",
+            sudo=True,
+        )
+        if rc != 0:
+            log.warning("[%s] linux-headers install failed: %s", host.hostname, err)
+
+        # 3. Secure Boot check (do this before reboot so the warning is visible
+        # regardless of whether we reboot for nouveau).
+        rc, sb_out, _ = self._run(h, "mokutil --sb-state 2>/dev/null || true", sudo=False)
+        sb_out = sb_out.strip()
+        if "enabled" in sb_out.lower():
+            log.warning(
+                "[%s] Secure Boot is ENABLED (%s) — the NVIDIA operator's "
+                "unsigned driver module will FAIL to load. Disable Secure "
+                "Boot in BIOS/UEFI before deploying the GPU operator.",
+                host.hostname, sb_out,
+            )
+        elif "disabled" in sb_out.lower():
+            log.info("[%s] Secure Boot disabled — OK", host.hostname)
+        else:
+            log.info("[%s] Secure Boot state unknown (mokutil unavailable): %s",
+                     host.hostname, sb_out or "<empty>")
+
+        # 2. Nouveau: only act if it is currently loaded
+        rc, lsmod_out, _ = self._run(h, "lsmod | grep '^nouveau ' || true", sudo=False)
+        if not lsmod_out.strip():
+            log.info("[%s] nouveau not loaded — skipping blacklist/reboot", host.hostname)
+            return
+
+        log.info("[%s] nouveau is loaded — blacklisting and rebooting", host.hostname)
+        blacklist = "blacklist nouveau\noptions nouveau modeset=0\n"
+        self._put_content(
+            h, blacklist, "/etc/modprobe.d/blacklist-nouveau.conf", mode=0o644, sudo=True,
+        )
+        rc, _, err = self._run(h, "update-initramfs -u", sudo=True)
+        if rc != 0:
+            log.warning("[%s] update-initramfs failed: %s", host.hostname, err)
+
+        # Reboot and reconnect
+        self._run(h, "nohup sh -c 'sleep 2 && reboot' >/dev/null 2>&1 &", sudo=True)
+        log.info("[%s] reboot issued to unload nouveau — waiting for node to return...", host.hostname)
+        self._close(h)
+
+        new_h = self._wait_for_reboot(host)
+        if new_h is None:
+            raise RuntimeError(
+                f"[{host.hostname}] node did not come back after nouveau-blacklist reboot"
+            )
+
+        # Confirm nouveau is gone
+        rc, check_out, _ = self._run(new_h, "lsmod | grep '^nouveau ' || true", sudo=False)
+        if check_out.strip():
+            log.warning("[%s] nouveau still loaded after reboot!", host.hostname)
+        else:
+            log.info("[%s] nouveau successfully unloaded", host.hostname)
+
+        # Replace handles so the outer caller closes the new session
+        h.client = new_h.client
+        h.sftp = new_h.sftp
+
     def role_istio_modules(self, h: _SSHHandles, host: Host, opts: NodeBootstrapOptions):
         """
         Write /etc/modules-load.d/99-istio-modules.conf and modprobe required modules.
@@ -699,6 +857,9 @@ class SshBootstrapper(NodeBootstrapper):
                 if plan.run_istio_modules:
                     log.info("[%s] Loading istio kernel modules...", host.hostname)
                     self.role_istio_modules(h, host, opts)
+                if plan.run_nvidia_prereqs:
+                    log.info("[%s] Applying NVIDIA GPU prerequisites (headers/nouveau/secureboot)...", host.hostname)
+                    self.role_nvidia_prereqs(h, host, opts)
                 if plan.run_containerd_registry and opts.insecure_registries:
                     log.info("[%s] Configuring containerd insecure registries...", host.hostname)
                     self.role_containerd_registry(h, host, opts)

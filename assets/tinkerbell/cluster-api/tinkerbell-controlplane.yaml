@@ -12,14 +12,16 @@ spec:
       kind: TinkerbellMachineTemplate
       name: ${ CLUSTER_NAME }-controlplane
   kubeadmConfigSpec:
+    preKubeadmCommands:
+      - "growpart /dev/sda 3 || true"
+      - "resize2fs /dev/sda3 || true"
+      - "mkdir -p /etc/systemd/system/kubelet.service.d && printf '[Service]\\nEnvironment=\"KUBELET_EXTRA_ARGS=--provider-id=tinkerbell://tinkerbell/%s\"\\n' \"$(hostname)\" > /etc/systemd/system/kubelet.service.d/20-provider-id.conf"
+    postKubeadmCommands:
+      - "kubectl --kubeconfig=/etc/kubernetes/admin.conf label node $(hostname) node.kubernetes.io/exclude-from-external-load-balancers- 2>/dev/null || true"
     initConfiguration:
-      nodeRegistration:
-        kubeletExtraArgs:
-          cloud-provider: external
+      nodeRegistration: {}
     joinConfiguration:
-      nodeRegistration:
-        kubeletExtraArgs:
-          cloud-provider: external
+      nodeRegistration: {}
     users:
       - name: ${ IMAGE_USERNAME }
         sudo: "ALL=(ALL) NOPASSWD:ALL"
@@ -45,16 +47,235 @@ spec:
               - /dev:/dev
               - /dev/console:/dev/console
               - /lib/firmware:/lib/firmware:ro
+              - /proc:/proc
             actions:
               - name: image2disk
-                image: ghcr.io/tinkerbell/actions/image2disk:v0.1.0
-                timeout: 600
+                image: busybox:stable
+                timeout: 1200
+                command:
+                  - sh
+                  - -c
+                  - |
+                    set -e
+                    echo "Downloading and writing image to $DEST_DISK..."
+                    wget -O - "$IMG_URL" | gunzip | dd of="$DEST_DISK" bs=16M
+                    sync
+                    echo "Image written successfully"
                 environment:
                   IMG_URL: "${ IMAGE_URL }"
                   DEST_DISK: "/dev/sda"
-                  COMPRESSED: "true"
+              - name: configure-node
+                image: busybox:stable
+                timeout: 180
+                command:
+                  - sh
+                  - -c
+                  - |
+                    set -e
+                    echo "Rereading partition table on $DEST_DISK..."
+                    blockdev --rereadpt "$DEST_DISK" 2>/dev/null || true
+                    sleep 3
+                    echo "Detecting root partition on $DEST_DISK..."
+                    ROOT_PART=""
+                    for part in /dev/sda1 /dev/sda2 /dev/sda3 /dev/sda4; do
+                      [ -b "$part" ] || continue
+                      INFO=$(blkid "$part" 2>/dev/null || true)
+                      echo "  $part: $INFO"
+                      if echo "$INFO" | grep -q 'TYPE="ext4"' || echo "$INFO" | grep -q 'TYPE="xfs"'; then
+                        ROOT_PART="$part"
+                        break
+                      fi
+                    done
+                    [ -n "$ROOT_PART" ] || { echo "ERROR: no root partition found on $DEST_DISK"; exit 1; }
+                    echo "Mounting $ROOT_PART..."
+                    mkdir -p /mnt/target
+                    mount "$ROOT_PART" /mnt/target
+                    [ -d /mnt/target/etc ] || { echo "ERROR: /mnt/target/etc missing"; umount /mnt/target; exit 1; }
+                    echo "=== Re-enabling cloud-init ==="
+                    rm -f /mnt/target/etc/cloud/cloud-init.disabled
+                    # Write a bootstrap script — separate file keeps ExecStart simple and
+                    # avoids quoting hell. Runs cloud-init for write_files (PKI certs,
+                    # kubeadm.yaml) then runs runcmd directly via Python because
+                    # cloud-init 25.x scripts_user doesn't reliably execute the runcmd
+                    # script written by cc_runcmd.
+                    mkdir -p /mnt/target/usr/local/bin
+                    mkdir -p /mnt/target/etc/systemd/system/multi-user.target.wants
+                    printf '%s\n' \
+                      '#!/bin/bash' \
+                      'set -uo pipefail' \
+                      'cloud-init clean --machine-id' \
+                      'cloud-init init --local || true' \
+                      'cloud-init init || true' \
+                      'cloud-init modules --mode=config || true' \
+                      'python3 << '"'"'PYEOF'"'"'' \
+                      'import os, yaml, subprocess, sys' \
+                      'os.makedirs("/run/cluster-api", exist_ok=True)' \
+                      '# Assign the CAPI controlPlaneEndpoint VIP to loopback so kubeadm' \
+                      '# upload-config can reach the API server it just started.' \
+                      'try:' \
+                      '    with open("/run/kubeadm/kubeadm.yaml") as f:' \
+                      '        for doc in yaml.safe_load_all(f):' \
+                      '            if isinstance(doc, dict) and doc.get("kind") == "ClusterConfiguration":' \
+                      '                ep = doc.get("controlPlaneEndpoint", "")' \
+                      '                if ep:' \
+                      '                    vip = ep.split(":")[0]' \
+                      '                    subprocess.run(["ip", "addr", "replace", vip + "/32", "dev", "lo"], capture_output=True)' \
+                      '                    # Persist the VIP via a systemd oneshot (netplan' \
+                      '                    # loopback-secondary support is unreliable; later' \
+                      '                    # netplan apply calls would also tear it down).' \
+                      '                    script = "#!/bin/bash\nip addr replace " + vip + "/32 dev lo\n"' \
+                      '                    with open("/usr/local/bin/daalu-cp-vip.sh", "w") as sf:' \
+                      '                        sf.write(script)' \
+                      '                    os.chmod("/usr/local/bin/daalu-cp-vip.sh", 0o755)' \
+                      '                    unit = (' \
+                      '                        "[Unit]\n"' \
+                      '                        "Description=Daalu control-plane endpoint VIP on loopback\n"' \
+                      '                        "After=network-pre.target\n"' \
+                      '                        "Before=network.target kubelet.service\n"' \
+                      '                        "Wants=network-pre.target\n\n"' \
+                      '                        "[Service]\n"' \
+                      '                        "Type=oneshot\n"' \
+                      '                        "RemainAfterExit=yes\n"' \
+                      '                        "ExecStart=/usr/local/bin/daalu-cp-vip.sh\n\n"' \
+                      '                        "[Install]\n"' \
+                      '                        "WantedBy=multi-user.target\n"' \
+                      '                    )' \
+                      '                    with open("/etc/systemd/system/daalu-cp-vip.service", "w") as uf:' \
+                      '                        uf.write(unit)' \
+                      '                    subprocess.run(["systemctl", "daemon-reload"], capture_output=True)' \
+                      '                    subprocess.run(["systemctl", "enable", "--now", "daalu-cp-vip.service"], capture_output=True)' \
+                      '                    print("Assigned controlPlaneEndpoint VIP %s to lo (systemd-persisted)" % vip)' \
+                      '                    break' \
+                      'except Exception as e:' \
+                      '    print("Warning: could not assign CP endpoint VIP: %s" % e, file=sys.stderr)' \
+                      'with open("/var/lib/cloud/seed/nocloud/user-data") as f:' \
+                      '    lines = [l for l in f if not l.startswith("## template:")]' \
+                      'data = yaml.safe_load("".join(lines))' \
+                      'for cmd in data.get("runcmd", []):' \
+                      '    r = subprocess.run(cmd if isinstance(cmd, list) else cmd, shell=not isinstance(cmd, list))' \
+                      '    if r.returncode != 0:' \
+                      '        print("runcmd failed (code %d): %s" % (r.returncode, cmd), file=sys.stderr)' \
+                      '        sys.exit(r.returncode)' \
+                      'PYEOF' \
+                      'touch /var/lib/daalu-bootstrapped' \
+                      > /mnt/target/usr/local/bin/daalu-bootstrap.sh
+                    chmod 755 /mnt/target/usr/local/bin/daalu-bootstrap.sh
+                    printf '%s\n' \
+                      '[Unit]' \
+                      'Description=Daalu first-boot kubeadm bootstrap' \
+                      'After=network-online.target' \
+                      'Wants=network-online.target' \
+                      'ConditionPathExists=!/var/lib/daalu-bootstrapped' \
+                      '' \
+                      '[Service]' \
+                      'Type=oneshot' \
+                      'RemainAfterExit=yes' \
+                      'ExecStart=/usr/local/bin/daalu-bootstrap.sh' \
+                      'StandardOutput=journal+console' \
+                      'StandardError=journal+console' \
+                      'TimeoutStartSec=600' \
+                      '' \
+                      '[Install]' \
+                      'WantedBy=multi-user.target' \
+                      > /mnt/target/etc/systemd/system/daalu-bootstrap.service
+                    ln -sf /etc/systemd/system/daalu-bootstrap.service \
+                      /mnt/target/etc/systemd/system/multi-user.target.wants/daalu-bootstrap.service
+                    echo "=== Setting hostname from Hegel ==="
+                    HOSTNAME=$(wget -q -O - "${HEGEL_URL}/2009-04-04/meta-data/local-hostname" 2>/dev/null | tr -d '\n\r ')
+                    [ -n "${HOSTNAME}" ] || HOSTNAME=$(wget -q -O - "${HEGEL_URL}/2009-04-04/meta-data/hostname" 2>/dev/null | tr -d '\n\r ')
+                    echo "Hostname: ${HOSTNAME:-unknown}"
+                    if [ -n "${HOSTNAME}" ]; then
+                      printf '%s\n' "${HOSTNAME}" > /mnt/target/etc/hostname
+                      printf '127.0.0.1\tlocalhost\n127.0.1.1\t%s\n' "${HOSTNAME}" > /mnt/target/etc/hosts
+                    fi
+                    echo "=== Writing netplan (static IPs for all interfaces) ==="
+                    mkdir -p /mnt/target/etc/netplan
+                    rm -f /mnt/target/etc/netplan/*.yaml
+                    # Action containers run in Docker network namespace — must nsenter host netns.
+                    # Write static netplan for every non-loopback interface that has an IPv4 in HookOS.
+                    # SMEE's DHCP OFFER includes siaddr; Ubuntu systemd-networkd refuses to REQUEST
+                    # (treats siaddr as PXE-only) → static netplan bypasses DHCP entirely.
+                    # Only the provisioning NIC gets a default route (via PROVISIONING_GATEWAY).
+                    # All other NICs (e.g. home LAN) get static IPs but no default route, so there
+                    # is exactly one default gateway and it is always the correct pfSense LAN address.
+                    printf 'network:\n  version: 2\n  renderer: networkd\n  ethernets:\n' \
+                      > /mnt/target/etc/netplan/99-daalu-static.yaml
+                    PROV_PREFIX=$(echo "${PROVISIONING_GATEWAY}" | cut -d. -f1-2)
+                    for IFACE in $(nsenter --target 1 --net -- ip -4 addr show | awk '/^[0-9]+:/{split($2,a,":");iface=a[1]} /inet / && iface!="lo"{print iface}'); do
+                      CIDR=$(nsenter --target 1 --net -- ip addr show dev "${IFACE}" | awk '/inet /{print $2; exit}')
+                      [ -n "${CIDR}" ] || continue
+                      MAC=$(nsenter --target 1 --net -- ip link show "${IFACE}" | awk '/link\/ether/{print $2}')
+                      [ -n "${MAC}" ] || continue
+                      IFACE_PREFIX=$(echo "${CIDR}" | cut -d. -f1-2)
+                      if [ "${IFACE_PREFIX}" = "${PROV_PREFIX}" ]; then
+                        GW="${PROVISIONING_GATEWAY}"
+                      else
+                        GW=""
+                      fi
+                      echo "  iface=${IFACE} mac=${MAC} cidr=${CIDR} gw=${GW:-none}"
+                      printf '    %s:\n      match:\n        macaddress: "%s"\n      addresses:\n        - %s\n' \
+                        "${IFACE}" "${MAC}" "${CIDR}" >> /mnt/target/etc/netplan/99-daalu-static.yaml
+                      if [ -n "${GW}" ]; then
+                        printf '      routes:\n        - to: default\n          via: %s\n          metric: 100\n' \
+                          "${GW}" >> /mnt/target/etc/netplan/99-daalu-static.yaml
+                      fi
+                      printf '      nameservers:\n        addresses: [8.8.8.8, 1.1.1.1]\n' \
+                        >> /mnt/target/etc/netplan/99-daalu-static.yaml
+                    done
+                    echo "Netplan written:"
+                    cat /mnt/target/etc/netplan/99-daalu-static.yaml
+                    echo "=== Injecting SSH key for root ==="
+                    mkdir -p /mnt/target/root/.ssh
+                    chmod 700 /mnt/target/root/.ssh
+                    printf '%s\n' "$SSH_PUB_KEY" > /mnt/target/root/.ssh/authorized_keys
+                    chmod 600 /mnt/target/root/.ssh/authorized_keys
+                    echo "=== Injecting SSH key for image user ==="
+                    if [ -d "/mnt/target/home/$IMAGE_USERNAME" ]; then
+                      mkdir -p "/mnt/target/home/$IMAGE_USERNAME/.ssh"
+                      chmod 700 "/mnt/target/home/$IMAGE_USERNAME/.ssh"
+                      printf '%s\n' "$SSH_PUB_KEY" > "/mnt/target/home/$IMAGE_USERNAME/.ssh/authorized_keys"
+                      chmod 600 "/mnt/target/home/$IMAGE_USERNAME/.ssh/authorized_keys"
+                    fi
+                    echo "=== Enabling root SSH login ==="
+                    mkdir -p /mnt/target/etc/ssh/sshd_config.d
+                    echo 'PermitRootLogin yes' > /mnt/target/etc/ssh/sshd_config.d/01-daalu.conf
+                    echo "=== Fetching kubeadm bootstrap user-data from Hegel ==="
+                    mkdir -p /mnt/target/var/lib/cloud/seed/nocloud
+                    mkdir -p /mnt/target/etc/cloud/cloud.cfg.d
+                    wget -q -O /mnt/target/var/lib/cloud/seed/nocloud/user-data \
+                      "${HEGEL_URL}/2009-04-04/user-data" \
+                      || { echo "ERROR: failed to fetch user-data from Hegel at ${HEGEL_URL}"; exit 1; }
+                    printf 'instance-id: %s\nlocal-hostname: %s\n' "${HOSTNAME:-node}" "${HOSTNAME:-node}" > /mnt/target/var/lib/cloud/seed/nocloud/meta-data
+                    # Remove dib (diskimage-builder) configs baked into the image that
+                    # override datasource_list (91-dib > 90-daalu, so dib wins without this).
+                    rm -f /mnt/target/etc/cloud/cloud.cfg.d/91-dib-cloud-init-datasources.cfg
+                    rm -f /mnt/target/etc/cloud/cloud.cfg.d/93-dib-cloud-init-disable-datasource-network-activation.cfg
+                    printf 'datasource_list: [NoCloud, None]\n' > /mnt/target/etc/cloud/cloud.cfg.d/99-daalu-datasource.cfg
+                    # Prevent cloud-init from regenerating /etc/netplan/50-cloud-init.yaml
+                    # on first boot (it recreates the file we deleted, with a hardcoded NIC
+                    # name from the image build env, causing two competing DHCP stanzas and
+                    # breaking the DHCP handshake — DISCOVER→OFFER loop, never REQUEST).
+                    printf 'network:\n  config: disabled\n' > /mnt/target/etc/cloud/cloud.cfg.d/99-disable-network-config.cfg
+                    echo "user-data fetched OK ($(wc -c < /mnt/target/var/lib/cloud/seed/nocloud/user-data) bytes)"
+                    echo "=== Writing vendor-data for console access ==="
+                    printf '#cloud-config\nchpasswd:\n  users:\n    - name: root\n      password: daalu123\n      type: text\n  expire: false\nssh_pwauth: true\n' \
+                      > /mnt/target/var/lib/cloud/seed/nocloud/vendor-data
+                    umount /mnt/target
+                    echo "configure-node complete on $ROOT_PART"
+                environment:
+                  DEST_DISK: "/dev/sda"
+                  SSH_PUB_KEY: "${ SSH_PUB_KEY_CONTENT }"
+                  IMAGE_USERNAME: "${ IMAGE_USERNAME }"
+                  HEGEL_URL: "${ HEGEL_URL }"
+                  PROVISIONING_GATEWAY: "${ PROVISIONING_GATEWAY }"
               - name: reboot
-                image: ghcr.io/tinkerbell/actions/reboot:v0.1.0
+                image: busybox:stable
                 timeout: 90
-                volumes:
-                  - /worker:/worker
+                command:
+                  - sh
+                  - -c
+                  - |
+                    echo "Enabling sysrq and scheduling reboot..."
+                    echo 1 > /proc/sys/kernel/sysrq || true
+                    nsenter --target 1 --pid -- sh -c 'sleep 5 && echo 1 > /proc/sys/kernel/sysrq && echo b > /proc/sysrq-trigger' &
+                    echo "Reboot scheduled. Exiting action cleanly."

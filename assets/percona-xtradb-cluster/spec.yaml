@@ -48,6 +48,22 @@ _percona_xtradb_cluster_spec:
           - name: metrics
             containerPort: 9104
 
+    # Raised from defaults (timeout=5s, failure=3) to survive heavy DDL from
+    # OpenStack DB migrations (neutron creates ~500 tables). The default 5s
+    # timeout is too short under that load, causing spurious liveness kills.
+    # With timeout=30s and failureThreshold=5 the pod must be unresponsive
+    # for ~150s before Kubernetes restarts it — plenty of headroom for DDL
+    # while still catching genuine hangs within a reasonable window.
+    livenessProbes:
+      # 600s initial delay: after a liveness-kill MySQL must crash-recover
+      # all InnoDB tables (can include 500+ neutron tables) before mysqld
+      # is ready. 300s was not sufficient; 600s gives a safe margin.
+      initialDelaySeconds: 600
+      periodSeconds: 10
+      timeoutSeconds: 30
+      failureThreshold: 5
+      successThreshold: 1
+
     nodeSelector:
       openstack-control-plane: enabled
 

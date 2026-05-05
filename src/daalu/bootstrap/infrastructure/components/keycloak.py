@@ -122,9 +122,9 @@ class KeycloakComponent(InfraComponent):
         auth_ns = self.namespace  # expected to be "auth-system"
 
         # ------------------------------------------------------------------
-        # Ensure auth-system namespace exists (idempotent)
+        # Ensure both namespaces exist (idempotent)
         # ------------------------------------------------------------------
-        log.debug(f"Ensuring namespace '{auth_ns}' exists...")
+        log.debug(f"Ensuring namespaces '{auth_ns}' and '{pxc_ns}' exist...")
 
         kubectl.apply_objects(
             [
@@ -134,7 +134,14 @@ class KeycloakComponent(InfraComponent):
                     "metadata": {
                         "name": auth_ns,
                     },
-                }
+                },
+                {
+                    "apiVersion": "v1",
+                    "kind": "Namespace",
+                    "metadata": {
+                        "name": pxc_ns,
+                    },
+                },
             ]
         )
 

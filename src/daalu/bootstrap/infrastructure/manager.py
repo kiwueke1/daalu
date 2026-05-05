@@ -85,6 +85,42 @@ class InfrastructureManager:
         infra_logger.log_event("infra.manager.success")
 
 
+    def teardown(self, components: list[InfraComponent]) -> None:
+        """
+        Tear down infrastructure components in reverse deployment order.
+
+        Each component's teardown_extra hook runs first (removes CRD objects),
+        then helm uninstall removes the chart.  Errors on individual components
+        are logged and teardown continues so all components are attempted.
+        """
+        if not components:
+            return
+
+        kubeconfig_path = components[0].kubeconfig
+        kubeconfig_text = Path(kubeconfig_path).read_text()
+
+        # Stage kubeconfig on the controller node
+        self.ssh.put_text(kubeconfig_text, kubeconfig_path, sudo=True)
+
+        engine = HelmInfraEngine(
+            helm=self.helm,
+            ssh=self.ssh,
+            registry_url=self.registry_url,
+            registry_project=self.registry_project,
+        )
+
+        errors = []
+        for component in reversed(components):
+            try:
+                engine.teardown(component)
+            except Exception as e:
+                log.warning("[teardown] %s failed: %s", component.name, e)
+                errors.append((component.name, e))
+
+        if errors:
+            names = ", ".join(n for n, _ in errors)
+            raise RuntimeError(f"Teardown failed for: {names}")
+
     def pre_install(self, kubectl):
         """Run BEFORE Helm install/upgrade"""
         pass

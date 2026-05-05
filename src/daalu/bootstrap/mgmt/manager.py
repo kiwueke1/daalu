@@ -102,22 +102,28 @@ class MgmtClusterManager:
             # ------------------------------------------------------------------
             from daalu.bootstrap.mgmt.models import BaremetalProvider
 
-            provider = mgmt_cfg.provider
-            log.info("[mgmt] Installing bare-metal provisioning stack (provider: %s)...", provider.value)
-
-            if provider == BaremetalProvider.metal3:
-                Metal3Installer(kubeconfig_path, mgmt_cfg).install()
-
-            elif provider == BaremetalProvider.tinkerbell:
-                from daalu.bootstrap.mgmt.tinkerbell_installer import TinkerbellInstaller
-                TinkerbellInstaller(kubeconfig_path, mgmt_cfg, self._workspace_root).install()
-
-            elif provider == BaremetalProvider.proxmox:
-                from daalu.bootstrap.mgmt.proxmox_installer import ProxmoxInstaller
-                ProxmoxInstaller(kubeconfig_path, mgmt_cfg).install()
-
+            if mgmt_cfg.skip_provisioning_stack:
+                log.info(
+                    "[mgmt] skip_provisioning_stack=True — skipping bare-metal "
+                    "provisioning stack installation (cert-manager, CAPI, provider stack)."
+                )
             else:
-                raise ValueError(f"Unknown bare-metal provider: {provider!r}")
+                provider = mgmt_cfg.provider
+                log.info("[mgmt] Installing bare-metal provisioning stack (provider: %s)...", provider.value)
+
+                if provider == BaremetalProvider.metal3:
+                    Metal3Installer(kubeconfig_path, mgmt_cfg).install()
+
+                elif provider == BaremetalProvider.tinkerbell:
+                    from daalu.bootstrap.mgmt.tinkerbell_installer import TinkerbellInstaller
+                    TinkerbellInstaller(kubeconfig_path, mgmt_cfg, self._workspace_root).install()
+
+                elif provider == BaremetalProvider.proxmox:
+                    from daalu.bootstrap.mgmt.proxmox_installer import ProxmoxInstaller
+                    ProxmoxInstaller(kubeconfig_path, mgmt_cfg).install()
+
+                else:
+                    raise ValueError(f"Unknown bare-metal provider: {provider!r}")
 
             # ------------------------------------------------------------------
             # 6. Deploy Harbor (optional)
@@ -158,6 +164,26 @@ class MgmtClusterManager:
                     "[mgmt] install_harbor=true but no 'registry:' block found in config. "
                     "Add a registry block to cluster.yaml to enable Harbor deployment."
                 )
+
+            # ------------------------------------------------------------------
+            # 7. Install Temporal control plane (server + daalu worker + UI)
+            # ------------------------------------------------------------------
+            # Runs after Harbor so the worker image is fetchable from the local
+            # registry. Configurable via mgmt_cluster.temporal.* in cluster.yaml.
+            if mgmt_cfg.temporal and mgmt_cfg.temporal.enabled:
+                from daalu.bootstrap.mgmt.temporal_installer import TemporalInstaller
+                try:
+                    TemporalInstaller(
+                        kubeconfig_path=kubeconfig_path,
+                        cfg=mgmt_cfg,
+                        workspace_root=self._workspace_root,
+                    ).install()
+                except Exception as exc:  # noqa: BLE001
+                    log.error(
+                        "[mgmt] Temporal install failed (non-fatal — daalu CLI "
+                        "still works): %s",
+                        exc,
+                    )
 
         finally:
             client.close()

@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "daalu-worker.fullname" . }}
+  labels:
+    {{- include "daalu-worker.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  # Worker keeps long-lived activity state — replace one at a time.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "daalu-worker.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "daalu-worker.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      serviceAccountName: {{ include "daalu-worker.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      # The worker needs to run on the same node where daalu mgmt placed
+      # the workspace, kubeconfig, and ssh keys. Pin it.
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: worker
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: TEMPORAL_ADDRESS
+              value: {{ .Values.temporal.address | quote }}
+            - name: TEMPORAL_NAMESPACE
+              value: {{ .Values.temporal.namespace | quote }}
+            - name: DAALU_TASK_QUEUE
+              value: {{ .Values.temporal.taskQueue | quote }}
+            - name: DAALU_WORKER_THREADS
+              value: {{ .Values.threads | quote }}
+            - name: WORKSPACE_ROOT
+              value: /workspace
+            - name: KUBECONFIG
+              value: /root/.kube/daalu-mgmt-config
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+            - name: mgmt-kubeconfig
+              mountPath: /root/.kube/daalu-mgmt-config
+              readOnly: true
+            - name: ssh-keys
+              mountPath: /root/.ssh
+              readOnly: true
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          # Liveness: the worker process should be running. Cheap probe —
+          # we verify the daalu-worker entrypoint is alive via /proc.
+          livenessProbe:
+            exec:
+              command: ["/bin/sh", "-c", "pgrep -f daalu-worker >/dev/null"]
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 3
+      volumes:
+        - name: workspace
+          hostPath:
+            path: {{ .Values.workspace.hostPath }}
+            type: Directory
+        - name: mgmt-kubeconfig
+          hostPath:
+            path: {{ .Values.mgmtKubeconfig.hostPath }}
+            type: File
+        - name: ssh-keys
+          hostPath:
+            path: {{ .Values.sshKeys.hostPath }}
+            type: Directory

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: daalu-worker
+description: Temporal worker that runs Daalu workflows (deploy / clean / mirror-images).
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

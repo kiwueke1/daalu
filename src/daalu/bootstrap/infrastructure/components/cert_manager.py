@@ -249,13 +249,43 @@ class CertManagerComponent(InfraComponent):
     # -------------------------
 
     def post_install(self, kubectl) -> None:
+        import time
+
         cfg = self._load_config()
 
+        # The webhook pod reports Ready before its HTTPS server is actually
+        # listening. Retry applying resources until the webhook accepts connections.
+        def _apply_with_retry(content: str, remote_path: str, retries: int = 10, delay: int = 10) -> None:
+            for attempt in range(1, retries + 1):
+                try:
+                    kubectl.apply_content(content=content, remote_path=remote_path)
+                    return
+                except Exception as e:
+                    if "connection refused" in str(e) and attempt < retries:
+                        log.info(
+                            "[cert-manager] Webhook not ready yet (attempt %d/%d), retrying in %ds...",
+                            attempt, retries, delay,
+                        )
+                        time.sleep(delay)
+                    else:
+                        raise
+
         # 1) Cloudflare token secret (cert-manager namespace)
-        kubectl.apply_content(
+        _apply_with_retry(
             content=self._dump_multi([self._cloudflare_secret(token=cfg.cloudflare_api_token)]),
             remote_path="/tmp/cert-manager-cloudflare-secret.yaml",
         )
+
+        # 1b) Drop any stale ACME account keys from a previous cluster install.
+        # cert-manager (re)creates these automatically on first ClusterIssuer sync.
+        # The key secret is named after the issuer (privateKeySecretRef.name = issuer name).
+        # If a leftover key exists, Let's Encrypt may reject it with
+        # "Account ID doesn't match ID for authorization", breaking cert issuance.
+        for issuer in cfg.cluster_issuers:
+            kubectl._run(
+                f"delete secret {issuer.name}"
+                " -n cert-manager --ignore-not-found"
+            )
 
         # 2) ClusterIssuers
         issuer_docs = [
@@ -267,7 +297,7 @@ class CertManagerComponent(InfraComponent):
             )
             for i in cfg.cluster_issuers
         ]
-        kubectl.apply_content(
+        _apply_with_retry(
             content=self._dump_multi(issuer_docs),
             remote_path="/tmp/cert-manager-cluster-issuers.yaml",
         )
@@ -276,7 +306,7 @@ class CertManagerComponent(InfraComponent):
         ns_names = sorted({c.namespace for c in cfg.certificates if c.namespace})
         ns_docs = [self._namespace(n) for n in ns_names]
         if ns_docs:
-            kubectl.apply_content(
+            _apply_with_retry(
                 content=self._dump_multi(ns_docs),
                 remote_path="/tmp/cert-manager-namespaces.yaml",
             )
@@ -284,7 +314,7 @@ class CertManagerComponent(InfraComponent):
         # 4) Certificates
         cert_docs = [self._certificate(c) for c in cfg.certificates]
         if cert_docs:
-            kubectl.apply_content(
+            _apply_with_retry(
                 content=self._dump_multi(cert_docs),
                 remote_path="/tmp/cert-manager-certificates.yaml",
             )
@@ -292,6 +322,22 @@ class CertManagerComponent(InfraComponent):
         # 5) Optional: Argo CD onboarding (kept, but off by default)
         if cfg.argocd_onboard.enabled:
             self._maybe_onboard_argocd_app(kubectl, cfg)
+
+    def teardown_extra(self, kubectl) -> None:
+        """Delete cert-manager CRD objects created in post_install."""
+        for kind in ("certificate", "clusterissuer"):
+            rc, out, _ = kubectl._run(
+                f"get {kind}.cert-manager.io -A -o name --ignore-not-found"
+            )
+            if rc == 0 and out.strip():
+                for resource in out.strip().splitlines():
+                    log.debug("[cert-manager] Deleting %s", resource)
+                    kubectl._run(f"delete {resource} -A --ignore-not-found")
+
+        kubectl._run(
+            "delete secret cloudflare-api-token-secret"
+            " -n cert-manager --ignore-not-found"
+        )
 
     def _maybe_onboard_argocd_app(self, kubectl, cfg: CertManagerConfig) -> None:
         """

@@ -3,4 +3,6 @@ Name: daalu
 Version: 0
 Classifier: Private :: Do Not Upload
 License-File: LICENSE
+Provides-Extra: worker
+Requires-Dist: temporalio>=1.6.0; extra == "worker"
 Dynamic: license-file

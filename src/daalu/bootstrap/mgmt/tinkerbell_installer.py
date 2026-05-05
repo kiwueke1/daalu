@@ -22,12 +22,19 @@ class TinkerbellInstaller:
     Installation sequence:
       1. cert-manager              — TLS certificate management (Helm, local chart)
       2. CAPI core                 — Cluster API + kubeadm bootstrap/control-plane providers
-      3. CAPT                      — Cluster API Provider Tinkerbell (bundles Rufio for BMC)
-      4. Tinkerbell stack (Helm)   — Tink Server, Hegel (metadata), SMEE (DHCP/iPXE)
-      5. SMEE DHCP config          — Patch SMEE with provisioning IP and DHCP range
+      3. Tinkerbell stack (Helm)   — Tink Server, Hegel (metadata), SMEE (DHCP/iPXE), Rufio CRDs
+                                     MUST precede CAPT: CAPT controller watches Workflow/Job CRDs
+                                     on startup; without them it crashes into CrashLoopBackOff
+      4. SMEE DHCP config          — Patch SMEE with provisioning IP and DHCP range
+      5. CAPT                      — Cluster API Provider Tinkerbell (bundles Rufio for BMC)
       6. Image server              — nginx pod serving OS images over the provisioning IP
-      7. Hardware registration     — Apply Hardware CRs for each bare-metal node
-      8. OS provisioning template  — Apply Tinkerbell Template CR (image2disk + cexec + reboot)
+      7. Hegel externalIPs         — Expose Hegel on provisioning IP so bare-metal HookOS nodes
+                                     can reach it (ClusterIPs are not reachable from bare metal)
+      8. Hardware registration     — Apply Hardware CRs for each bare-metal node
+      9. OS provisioning template  — Apply Tinkerbell Template CR (image2disk + cexec + reboot)
+     10. Workflow CRs              — Apply per-node Workflow CRs
+     11. Node power-on             — Rufio Job CRs: set PXE boot once, then power on via BMC
+     12. Post-provision reboot     — Wait for STATE_SUCCESS, disable PXE, Rufio power-cycle into OS
 
     All operations run locally via subprocess using a kubeconfig that
     points at the remote mgmt cluster.
@@ -43,17 +50,37 @@ class TinkerbellInstaller:
     # ------------------------------------------------------------------
 
     def install(self) -> None:
-        """Run the full Tinkerbell stack installation."""
+        """Run the full Tinkerbell stack installation.
+
+        Steps 1-7 set up the Tinkerbell infrastructure and register Hardware CRs
+        with allowPXE=true.  Standalone OS provisioning (Template/Workflow CRs,
+        Rufio power-on, post-provision reboot) is intentionally omitted because
+        CAPT handles all of that automatically via its templateOverride when
+        ``daalu deploy --install cluster-api`` applies the CAPI manifests.
+
+        Sequence:
+          1. cert-manager
+          2. CAPI core
+          3. Tinkerbell stack (Tink, Hegel, SMEE) — must precede CAPT so that
+             Workflow/Job CRDs exist before the CAPT controller starts
+          4. SMEE DHCP config
+          5. CAPT (bundles Rufio) — installed after Tinkerbell CRDs are present
+          6. Image server (nginx serving OS images over provisioning IP)
+          7. Hegel externalIPs patch — makes Hegel reachable from bare-metal nodes
+          8. Hardware CRs + Rufio Machine CRs + BMC Secrets
+        """
         self._install_cert_manager()
         self._install_capi()
-        self._install_capt()
         self._install_tinkerbell_stack()
         self._configure_smee()
+        self._install_capt()
         self._deploy_image_server()
+        self._patch_hegel_service()
         self._register_hardware()
-        self._create_os_template()
-        self._create_workflows()
-        log.info("[mgmt/tinkerbell] Tinkerbell stack installed successfully")
+        log.info(
+            "[mgmt/tinkerbell] Tinkerbell stack installed and hardware registered. "
+            "Run 'daalu deploy --install cluster-api' to provision workload nodes via CAPT."
+        )
 
     # ------------------------------------------------------------------
     # Step 1 — cert-manager (Helm, local chart)
@@ -237,6 +264,11 @@ class TinkerbellInstaller:
             "--create-namespace",
             "--set", f"global.publicIP={ip}",
             "--set", f"global.trustedProxies={{{self._cfg.pod_cidr}}}",
+            # Use ClusterRole so tink-controller and tink-server watch ALL namespaces.
+            # CAPT creates Workflow/Template CRs in the cluster namespace (e.g. "default"),
+            # not in "tinkerbell".  Without ClusterRole, tink-controller ignores those
+            # CRs and the tink-worker in HookOS never receives workflow actions.
+            "--set", "global.rbac.type=ClusterRole",
             "--wait",
             "--timeout", "10m",
         )
@@ -301,11 +333,51 @@ class TinkerbellInstaller:
 
         log.info("[mgmt/tinkerbell] SMEE DHCP config applied")
 
+    def _patch_hegel_service(self) -> None:
+        """
+        Patch the Hegel Service to add the provisioning IP as an ExternalIP.
+
+        Hegel's Service is ClusterIP-only by default. Bare-metal nodes running
+        HookOS are outside the Kubernetes cluster and cannot reach ClusterIPs.
+        The configure-node workflow action fetches kubeadm user-data from Hegel
+        via HTTP — without this patch the wget hangs until timeout and the
+        workflow fails.
+
+        This patch must be reapplied after every Tinkerbell stack reinstall
+        because Helm recreates the Service without the ExternalIP.
+        """
+        ip = self._cfg.provisioning_ip or self._cfg.host
+        log.info("[mgmt/tinkerbell] Patching Hegel service with externalIPs=[%s]...", ip)
+
+        import json as _json
+        patch = _json.dumps({"spec": {"externalIPs": [ip]}})
+
+        r = subprocess.run(
+            ["kubectl", "--kubeconfig", self._kc,
+             "-n", "tinkerbell",
+             "patch", "svc", "hegel",
+             "--type=strategic",
+             f"--patch={patch}"],
+            capture_output=True, text=True,
+        )
+        if r.returncode != 0:
+            log.warning(
+                "[mgmt/tinkerbell] Failed to patch Hegel service: %s", r.stderr.strip()
+            )
+        else:
+            log.info("[mgmt/tinkerbell] Hegel reachable at http://%s:50061", ip)
+
     def _register_hardware(self) -> None:
         """
         Apply a Tinkerbell Hardware CR for each bare-metal node in cfg.hardware.
 
-        Hardware CRs are the Tinkerbell equivalent of Metal3 BareMetalHost CRs.
+        Hardware CRs are placed in cfg.cluster_namespace (default: "default") so that
+        CAPT-created Workflow/Template CRs in the same namespace can reference them.
+        Rufio Machine (BMC) CRs and their Secrets are placed in the same namespace.
+
+        tink-controller/tink-server must have ClusterRole RBAC to watch these CRs
+        (set via ``global.rbac.type=ClusterRole`` in the Tinkerbell Helm chart).
+
         The apply is idempotent — existing CRs are updated in-place.
         """
         if not self._cfg.hardware:
@@ -314,15 +386,17 @@ class TinkerbellInstaller:
 
         import yaml as _yaml
 
+        hw_ns = self._cfg.cluster_namespace
+
         for hw in self._cfg.hardware:
-            log.info("[mgmt/tinkerbell] Registering hardware: %s (%s)", hw.name, hw.mac)
+            log.info("[mgmt/tinkerbell] Registering hardware: %s (%s) in ns=%s", hw.name, hw.mac, hw_ns)
 
             cr = {
                 "apiVersion": "tinkerbell.org/v1alpha1",
                 "kind": "Hardware",
                 "metadata": {
                     "name": hw.name,
-                    "namespace": "tinkerbell",
+                    "namespace": hw_ns,
                 },
                 "spec": {
                     "bmcRef": {
@@ -331,6 +405,12 @@ class TinkerbellInstaller:
                         "name": hw.name,
                     },
                     "disks": [{"device": hw.disk}],
+                    "metadata": {
+                        "instance": {
+                            "id": hw.mac,
+                            "hostname": hw.name,
+                        }
+                    },
                     "interfaces": [
                         {
                             "dhcp": {
@@ -359,14 +439,14 @@ class TinkerbellInstaller:
                 "kind": "Machine",
                 "metadata": {
                     "name": hw.name,
-                    "namespace": "tinkerbell",
+                    "namespace": hw_ns,
                 },
                 "spec": {
                     "connection": {
                         "host": hw.bmc_endpoint,
                         "authSecretRef": {
                             "name": f"{hw.name}-bmc-secret",
-                            "namespace": "tinkerbell",
+                            "namespace": hw_ns,
                         },
                         "insecureTLS": True,
                     }
@@ -378,7 +458,7 @@ class TinkerbellInstaller:
                 "kind": "Secret",
                 "metadata": {
                     "name": f"{hw.name}-bmc-secret",
-                    "namespace": "tinkerbell",
+                    "namespace": hw_ns,
                 },
                 "stringData": {
                     "username": hw.bmc_username,
@@ -569,9 +649,303 @@ class TinkerbellInstaller:
 
         for wf_path in yamls:
             log.info("[mgmt/tinkerbell] Applying workflow: %s", wf_path.name)
+            # Delete first so stale STATE_PENDING/FAILED workflows from aborted
+            # runs don't survive — apply would leave them unchanged and the
+            # node would never PXE boot.
+            self._kubectl(
+                "delete", "-f", str(wf_path),
+                "--ignore-not-found",
+            )
             self._kubectl("apply", "-f", str(wf_path))
 
         log.info("[mgmt/tinkerbell] %d workflow(s) applied", len(yamls))
+
+    # ------------------------------------------------------------------
+    # Step 10 — Power on bare-metal nodes via Rufio BMC Jobs
+    # ------------------------------------------------------------------
+
+    def _power_on_nodes(self) -> None:
+        """
+        For each hardware node create a Rufio Job CR that:
+          1. Sets the one-time boot device to PXE (ephemeral — reverts to disk
+             after the first boot so the OS boots normally thereafter).
+          2. Powers the machine on via its BMC.
+
+        Rufio (bundled with CAPT) translates these tasks into Redfish/IPMI
+        calls using the credentials stored in each {name}-bmc-secret.
+
+        Idempotent: if a Job with the same name already exists it is left in
+        place (the node has already been told to power on).
+
+        Waits up to 5 minutes per node for the Job to reach a terminal state
+        (Completed or Failed) so callers know the BMC command was accepted
+        before returning.
+        """
+        if not self._cfg.hardware:
+            return
+
+        import yaml as _yaml
+
+        hw_ns = self._cfg.cluster_namespace
+
+        for hw in self._cfg.hardware:
+            job_name = f"{hw.name}-pxe-poweron"
+
+            # Delete any existing Job so we always send a fresh power-on —
+            # a stale completed Job means the node may not have actually booted.
+            subprocess.run(
+                ["kubectl", "--kubeconfig", self._kc,
+                 "delete", "job.bmc.tinkerbell.org", job_name,
+                 "-n", hw_ns, "--ignore-not-found"],
+                capture_output=True,
+            )
+
+            log.info(
+                "[mgmt/tinkerbell] Creating Rufio Job %s — PXE boot %s via %s",
+                job_name, hw.name, hw.bmc_endpoint,
+            )
+
+            job = {
+                "apiVersion": "bmc.tinkerbell.org/v1alpha1",
+                "kind": "Job",
+                "metadata": {
+                    "name": job_name,
+                    "namespace": hw_ns,
+                },
+                "spec": {
+                    "machineRef": {
+                        "name": hw.name,
+                        "namespace": hw_ns,
+                    },
+                    "tasks": [
+                        {"powerAction": "off"},
+                        {
+                            "oneTimeBootDeviceAction": {
+                                "device": ["pxe"],
+                                "efiBoot": hw.uefi,
+                            }
+                        },
+                        {"powerAction": "on"},
+                    ],
+                },
+            }
+
+            subprocess.run(
+                ["kubectl", "--kubeconfig", self._kc, "apply", "-f", "-"],
+                input=_yaml.dump(job),
+                text=True,
+                check=True,
+            )
+
+        # Wait for each Job to reach a terminal state
+        for hw in self._cfg.hardware:
+            self._wait_for_rufio_job(f"{hw.name}-pxe-poweron", hw.name)
+
+        log.info("[mgmt/tinkerbell] Node power-on sequence complete")
+
+    # ------------------------------------------------------------------
+    # Step 11 — Reboot provisioned nodes into the installed OS
+    # ------------------------------------------------------------------
+
+    def _reboot_provisioned_nodes(self) -> None:
+        """
+        After provisioning workflows complete, boot nodes into the installed OS.
+
+        The HookOS workflow template includes a kernel sysrq reboot action, but
+        because the Hardware CR still has ``netboot.allowPXE: true``, SMEE
+        responds to the node's next DHCP/PXE request and loads HookOS again —
+        the node loops back into the provisioner instead of booting Ubuntu.
+
+        This method fixes that by:
+          1. Waiting for each Workflow CR to reach STATE_SUCCESS (up to 45 min
+             to allow for large image downloads and disk writes).
+          2. Patching the corresponding Hardware CR to set allowPXE=false so
+             SMEE stops serving iPXE to that node.
+          3. Creating a Rufio Job with ``powerAction: cycle`` to hard-reboot
+             the node via BMC — since the one-time PXE override from power-on
+             was already consumed, the node boots from disk (Ubuntu).
+
+        Idempotent: existing reboot Jobs are left in place.
+        """
+        if not self._cfg.hardware:
+            return
+
+        import time as _time
+        import json as _json
+        import yaml as _yaml
+
+        provisioning_timeout = 45 * 60  # 45 minutes — image download + dd can be slow
+
+        for hw in self._cfg.hardware:
+            workflow_name = f"{hw.name}-provision"
+            log.info(
+                "[mgmt/tinkerbell] Waiting for workflow %s to reach STATE_SUCCESS "
+                "(timeout %ds)...",
+                workflow_name, provisioning_timeout,
+            )
+
+            deadline = _time.time() + provisioning_timeout
+            succeeded = False
+
+            while _time.time() < deadline:
+                r = subprocess.run(
+                    ["kubectl", "--kubeconfig", self._kc,
+                     "get", "workflow", workflow_name,
+                     "-n", "tinkerbell",
+                     "-o", "jsonpath={.status.state}"],
+                    capture_output=True, text=True,
+                )
+                if r.returncode == 0:
+                    state = r.stdout.strip()
+                    if state == "STATE_SUCCESS":
+                        log.info(
+                            "[mgmt/tinkerbell] Workflow %s completed successfully",
+                            workflow_name,
+                        )
+                        succeeded = True
+                        break
+                    if state == "STATE_FAILED":
+                        log.warning(
+                            "[mgmt/tinkerbell] Workflow %s reached STATE_FAILED — "
+                            "skipping reboot for %s",
+                            workflow_name, hw.name,
+                        )
+                        break
+                    log.debug(
+                        "[mgmt/tinkerbell] Workflow %s state=%s — waiting...",
+                        workflow_name, state or "(pending)",
+                    )
+                _time.sleep(15)
+            else:
+                log.warning(
+                    "[mgmt/tinkerbell] Timed out waiting for workflow %s — "
+                    "skipping reboot for %s",
+                    workflow_name, hw.name,
+                )
+
+            if not succeeded:
+                continue
+
+            # Patch Hardware CR: disable PXE so SMEE no longer intercepts boots.
+            # Must use --type=json with targeted path operations — --type=merge on
+            # an array field replaces the entire interfaces[0] element, wiping the
+            # dhcp section and breaking subsequent CAPT reconciliation.
+            log.info(
+                "[mgmt/tinkerbell] Disabling PXE on Hardware CR %s ...", hw.name,
+            )
+            pxe_patch = _json.dumps([
+                {"op": "replace", "path": "/spec/interfaces/0/netboot/allowPXE",      "value": False},
+                {"op": "replace", "path": "/spec/interfaces/0/netboot/allowWorkflow", "value": False},
+            ])
+            r = subprocess.run(
+                ["kubectl", "--kubeconfig", self._kc,
+                 "-n", "tinkerbell",
+                 "patch", "hardware", hw.name,
+                 "--type=json",
+                 f"--patch={pxe_patch}"],
+                capture_output=True, text=True,
+            )
+            if r.returncode != 0:
+                log.warning(
+                    "[mgmt/tinkerbell] Failed to patch Hardware CR %s: %s",
+                    hw.name, r.stderr.strip(),
+                )
+
+            # BMC power cycle — boots into Ubuntu (disk) since one-time PXE override
+            # from the initial power-on was already consumed
+            job_name = f"{hw.name}-post-provision-reboot"
+
+            existing = subprocess.run(
+                ["kubectl", "--kubeconfig", self._kc,
+                 "get", "job.bmc.tinkerbell.org", job_name,
+                 "-n", "tinkerbell"],
+                capture_output=True,
+            )
+            if existing.returncode == 0:
+                log.info(
+                    "[mgmt/tinkerbell] Rufio reboot Job %s already exists — skipping",
+                    job_name,
+                )
+                continue
+
+            log.info(
+                "[mgmt/tinkerbell] Creating Rufio Job %s — power-cycling %s into Ubuntu",
+                job_name, hw.name,
+            )
+            reboot_job = {
+                "apiVersion": "bmc.tinkerbell.org/v1alpha1",
+                "kind": "Job",
+                "metadata": {
+                    "name": job_name,
+                    "namespace": "tinkerbell",
+                },
+                "spec": {
+                    "machineRef": {
+                        "name": hw.name,
+                        "namespace": "tinkerbell",
+                    },
+                    "tasks": [
+                        {"powerAction": "cycle"},
+                    ],
+                },
+            }
+            subprocess.run(
+                ["kubectl", "--kubeconfig", self._kc, "apply", "-f", "-"],
+                input=_yaml.dump(reboot_job),
+                text=True,
+                check=True,
+            )
+            self._wait_for_rufio_job(job_name, hw.name)
+
+        log.info("[mgmt/tinkerbell] Post-provisioning reboot sequence complete")
+
+    def _wait_for_rufio_job(self, job_name: str, node_name: str, timeout: int = 300) -> None:
+        """
+        Poll a Rufio Job until it reaches Completed or Failed, or until
+        *timeout* seconds elapse.  Logs a warning (does not raise) on
+        failure or timeout so the install can continue — the node may
+        still boot if the BMC command was sent before the error.
+        """
+        import time as _time
+        import json as _json
+
+        log.info("[mgmt/tinkerbell] Waiting for Rufio Job %s ...", job_name)
+        deadline = _time.time() + timeout
+
+        while _time.time() < deadline:
+            r = subprocess.run(
+                ["kubectl", "--kubeconfig", self._kc,
+                 "get", "job.bmc.tinkerbell.org", job_name,
+                 "-n", "tinkerbell",
+                 "-o", "jsonpath={.status.conditions}"],
+                capture_output=True, text=True,
+            )
+
+            if r.returncode == 0 and r.stdout.strip():
+                try:
+                    for cond in _json.loads(r.stdout):
+                        if cond.get("type") == "Completed" and cond.get("status") == "True":
+                            log.info(
+                                "[mgmt/tinkerbell] Rufio Job %s completed — %s is powering on",
+                                job_name, node_name,
+                            )
+                            return
+                        if cond.get("type") == "Failed" and cond.get("status") == "True":
+                            log.warning(
+                                "[mgmt/tinkerbell] Rufio Job %s FAILED for %s: %s",
+                                job_name, node_name, cond.get("message", "(no message)"),
+                            )
+                            return
+                except Exception:
+                    log.exception("[mgmt/tinkerbell] Error parsing Rufio Job status for %s", job_name)
+
+            _time.sleep(5)
+
+        log.warning(
+            "[mgmt/tinkerbell] Rufio Job %s did not reach a terminal state within %ds — "
+            "check BMC connectivity for %s",
+            job_name, timeout, node_name,
+        )
 
     # ------------------------------------------------------------------
     # Helpers

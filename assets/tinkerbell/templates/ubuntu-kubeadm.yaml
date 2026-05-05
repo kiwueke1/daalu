@@ -65,32 +65,12 @@ spec:
                 echo "{{.hostname}}" > /mnt/target/etc/hostname
                 printf "127.0.0.1\tlocalhost\n127.0.1.1\t{{.hostname}}\n" > /mnt/target/etc/hosts
 
-                echo "=== Configuring networking via netplan ==="
+                echo "=== Configuring networking via netplan (static IP) ==="
                 mkdir -p /mnt/target/etc/netplan
-                cat > /mnt/target/etc/netplan/99-daalu-all-dhcp.yaml << NETEOF
-                network:
-                  version: 2
-                  renderer: networkd
-                  ethernets:
-                    all-en-dhcp:
-                      match:
-                        name: "en*"
-                        macaddress: "{{.prov_mac}}"
-                      addresses:
-                        - {{.prov_ip}}/{{.prov_prefix}}
-                      dhcp4: false
-                      dhcp6: false
-                    all-en-mgmt:
-                      match:
-                        name: "en*"
-                      dhcp4: true
-                      dhcp6: false
-                    all-eth:
-                      match:
-                        name: "eth*"
-                      dhcp4: true
-                      dhcp6: false
-                NETEOF
+                rm -f /mnt/target/etc/netplan/*.yaml
+                printf 'network:\n  version: 2\n  renderer: networkd\n  ethernets:\n    prov-iface:\n      match:\n        macaddress: "%s"\n      addresses:\n        - %s/%s\n      routes:\n        - to: default\n          via: %s\n      nameservers:\n        addresses: [8.8.8.8, 1.1.1.1]\n' \
+                  "{{.prov_mac}}" "{{.prov_ip}}" "{{.prov_prefix}}" "$(ip route | awk '/default/{print $3; exit}')" \
+                  > /mnt/target/etc/netplan/99-daalu-static.yaml
                 echo "Netplan config written."
 
                 echo "=== Injecting SSH key for root ==="
@@ -138,6 +118,7 @@ spec:
                 echo "=== Disabling cloud-init datasource wait ==="
                 mkdir -p /mnt/target/etc/cloud/cloud.cfg.d
                 echo 'datasource_list: [NoCloud, None]' > /mnt/target/etc/cloud/cloud.cfg.d/90-datasource.cfg
+                printf 'network:\n  config: disabled\n' > /mnt/target/etc/cloud/cloud.cfg.d/99-disable-network-config.cfg
 
                 echo "=== Summary ==="
                 echo "Hostname: $(cat /mnt/target/etc/hostname)"

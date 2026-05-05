@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import os
+import shlex
 import subprocess
 from pathlib import Path
 from typing import Optional, List, Set, Tuple
@@ -33,6 +34,9 @@ from daalu.bootstrap.infrastructure.models import parse_infra_flag
 from daalu.bootstrap.csi.manager import CSIManager
 from daalu.bootstrap.csi.models import CSIConfig
 
+from daalu.bootstrap.rgw.manager import RGWManager
+from daalu.bootstrap.rgw.models import RGWConfig
+
 from daalu.cli.helper import (
     inventory_path,
     read_hosts_from_inventory,
@@ -43,6 +47,7 @@ from daalu.cli.helper import (
 
 from daalu.utils.execution import ExecutionContext
 from daalu.utils.ssh_runner import SSHRunner
+from daalu.utils.helpers import update_hosts_and_inventory
 
 from daalu.logging.log import init_logging
 from daalu.observers.console import ConsoleObserver
@@ -60,9 +65,6 @@ from daalu.bootstrap.openstack.manager import OpenStackManager
 from daalu.bootstrap.registry.manager import RegistryManager
 from daalu.bootstrap.mgmt.manager import MgmtClusterManager
 from daalu.bootstrap.mgmt.cleaner import MgmtClusterCleaner
-from daalu.bootstrap.ai.manager import AIManager
-from daalu.bootstrap.ai.registry import build_ai_components
-from daalu.bootstrap.ai.models import parse_ai_flag
 
 
 
@@ -88,9 +90,17 @@ ALL_TARGETS: Set[str] = {
     "nodes",
     "ceph",
     "csi",
+    "rgw",
     "infrastructure",
     "monitoring",
     "openstack",
+}
+
+# Targets that are implied by another target. When the LHS is in the install
+# plan, every target on the RHS is added too. This keeps `--install csi` doing
+# what users intuitively expect: block storage AND object storage.
+IMPLIED_TARGETS: dict[str, Set[str]] = {
+    "csi": {"rgw"},
 }
 
 
@@ -119,6 +129,11 @@ def resolve_install_plan(install: Optional[str]) -> Set[str]:
             f"Unknown install targets: {', '.join(sorted(unknown))}\n"
             f"Valid targets: {', '.join(sorted(ALL_TARGETS))}"
         )
+
+    # Expand implied targets (e.g. csi → also rgw)
+    for target, implied in IMPLIED_TARGETS.items():
+        if target in items:
+            items |= implied
 
     return items
 
@@ -224,15 +239,59 @@ def deploy_cluster_api_tinkerbell(
     cfg,
     workspace_root: Path,
     mgmt_context: Optional[str],
-) -> None:
+) -> bool:
     """
-    Deploy a CAPT-backed workload cluster by applying the Tinkerbell
-    cluster-api manifests from assets/tinkerbell/cluster-api/.
+    Deploy a CAPT-backed workload cluster:
+      1. Apply manifests from assets/tinkerbell/cluster-api/ (substituting ${ VAR } placeholders)
+      2. Phase 1 — provision control-plane node(s) via Rufio + wait for workflow success
+      3. Wait for KCP to initialize (kubeadm init)
+      4. Fetch workload kubeconfig + install Cilium CNI
+      5. Phase 2 — provision worker node(s)
+      6. Wait for cluster to be fully ready
 
-    The manifests use the same ${ VAR } substitution style as the Metal3
-    templates and are applied via kubectl against the mgmt cluster context.
+    Returns True if cluster became ready, False on timeout.
     """
+    import re
     import subprocess as _sp
+    from daalu.bootstrap.mgmt.capt_provisioner import (
+        provision_phase,
+        wait_for_kcp_initialized,
+        wait_for_kcp_ready,
+        fetch_workload_kubeconfig,
+        install_cilium,
+        wait_for_workload_api_server_stable,
+        wait_for_cluster_ready,
+    )
+
+    ca = cfg.cluster_api
+    if ca is None:
+        raise RuntimeError("cluster_api config block is required for Tinkerbell CAPI deploy")
+
+    substitutions = {
+        "CLUSTER_NAME": ca.cluster_name,
+        "NAMESPACE": ca.namespace,
+        "SERVICE_CIDR": ca.service_cidr,
+        "POD_CIDR": ca.pod_cidr,
+        "CLUSTER_APIENDPOINT_HOST": ca.control_plane_vip,
+        "IMAGE_URL": ca.image_url,
+        "KUBERNETES_VERSION": ca.kubernetes_version,
+        "CONTROL_PLANE_MACHINE_COUNT": str(ca.control_plane_replicas),
+        "WORKER_MACHINE_COUNT": str(ca.worker_replicas),
+        "IMAGE_USERNAME": ca.image_username,
+        "SSH_PUB_KEY_CONTENT": ca.ssh_public_key,
+        "HEGEL_URL": f"{getattr(ca, 'ironic_http_base', 'http://10.10.0.9').rstrip('/')}:50061",
+        "PROVISIONING_GATEWAY": getattr(ca, 'provisioning_gateway', '10.10.0.100'),
+    }
+
+    def _substitute(text: str) -> str:
+        def _replace(m: re.Match) -> str:
+            key = m.group(1).strip()
+            if key not in substitutions:
+                raise KeyError(
+                    f"No substitution value for '${{ {key} }}' in Tinkerbell CAPI manifest"
+                )
+            return substitutions[key]
+        return re.sub(r'\$\{\s+(\w+)\s+\}', _replace, text)
 
     manifests_dir = workspace_root / "assets" / "tinkerbell" / "cluster-api"
     kubeconfig = (
@@ -244,14 +303,138 @@ def deploy_cluster_api_tinkerbell(
     kc_args = ["--kubeconfig", kubeconfig] if kubeconfig else []
     ctx_args = ["--context", mgmt_context] if mgmt_context else []
 
+    ns = ca.namespace
+    if ns and ns != "default":
+        _sp.run(
+            ["kubectl", *kc_args, *ctx_args, "apply", "-f", "-"],
+            input=f"apiVersion: v1\nkind: Namespace\nmetadata:\n  name: {ns}\n",
+            text=True, check=True,
+        )
+
     for manifest in sorted(manifests_dir.glob("*.yaml")):
         typer.echo(f"  [tinkerbell] Applying {manifest.name}...")
         _sp.run(
-            ["kubectl", *kc_args, *ctx_args, "apply", "-f", str(manifest)],
-            check=True,
+            ["kubectl", *kc_args, *ctx_args, "apply", "-f", "-"],
+            input=_substitute(manifest.read_text()),
+            text=True, check=True,
+        )
+    typer.secho("  [tinkerbell] Cluster API manifests applied.", fg=typer.colors.GREEN)
+
+    # CAPT names worker workflows after the MachineDeployment, which always contains
+    # "-workers-" (e.g. auto-openstack-infra-workers-ldl9c-pw5jf).  Control-plane
+    # workflows do not contain this token.  Use these filters to scope each phase
+    # correctly on both first runs and idempotent re-runs.
+    worker_wf_token = f"{ca.cluster_name}-workers-"
+
+    typer.echo("\n  [tinkerbell] Phase 1 — provisioning control plane node(s)...")
+    cp_workflows = provision_phase(
+        phase_name="control-plane",
+        namespace=ca.namespace,
+        kc_args=kc_args,
+        ctx_args=ctx_args,
+        workflow_name_excludes=worker_wf_token,
+    )
+
+    typer.echo(
+        "\n  [tinkerbell] Waiting for KubeadmControlPlane to initialize "
+        "(kubeadm init running — ~10 min)..."
+    )
+    wait_for_kcp_initialized(
+        cluster_name=ca.cluster_name,
+        namespace=ca.namespace,
+        kc_args=kc_args,
+        ctx_args=ctx_args,
+        timeout=1800,
+    )
+
+    # Fetch workload kubeconfig — the secret exists right after KCP init.
+    wl_kubeconfig = fetch_workload_kubeconfig(
+        cluster_name=ca.cluster_name,
+        namespace=ca.namespace,
+        kc_args=kc_args,
+        ctx_args=ctx_args,
+    )
+
+    # Wait for the workload API server to be consistently reachable before installing
+    # Cilium.  The CAPI kubeconfig secret is created during early kubeadm init while
+    # the API server may still restart (kubeadm progresses through phases) or the node
+    # undergoes a second OS-level reboot (cloud-init/systemd finalising network).
+    # Installing Cilium during that window fails because the API server is unreachable.
+    if wl_kubeconfig:
+        typer.echo(
+            "\n  [tinkerbell] Waiting for workload API server to stabilise "
+            "before installing Cilium..."
+        )
+        wait_for_workload_api_server_stable(
+            workload_kubeconfig=wl_kubeconfig,
+            consecutive_ok=3,
+            poll_interval=10,
+            timeout=600,
         )
 
-    typer.secho("  [tinkerbell] Cluster API manifests applied.", fg=typer.colors.GREEN)
+    # Install CNI before phase 2: CAPT only schedules worker Machines after KCP has
+    # readyReplicas >= 1, which requires the control-plane node to be Ready (CNI up).
+    # Installing Cilium here unblocks CAPT so worker Workflows appear promptly.
+    if not ca.cilium_version:
+        typer.secho(
+            "  [tinkerbell] ERROR: cilium_version not set — cannot install CNI. "
+            "Nodes will never become Ready. Set cilium_version in cluster_api config.",
+            fg=typer.colors.RED,
+        )
+        return False
+    if not wl_kubeconfig:
+        typer.secho(
+            "  [tinkerbell] ERROR: workload kubeconfig unavailable — cannot install Cilium.",
+            fg=typer.colors.RED,
+        )
+        return False
+    cni_ok = install_cilium(version=ca.cilium_version, kubeconfig=wl_kubeconfig)
+    if not cni_ok:
+        typer.secho(
+            "  [tinkerbell] ERROR: Cilium install failed — nodes will not become Ready. "
+            "Fix Cilium then re-run.",
+            fg=typer.colors.RED,
+        )
+        return False
+
+    # Wait for the control-plane node to be Ready in the workload cluster — this is the
+    # real signal that CAPT will start scheduling worker Machines.  We use the workload
+    # kubeconfig directly rather than KCP readyReplicas on the mgmt cluster because
+    # readyReplicas is gated on providerID reconciliation (which requires a manual patch
+    # in our setup) and would block indefinitely.
+    if wl_kubeconfig:
+        typer.echo(
+            "\n  [tinkerbell] Waiting for control-plane node Ready in workload cluster..."
+        )
+        wait_for_cluster_ready(
+            workload_kubeconfig=wl_kubeconfig,
+            expected_nodes=ca.control_plane_replicas,
+            timeout=600,
+        )
+
+    typer.echo("\n  [tinkerbell] Phase 2 — provisioning worker node(s)...")
+    provision_phase(
+        phase_name="workers",
+        namespace=ca.namespace,
+        kc_args=kc_args,
+        ctx_args=ctx_args,
+        workflow_name_contains=worker_wf_token,
+        workflow_appear_timeout=300,
+    )
+
+    typer.echo("\n  [tinkerbell] Waiting for cluster to be fully ready...")
+    expected_nodes = ca.control_plane_replicas + ca.worker_replicas
+    ready = wait_for_cluster_ready(
+        workload_kubeconfig=wl_kubeconfig or f"/tmp/kubeconfig-{ca.cluster_name}.yaml",
+        expected_nodes=expected_nodes,
+        timeout=1800,
+    )
+    if not ready:
+        typer.secho(
+            "  [tinkerbell] WARNING: timed out waiting for cluster — check node status manually.",
+            fg=typer.colors.YELLOW,
+        )
+    return ready
 
 
 def deploy_nodes(
@@ -271,6 +454,18 @@ def deploy_nodes(
     then label nodes for OpenStack scheduling.
     """
     typer.echo("\n[nodes] Bootstrapping nodes...")
+
+    # Regenerate inventory from the live workload cluster so we always use
+    # current node IPs rather than stale entries from a previous deployment.
+    wl_kc = Path(f"/tmp/kubeconfig-{cfg.cluster_api.cluster_name}.yaml")
+    if wl_kc.is_file():
+        typer.echo("[nodes] Refreshing inventory from live cluster nodes...")
+        update_hosts_and_inventory(
+            kubeconfig=wl_kc,
+            workspace_root=workspace_root,
+            domain_suffix=domain_suffix,
+            ctx=type("_Ctx", (), {"logger": None, "dry_run": False})(),
+        )
 
     inv = inventory_path(workspace_root)
     inventory_hosts = read_hosts_from_inventory(inv)
@@ -378,6 +573,48 @@ def connect_controller_ssh(
     return client, controller_host
 
 
+def _push_authorized_key(
+    address: str,
+    port: int,
+    username: str,
+    password: str,
+    pub_key_content: str,
+) -> None:
+    """
+    Connect to *address* via password auth and append *pub_key_content* to
+    ~/.ssh/authorized_keys if not already present.
+    """
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(
+        hostname=address,
+        port=port,
+        username=username,
+        password=password,
+        allow_agent=False,
+        look_for_keys=False,
+    )
+    try:
+        script = (
+            "set -e\n"
+            "mkdir -p ~/.ssh && chmod 700 ~/.ssh\n"
+            f"KEY={shlex.quote(pub_key_content.strip())}\n"
+            "grep -qxF \"$KEY\" ~/.ssh/authorized_keys 2>/dev/null "
+            "|| echo \"$KEY\" >> ~/.ssh/authorized_keys\n"
+            "chmod 600 ~/.ssh/authorized_keys\n"
+        )
+        stdin, stdout, stderr = client.exec_command("bash -s")
+        stdin.write(script)
+        stdin.channel.shutdown_write()
+        rc = stdout.channel.recv_exit_status()
+        if rc != 0:
+            raise RuntimeError(
+                f"SSH key install on {address} failed: {stderr.read().decode().strip()}"
+            )
+    finally:
+        client.close()
+
+
 def deploy_ceph(
     *,
     workspace_root: Path,
@@ -429,6 +666,35 @@ def deploy_ceph(
                 f"with {len(ext.osd_devices)} OSD device(s)"
             )
 
+    # For additional hosts that use password auth (no pkey_path) and we have
+    # an SSH key: install the public key via password, then switch to key auth
+    # so all Ceph hosts use the same credentials going forward.
+    if ssh_key:
+        pub_key_path = Path(f"{ssh_key}.pub")
+        if pub_key_path.exists():
+            pub_key_content = pub_key_path.read_text().strip()
+            for host in ceph_hosts:
+                if host.password and not host.pkey_path:
+                    typer.echo(
+                        f"[ceph] Installing SSH key on {host.hostname} ({host.address})..."
+                    )
+                    _push_authorized_key(
+                        address=host.address,
+                        port=host.port,
+                        username=host.username,
+                        password=host.password,
+                        pub_key_content=pub_key_content,
+                    )
+                    host.pkey_path = str(ssh_key)
+                    typer.echo(f"[ceph] SSH key installed on {host.hostname}")
+        else:
+            typer.echo(
+                f"[ceph] Warning: {pub_key_path} not found — skipping SSH key install on password-auth hosts"
+            )
+
+    _pool_size = cfg.ceph.pool_replication_size if cfg and cfg.ceph else 3
+    _pool_min_size = cfg.ceph.pool_min_size if cfg and cfg.ceph else 2
+    _public_network = cfg.ceph.public_network if cfg and cfg.ceph else None
     CephManager(
         bus=EventBus(observers=[ConsoleObserver()])
     ).deploy(
@@ -437,6 +703,9 @@ def deploy_ceph(
             version=ceph_version,
             image=ceph_image,
             apply_osds_all_devices=True,
+            pool_replication_size=_pool_size,
+            pool_min_size=_pool_min_size,
+            public_network=_public_network,
         ),
     )
 
@@ -464,6 +733,41 @@ def deploy_csi(
             kubeconfig_path=kubeconfig_path,
         )
     )
+
+
+def deploy_rgw(
+    *,
+    ceph_hosts: List[CephHost],
+    cfg=None,
+) -> None:
+    """
+    Deploy a Ceph RGW (S3-compatible object storage gateway).
+
+    Reads optional configuration from cfg.ceph.rgw if present; otherwise uses
+    sensible defaults (port 7480, single placement, no default user).
+    """
+    typer.echo("\n[rgw] Installing Ceph RGW (S3 object storage)...")
+
+    rgw_cfg = RGWConfig()
+    if cfg is not None and getattr(cfg, "ceph", None) is not None:
+        ceph_section = cfg.ceph
+        if getattr(ceph_section, "rgw", None) is not None:
+            r = ceph_section.rgw
+            rgw_cfg = RGWConfig(
+                realm=getattr(r, "realm", rgw_cfg.realm),
+                placement_count=getattr(r, "placement_count", rgw_cfg.placement_count),
+                port=getattr(r, "port", rgw_cfg.port),
+                ready_timeout_secs=getattr(r, "ready_timeout_secs", rgw_cfg.ready_timeout_secs),
+                default_user_id=getattr(r, "default_user_id", rgw_cfg.default_user_id),
+                default_user_display_name=getattr(
+                    r, "default_user_display_name", rgw_cfg.default_user_display_name
+                ),
+            )
+
+    RGWManager(
+        bus=EventBus(observers=[ConsoleObserver()]),
+        ceph_hosts=ceph_hosts,
+    ).deploy(rgw_cfg)
 
 
 def _verify_and_get_registry_url(cfg, mgmt_kubeconfig: Optional[str]) -> str:
@@ -599,6 +903,42 @@ def deploy_registry(
     url = mgr.harbor_registry_url()
     typer.echo(f"\n[registry] Harbor available at https://{url}")
     return url
+
+
+def teardown_infrastructure(
+    *,
+    helm: HelmCliRunner,
+    ssh: SSHRunner,
+    workspace_root: Path,
+    infra_flag: Optional[str],
+    kubeconfig_path: str,
+    keycloak_admin_password: str = "",
+    registry_url: Optional[str] = None,
+    registry_project: str = "openstack",
+) -> None:
+    """
+    Tear down infrastructure components installed by deploy_infrastructure.
+    Components are uninstalled in reverse deployment order.
+    """
+    typer.echo("\n[infrastructure] Tearing down infrastructure components...")
+
+    selection = parse_infra_flag(infra_flag)
+
+    components = build_infrastructure_components(
+        selection=selection,
+        workspace_root=workspace_root,
+        kubeconfig_path=kubeconfig_path,
+        keycloak_admin_password=keycloak_admin_password,
+        registry_url=registry_url,
+        registry_project=registry_project,
+    )
+
+    InfrastructureManager(
+        helm=helm,
+        ssh=ssh,
+        registry_url=registry_url,
+        registry_project=registry_project,
+    ).teardown(components)
 
 
 def deploy_infrastructure(
@@ -745,129 +1085,6 @@ def deploy_openstack(
         if ceph_ssh is not None:
             ceph_client.close()
 
-def deploy_ai(
-    *,
-    helm: HelmCliRunner,
-    ssh: SSHRunner,
-    workspace_root: Path,
-    ai_flag: Optional[str],
-    kubeconfig_path: str,
-    cfg: Optional[DaaluConfig] = None,
-) -> None:
-    """
-    Deploy AI platform components (Phase 1 and beyond).
-
-    Phase 1 components:
-      gpu-operator   — NVIDIA GPU Operator (driver, toolkit, device-plugin, DCGM)
-      gpu-node-setup — Apply GPU pool labels and NoSchedule taint to GPU nodes
-    """
-    typer.echo("\n[ai] Installing AI platform components...")
-
-    selection = parse_ai_flag(ai_flag)
-
-    components = build_ai_components(
-        selection=selection,
-        workspace_root=workspace_root,
-        kubeconfig_path=kubeconfig_path,
-        cfg=cfg,
-    )
-
-    AIManager(
-        helm=helm,
-        ssh=ssh,
-    ).deploy(components)
-
-
-# ------------------------------------------------------------------------------
-# AI command — deploy AI platform after cloud install
-# ------------------------------------------------------------------------------
-
-@app.command()
-def ai(
-    config: str = typer.Argument("cluster-defs/cluster.yaml", help="Path to cluster definition YAML (e.g. cluster-defs/cluster.yaml)"),
-    components: Optional[str] = typer.Option(
-        None,
-        "--components",
-        help="AI components to install (e.g. gpu-operator,gpu-node-setup or all). Defaults to all.",
-    ),
-    managed_user: Optional[str] = typer.Option(None, "--managed-user", help="SSH user on controller nodes (default: from mgmt_cluster.managed_user in config)"),
-    ssh_key: Optional[Path] = typer.Option(None, "--ssh-key", help="Path to SSH private key (default: from mgmt_cluster.ssh_key in config)"),
-    ssh_password: Optional[str] = typer.Option(None, "--ssh-password", help="SSH password (default: from mgmt_cluster.ssh_password in secrets.yaml)"),
-    context: Optional[str] = typer.Option(None, "--context", help="Kubernetes context"),
-    debug: bool = typer.Option(False, "--debug"),
-) -> None:
-    """
-    Deploy the AI platform onto an existing Daalu OpenStack cloud.
-
-    Run this command after 'daalu deploy' has completed successfully.
-
-    Phase 1 components:
-      gpu-operator   — NVIDIA GPU Operator (driver, toolkit, device-plugin, DCGM)
-      gpu-node-setup — Apply GPU pool labels and NoSchedule taint to GPU nodes
-
-    Phase 2 components:
-      vllm           — OpenAI-compatible model server (Qwen2.5-Coder-7B by default)
-    """
-    logger, _, _ = init_logging(verbose=debug)
-
-    cfg: DaaluConfig = load_config(config)
-    workspace_root = Path.cwd()
-
-    # Resolve SSH / managed-user values: CLI flag > config > built-in default
-    _mc = cfg.mgmt_cluster
-    managed_user = managed_user or (getattr(_mc, "managed_user", None) if _mc else None) or "builder"
-    ssh_key = ssh_key or (Path(_mc.ssh_key).expanduser() if _mc and _mc.ssh_key else None)
-    ssh_password = ssh_password or (getattr(_mc, "ssh_password", None) if _mc else None)
-
-    client: Optional[paramiko.SSHClient] = None
-    try:
-        client, _ = connect_controller_ssh(
-            workspace_root=workspace_root,
-            managed_user=managed_user,
-            ssh_key=ssh_key,
-            ssh_password=ssh_password,
-        )
-
-        ssh = SSHRunner(client)
-
-        rc, out, err = ssh.run("which helm", sudo=False)
-        if rc != 0:
-            typer.echo("[ai] Helm not found on controller, installing...")
-            rc, out, err = ssh.run(
-                "curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash",
-                sudo=True,
-            )
-            if rc != 0:
-                raise RuntimeError(f"Failed to install helm on controller: {err}")
-
-        helm = HelmCliRunner(ssh=ssh, kube_context=context or cfg.context)
-
-        kubeconfig_path = f"/tmp/kubeconfig-{cfg.cluster_api.cluster_name}.yaml"
-        if os.path.isfile(kubeconfig_path):
-            ssh.put_file(local_path=kubeconfig_path, remote_path=kubeconfig_path)
-
-        deploy_ai(
-            helm=helm,
-            ssh=ssh,
-            workspace_root=workspace_root,
-            ai_flag=components,
-            kubeconfig_path=kubeconfig_path,
-            cfg=cfg,
-        )
-
-    except Exception as exc:
-        logger.exception("[ai] Deployment failed: %s: %s", type(exc).__name__, exc)
-        typer.secho(
-            f"\n[ai] Deployment failed: {type(exc).__name__}: {exc}"
-            f"\nSee log for full traceback.",
-            fg=typer.colors.RED,
-            err=True,
-        )
-        raise typer.Exit(1)
-    finally:
-        if client is not None:
-            client.close()
-
 
 # ------------------------------------------------------------------------------
 # Deploy command
@@ -993,6 +1210,8 @@ def deploy(
     # ------------------------------------------------------------------------------
     logger.debug("install plan: %s", install_plan)
 
+    _capi_ready: Optional[bool] = None
+
     if "cluster-api" in install_plan:
         typer.echo("\n[cluster-api] Installing Cluster API...")
 
@@ -1012,7 +1231,7 @@ def deploy(
                 dry_run=dry_run,
             )
         elif provider == "tinkerbell":
-            deploy_cluster_api_tinkerbell(
+            _capi_ready = deploy_cluster_api_tinkerbell(
                 cfg=cfg,
                 workspace_root=WORKSPACE_ROOT,
                 mgmt_context=mgmt_context,
@@ -1023,10 +1242,20 @@ def deploy(
                 workspace_root=WORKSPACE_ROOT,
                 mgmt_context=mgmt_context,
             )
+    else:
+        _capi_ready = None  # cluster-api step not in plan
 
     # ------------------------------------------------------------------------------
     # 2) Node bootstrap
     # ------------------------------------------------------------------------------
+    # Derive expected workload kubeconfig path
+    _workload_kc = (
+        f"/tmp/kubeconfig-{cfg.cluster_api.cluster_name}.yaml"
+        if cfg.cluster_api
+        else None
+    )
+    _workload_kc_exists = _workload_kc and os.path.isfile(_workload_kc)
+
     if "nodes" in install_plan:
         # Use image_username from cluster_api config if --ssh-username was not
         # explicitly provided (i.e. still the default "ubuntu").  Metal3 nodes
@@ -1053,39 +1282,49 @@ def deploy(
                     effective_node_ssh_key = priv
                     typer.echo(f"[nodes] Using SSH key derived from cluster_api.ssh_public_key_path: {priv}")
 
-        deploy_nodes(
-            cfg=cfg,
-            workspace_root=WORKSPACE_ROOT,
-            cluster_name=cluster_name,
-            node_tags=node_tags,
-            ssh_username=effective_ssh_user,
-            ssh_key=effective_node_ssh_key,
-            domain_suffix=domain_suffix,
-            managed_user=managed_user,
-            managed_user_password=managed_user_password,
-        )
+        # Skip nodes if the workload cluster isn't reachable yet.
+        # This happens when cluster-api timed out or was not in the install plan.
+        if not _workload_kc_exists:
+            typer.secho(
+                f"[nodes] Skipping node bootstrap — workload kubeconfig not found at "
+                f"{_workload_kc}.\n"
+                f"  Run 'daalu deploy --install nodes' once the cluster is ready.",
+                fg=typer.colors.YELLOW,
+            )
+        else:
+            deploy_nodes(
+                cfg=cfg,
+                workspace_root=WORKSPACE_ROOT,
+                cluster_name=cluster_name,
+                node_tags=node_tags,
+                ssh_username=effective_ssh_user,
+                ssh_key=effective_node_ssh_key,
+                domain_suffix=domain_suffix,
+                managed_user=managed_user,
+                managed_user_password=managed_user_password,
+            )
 
-        # After nodes are bootstrapped, configure containerd trust for the local
-        # registry so subsequent image pulls (ceph, csi, openstack, etc.) succeed.
-        if effective_registry_url:
-            _infra_kubeconfig = f"/tmp/kubeconfig-{cfg.cluster_api.cluster_name}.yaml"
-            if os.path.isfile(_infra_kubeconfig):
-                typer.echo("\n[registry] Configuring infra cluster nodes to trust local Harbor registry...")
-                try:
-                    from daalu.bootstrap.registry.manager import RegistryManager
-                    from daalu.config.models import RegistryConfig
-                    _reg_cfg = cfg.registry or RegistryConfig()
-                    _reg_mgr = RegistryManager(
-                        registry_cfg=_reg_cfg,
-                        workspace_root=WORKSPACE_ROOT,
-                        secrets_path=WORKSPACE_ROOT / "cloud-config" / "secrets.yaml",
-                    )
-                    _reg_mgr.configure_cluster_registry_trust(_infra_kubeconfig)
-                    typer.echo("[registry] Registry trust configured on all infra nodes.")
-                except Exception as _trust_exc:
-                    logger.warning("[registry] Registry trust configuration failed (non-fatal): %s", _trust_exc)
-            else:
-                logger.debug("[registry] Infra kubeconfig not found at %s — skipping trust config", _infra_kubeconfig)
+            # After nodes are bootstrapped, configure containerd trust for the local
+            # registry so subsequent image pulls (ceph, csi, openstack, etc.) succeed.
+            if effective_registry_url:
+                _infra_kubeconfig = f"/tmp/kubeconfig-{cfg.cluster_api.cluster_name}.yaml"
+                if os.path.isfile(_infra_kubeconfig):
+                    typer.echo("\n[registry] Configuring infra cluster nodes to trust local Harbor registry...")
+                    try:
+                        from daalu.bootstrap.registry.manager import RegistryManager
+                        from daalu.config.models import RegistryConfig
+                        _reg_cfg = cfg.registry or RegistryConfig()
+                        _reg_mgr = RegistryManager(
+                            registry_cfg=_reg_cfg,
+                            workspace_root=WORKSPACE_ROOT,
+                            secrets_path=WORKSPACE_ROOT / "cloud-config" / "secrets.yaml",
+                        )
+                        _reg_mgr.configure_cluster_registry_trust(_infra_kubeconfig)
+                        typer.echo("[registry] Registry trust configured on all infra nodes.")
+                    except Exception as _trust_exc:
+                        logger.warning("[registry] Registry trust configuration failed (non-fatal): %s", _trust_exc)
+                else:
+                    logger.debug("[registry] Infra kubeconfig not found at %s — skipping trust config", _infra_kubeconfig)
 
     # ------------------------------------------------------------------------------
     # Shared controller SSH (for Ceph/CSI/Infra/OpenStack)
@@ -1099,6 +1338,18 @@ def deploy(
     ssh = None
     kubeconfig_path = None
     ceph_hosts: List[CephHost] = []
+
+    # If the workload cluster is not yet ready, skip all steps that require SSH
+    # into the workload cluster nodes (ceph, csi, infrastructure, openstack, monitoring).
+    if _needs_controller_ssh and not _workload_kc_exists:
+        typer.secho(
+            "\n[deploy] Skipping infrastructure/openstack/ceph steps — workload cluster "
+            f"kubeconfig not found at {_workload_kc}.\n"
+            "  Run 'daalu deploy --install nodes,ceph,csi,infrastructure,monitoring,openstack' "
+            "once the cluster is ready.",
+            fg=typer.colors.YELLOW,
+        )
+        return
 
     try:
         if _needs_controller_ssh:
@@ -1176,6 +1427,15 @@ def deploy(
                 helm=helm,
                 ceph_hosts=ceph_hosts,
                 kubeconfig_path=kubeconfig_path,
+            )
+
+        # ---------------------------------------------------------------------------
+        # 4b) RGW (Ceph S3 object gateway)
+        # ---------------------------------------------------------------------------
+        if "rgw" in install_plan:
+            deploy_rgw(
+                ceph_hosts=ceph_hosts,
+                cfg=cfg,
             )
 
         # ------------------------------------------------------------------------------
@@ -1277,6 +1537,11 @@ def mgmt(
         "--skip-harbor",
         help="Skip Harbor registry deployment even if install_harbor=true in config",
     ),
+    skip_provisioning_stack: bool = typer.Option(
+        False,
+        "--skip-provisioning-stack",
+        help="Install Kubernetes + Cilium only; skip cert-manager, CAPI, and the provider stack (Tinkerbell/Metal3). Use this to manually walk through provisioning stack installation afterwards.",
+    ),
     provider: Optional[str] = typer.Option(
         None,
         "--provider",
@@ -1370,6 +1635,8 @@ def mgmt(
         overrides["provisioning_interface"] = provisioning_interface
     if skip_harbor:
         overrides["install_harbor"] = False
+    if skip_provisioning_stack:
+        overrides["skip_provisioning_stack"] = True
 
     if overrides:
         cfg = cfg.model_copy(
@@ -1533,6 +1800,23 @@ def configure_registry_trust(
 @app.command()
 def clean(
     config: str = typer.Argument(..., help="Cluster definition YAML"),
+    install: Optional[str] = typer.Option(
+        None,
+        "--install",
+        help="Tear down only specific components: infrastructure,openstack,monitoring or all. "
+             "When set, runs component-level teardown instead of CAPI cluster deletion.",
+    ),
+    infra: Optional[str] = typer.Option(
+        None,
+        "--infra",
+        help="Infrastructure sub-components to clean (e.g. metallb,argocd or all). "
+             "Only used when --install infrastructure is set.",
+    ),
+    kubeconfig: Optional[str] = typer.Option(
+        None,
+        "--kubeconfig",
+        help="Kubeconfig for the target cluster (required with --install).",
+    ),
     mgmt_kubeconfig: Optional[str] = typer.Option(
         None,
         "--mgmt-kubeconfig",
@@ -1572,27 +1856,109 @@ def clean(
     debug: bool = typer.Option(False, "--debug"),
 ):
     """
-    Tear down the workload CAPI cluster so Metal3/Ironic deprovisions bare-metal hosts.
+    Tear down the workload CAPI cluster, or specific installed components.
 
-    By default only the workload cluster is deleted — the management cluster
-    (Harbor, Metal3, Ironic) is left running so you can redeploy immediately.
+    Without --install: deletes the workload CAPI cluster (triggers bare-metal wipe via Ironic).
+    With --install: runs helm uninstall + cleanup for the specified component group.
 
-    Add --wipe-mgmt to also destroy the management cluster:
+      # Tear down all infrastructure components (metallb, argocd, keycloak, etc.):
+      daalu clean cluster-defs/cluster.yaml --install infrastructure --kubeconfig ~/.kube/config
 
+      # Tear down only specific infra sub-components:
+      daalu clean cluster-defs/cluster.yaml --install infrastructure --infra metallb,argocd --kubeconfig ~/.kube/config
+
+      # Full CAPI cluster teardown (default behaviour):
       daalu clean cluster-defs/cluster.yaml --mgmt-kubeconfig ~/.kube/daalu-mgmt-config
 
-      # Also destroy mgmt k8s + Harbor (full reset):
+      # Also destroy mgmt k8s + Harbor:
       daalu clean cluster-defs/cluster.yaml --mgmt-kubeconfig ~/.kube/daalu-mgmt-config --wipe-mgmt
-
-      # Skip waiting for deprovisioning (faster, but BMHs may not be wiped):
-      daalu clean cluster-defs/cluster.yaml --no-wait
-
-      # Already deleted the workload cluster manually:
-      daalu clean cluster-defs/cluster.yaml --skip-workload-cluster
     """
     init_logging(verbose=debug)
 
     cfg: DaaluConfig = load_config(config)
+
+    # ------------------------------------------------------------------
+    # Component-level teardown (--install infrastructure, etc.)
+    # ------------------------------------------------------------------
+    if install:
+        install_targets = resolve_install_plan(install)
+
+        if not kubeconfig:
+            typer.secho(
+                "ERROR: --kubeconfig is required when using --install",
+                fg=typer.colors.RED, err=True,
+            )
+            raise typer.Exit(1)
+
+        _mc = cfg.mgmt_cluster
+        _ssh_key = ssh_key or (Path(_mc.ssh_key).expanduser() if _mc and _mc.ssh_key else None)
+        _ssh_password = ssh_password or (getattr(_mc, "ssh_password", None) if _mc else None)
+        _host = _mc.host if _mc else None
+
+        if not _host:
+            typer.secho(
+                "ERROR: mgmt_cluster.host is required for SSH-based teardown",
+                fg=typer.colors.RED, err=True,
+            )
+            raise typer.Exit(1)
+
+        typer.echo("")
+        typer.secho("Daalu — Component Teardown", bold=True)
+        typer.echo(f"  Components : {install}")
+        if infra:
+            typer.echo(f"  Infra      : {infra}")
+        typer.echo(f"  Kubeconfig : {kubeconfig}")
+        typer.echo("")
+
+        if not yes:
+            typer.confirm("Proceed with component teardown?", abort=True)
+
+        try:
+            from daalu.helm.cli_runner import HelmCliRunner
+            from daalu.utils.ssh_runner import SSHRunner
+
+            _paramiko_client = paramiko.SSHClient()
+            _paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            _paramiko_client.connect(
+                hostname=_host,
+                username=_mc.ssh_username if _mc else "ubuntu",
+                key_filename=str(_ssh_key) if _ssh_key else None,
+                password=_ssh_password,
+            )
+            ssh = SSHRunner(_paramiko_client)
+
+            with _paramiko_client:
+                helm = HelmCliRunner(ssh=ssh)
+
+                keycloak_admin_password = (
+                    cfg.keycloak.monitoring.password
+                    if cfg.keycloak and cfg.keycloak.monitoring and cfg.keycloak.monitoring.password
+                    else ""
+                )
+
+                if "infrastructure" in install_targets or "all" in install_targets:
+                    teardown_infrastructure(
+                        helm=helm,
+                        ssh=ssh,
+                        workspace_root=WORKSPACE_ROOT,
+                        infra_flag=infra,
+                        kubeconfig_path=kubeconfig,
+                        keycloak_admin_password=keycloak_admin_password,
+                    )
+
+        except Exception as exc:
+            import logging as _logging
+            _logging.getLogger("daalu").exception("[clean] ERROR: %s: %s", type(exc).__name__, exc)
+            typer.secho(f"\n[clean] ERROR: {type(exc).__name__}: {exc}", fg=typer.colors.RED, err=True)
+            raise typer.Exit(1)
+
+        typer.echo("")
+        typer.secho("Component teardown complete.", bold=True, fg=typer.colors.GREEN)
+        return
+
+    # ------------------------------------------------------------------
+    # Full CAPI cluster teardown (default path)
+    # ------------------------------------------------------------------
 
     # Apply CLI SSH overrides
     if cfg.mgmt_cluster and (ssh_key or ssh_password):

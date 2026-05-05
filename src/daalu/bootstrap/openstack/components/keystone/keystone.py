@@ -1149,7 +1149,7 @@ class KeystoneComponent(InfraComponent):
         from urllib.parse import urlparse
 
         base_url = self.keycloak_config.admin.base_url  # e.g. "https://auth.daalu.io"
-        keycloak_host = urlparse(base_url).hostname
+        keycloak_host = urlparse(str(base_url)).hostname
         if not keycloak_host:
             log.warning(
                 "[keystone] Could not parse Keycloak hostname from %s; "

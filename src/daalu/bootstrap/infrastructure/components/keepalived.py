@@ -124,5 +124,18 @@ class KeepalivedComponent(InfraComponent):
         # Basic sanity
         kubectl.run(["get", "ds", "keepalived", "-n", self.namespace])
 
+    def teardown_extra(self, kubectl) -> None:
+        """Delete the keepalived DaemonSet, ConfigMap, and ServiceAccount."""
+        if not self._values.get("keepalived_enabled", True):
+            return
+        for resource in (
+            f"ds/keepalived",
+            f"cm/keepalived",
+            f"serviceaccount/keepalived",
+        ):
+            kubectl._run(
+                f"delete {resource} -n {self.namespace} --ignore-not-found"
+            )
+
     def helm_values(self) -> Dict[str, Any]:
         return self._values

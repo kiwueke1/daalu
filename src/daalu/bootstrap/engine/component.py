@@ -177,6 +177,17 @@ class InfraComponent(ABC):
         """Optional hook. Default: do nothing."""
         pass
 
+    def teardown_extra(self, kubectl) -> None:
+        """
+        Hook called during teardown to clean up resources created in pre_install
+        or post_install that are not managed by Helm (e.g. CRD objects, ConfigMap
+        patches, raw manifests).
+
+        Called BEFORE helm uninstall so that CRD-backed objects are removed while
+        the CRD itself still exists.  Default: do nothing.
+        """
+        pass
+
 
     def _ensure_virtualservice(self, kubectl) -> None:
         if not self.istio_enabled:

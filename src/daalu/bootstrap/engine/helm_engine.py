@@ -264,3 +264,43 @@ class HelmInfraEngine:
                     error=str(e),
                 )
             raise
+
+    def teardown(self, component) -> None:
+        """
+        Tear down a component: run teardown_extra hook then helm uninstall.
+
+        teardown_extra runs first so CRD-backed objects (e.g. IPAddressPool,
+        ClusterIssuer) are deleted while the managing CRD still exists.
+
+        For non-Helm components (uses_helm=False) only teardown_extra runs.
+        A failed helm uninstall (e.g. release not found) is logged as a warning
+        and does not abort teardown of the remaining components.
+        """
+        log.info("[%s] Tearing down...", component.name)
+
+        kubectl = KubectlRunner(
+            ssh=self.ssh,
+            kubeconfig=component.kubeconfig,
+            logger=self.logger,
+        )
+
+        try:
+            component.teardown_extra(kubectl)
+        except Exception as e:
+            log.warning("[%s] teardown_extra failed (continuing): %s", component.name, e)
+
+        if component.uses_helm and component.release_name:
+            try:
+                log.info(
+                    "[%s] Running helm uninstall %s -n %s",
+                    component.name, component.release_name, component.namespace,
+                )
+                self.helm.uninstall(component.release_name, component.namespace)
+                log.info("[%s] Helm uninstall complete", component.name)
+            except Exception as e:
+                log.warning(
+                    "[%s] helm uninstall failed (release may not exist): %s",
+                    component.name, e,
+                )
+
+        log.info("[%s] Teardown complete", component.name)

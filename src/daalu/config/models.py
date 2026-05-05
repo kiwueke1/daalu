@@ -95,7 +95,7 @@ class ClusterAPI(BaseModel):
     proxmox_url: str
     proxmox_token: str
     proxmox_secret: str
-    provider: Literal["proxmox", "metal3"] = "proxmox"
+    provider: Literal["proxmox", "metal3", "tinkerbell"] = "proxmox"
     image_username: str
     image_password: str
     image_password_hash: str
@@ -122,7 +122,14 @@ class ClusterAPI(BaseModel):
 
     # Ironic HTTP base (where images are served from)
     ironic_http_base: str
-    
+
+    # Provisioning network default gateway (pfSense/firewall LAN IP).
+    # Used in Tinkerbell configure-node to write a single correct default route.
+    provisioning_gateway: str = "10.10.0.100"
+
+    # CNI — installed on the workload cluster after KCP initializes
+    cilium_version: Optional[str] = None
+
 class ReleaseSpec(BaseModel):
     name: str                        # helm release name
     namespace: str                   # target ns
@@ -174,6 +181,7 @@ class CephConfig(BaseModel):
     """
     pool_replication_size: int = 3
     pool_min_size: int = 2
+    public_network: Optional[str] = None  # e.g. "192.168.0.0/24"
     additional_ceph_hosts: List[ExternalCephHostConfig] = Field(default_factory=list)
 
     model_config = {"extra": "forbid"}

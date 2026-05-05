@@ -35,3 +35,8 @@ class CephConfig:
     apply_osds_all_devices: bool = True        # use --all-available-devices
     mgr_count: int = 2                         # desired mgr count
     mon_count: Optional[int] = None            # None → infer min(3, len(hosts))
+    pool_replication_size: int = 3             # replicas per pool (1=dev, 2=two-node, 3=prod)
+    pool_min_size: int = 2                     # min replicas for I/O to proceed
+    public_network: Optional[str] = None      # e.g. "192.168.0.0/24" — set explicitly when
+                                               # hosts span different subnets or when the bootstrap
+                                               # mon-ip is on a different network than OSD hosts.

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from enum import Enum
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class BaremetalProvider(str, Enum):
@@ -88,11 +88,25 @@ class MgmtClusterConfig(BaseModel):
     # Each entry becomes a Tinkerbell Hardware CR (equivalent of Metal3 BareMetalHost).
     hardware: list[TinkerbellHardware] = []
 
+    # Kubernetes namespace where CAPI cluster resources live (Cluster, KCP,
+    # MachineDeployment, TinkerbellMachineTemplate, etc.).  Tinkerbell Hardware,
+    # Template, and Workflow CRs created by CAPT are placed in this namespace,
+    # so tink-controller/tink-server must have cluster-wide RBAC (ClusterRole)
+    # to find them.  Must match the namespace used in the CAPI manifests under
+    # assets/tinkerbell/cluster-api/*.yaml.
+    cluster_namespace: str = "tinkerbell"
+
     # Where to save the kubeconfig locally after cluster creation
     kubeconfig_output_path: str = "~/.kube/daalu-mgmt-config"
 
     # Set to False to skip Harbor install (useful when Harbor already deployed)
     install_harbor: bool = True
+
+    # Set to True to skip the bare-metal provisioning stack installation
+    # (cert-manager, CAPI, CAPT/Metal3, Tinkerbell stack, hardware registration).
+    # Useful when you want to install Kubernetes + Cilium only, then walk through
+    # the provisioning stack manually.
+    skip_provisioning_stack: bool = False
 
     # Override the base URI that ironic-ipa-downloader uses to fetch the IPA
     # ramdisk.  Defaults to None (uses the image's built-in default, which is
@@ -102,4 +116,51 @@ class MgmtClusterConfig(BaseModel):
     # The downloader will fetch <ipa_baseuri>/ipa-centos9-master.tar.gz.
     ipa_baseuri: Optional[str] = None
 
+    # Temporal control plane — installed after the provisioning stack so the
+    # workload-cluster deploy can be driven from the temporal-console UI.
+    temporal: "TemporalConfig" = Field(default_factory=lambda: TemporalConfig())
+
     model_config = {"extra": "forbid"}
+
+
+class TemporalConfig(BaseModel):
+    """
+    Temporal server + worker + UI deployed onto the management cluster.
+
+    Set ``enabled: false`` to skip — Daalu still works fine via the CLI alone.
+    """
+    enabled: bool = True
+
+    # Temporal server
+    namespace: str = "temporal"
+    chart_version: str = "0.62.0"           # github.com/temporalio/helm-charts
+    server_image_tag: str = "1.27.0"
+
+    # Persistence — Temporal needs a SQL backend. The chart defaults to a
+    # bundled Cassandra; we set sql.enabled=false in the installer and use
+    # the bundled Postgres which is lighter and easier to debug.
+    storage: str = "postgresql"             # "postgresql" | "cassandra" | "mysql"
+
+    # Daalu worker
+    worker_namespace: str = "daalu"
+    worker_chart_path: str = "deployments/daalu-worker/chart"
+    worker_image: str = "10.10.0.9:30003/daalu/daalu-worker:latest"
+    worker_replicas: int = 1
+    worker_threads: int = 4
+
+    # temporal-console UI
+    console_enabled: bool = True
+    console_namespace: str = "daalu"
+    # Path to the temporal-console helm chart, relative to workspace_root or
+    # absolute. The chart lives in a sibling repo by default.
+    console_chart_path: str = "../temporal-console/chart"
+    console_image: str = "10.10.0.9:30003/daalu/temporal-console:latest"
+    console_brand_name: str = "Daalu Workflows"
+    console_brand_subtitle: str = "operator console"
+    console_host: str = "workflows.daalu.io"
+    console_oidc_issuer: str = ""           # empty disables OIDC (dev only)
+    console_oidc_client_id: str = "temporal-console"
+
+
+# Resolve forward reference for `temporal: "TemporalConfig"`.
+MgmtClusterConfig.model_rebuild()

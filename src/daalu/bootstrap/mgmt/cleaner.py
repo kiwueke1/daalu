@@ -42,8 +42,8 @@ class MgmtClusterCleaner:
         self,
         *,
         mgmt_kubeconfig: Optional[str] = None,
-        workload_cluster_name: str = "auto-openstack-infra",
-        workload_cluster_namespace: str = "baremetal-operator-system",
+        workload_cluster_name: Optional[str] = None,
+        workload_cluster_namespace: Optional[str] = None,
         skip_workload_cluster: bool = False,
         wait_deprovision: bool = True,
         deprovision_timeout: int = 300,
@@ -58,14 +58,25 @@ class MgmtClusterCleaner:
             else None
         )
 
+        # Derive cluster name/namespace from config when not explicitly provided.
+        # cluster_api.cluster_name and cluster_api.namespace are the authoritative
+        # source for CAPT deployments (namespace is "default", not "baremetal-operator-system").
+        ca = getattr(self._cfg, "cluster_api", None)
+        resolved_cluster_name = workload_cluster_name or (
+            getattr(ca, "cluster_name", None) or "auto-openstack-infra"
+        )
+        resolved_cluster_ns = workload_cluster_namespace or (
+            getattr(ca, "namespace", None) or "default"
+        )
+
         # ------------------------------------------------------------------
         # 1. Delete workload CAPI cluster
         # ------------------------------------------------------------------
         if not skip_workload_cluster and kc and Path(kc).exists():
             self._delete_workload_cluster(
                 kubeconfig=kc,
-                cluster_name=workload_cluster_name,
-                namespace=workload_cluster_namespace,
+                cluster_name=resolved_cluster_name,
+                namespace=resolved_cluster_ns,
                 wait=wait_deprovision,
                 timeout=deprovision_timeout,
             )
@@ -96,6 +107,9 @@ class MgmtClusterCleaner:
                         self._clean_tinkerbell(kc)
                     elif provider == BaremetalProvider.metal3:
                         pass  # Metal3 is cleaned as part of _clean_metal3 below
+
+                if kc and Path(kc).exists():
+                    self._delete_pvcs(kc)
 
                 client = self._ssh_connect(mgmt_cfg)
                 try:
@@ -156,35 +170,116 @@ class MgmtClusterCleaner:
         if not wait:
             return
 
+        # Give CAPT a short grace period to begin its own cleanup, then force-remove
+        # all CAPI/CAPT finalizers immediately. We do not wait the full timeout before
+        # forcing — in a wipe scenario graceful BMC power-off is not required, and
+        # stuck finalizers (unreachable nodes, crashed controllers) would otherwise
+        # block the clean for the entire timeout period.
+        grace = min(30, timeout)
         log.info(
-            "[clean] Waiting up to %ds for BareMetalHosts to reach 'available' state...",
-            timeout,
+            "[clean] Waiting %ds for CAPI to begin deprovisioning '%s'...",
+            grace, cluster_name,
         )
-        deadline = time.time() + timeout
+        deadline = time.time() + grace
         while time.time() < deadline:
             r = subprocess.run(
                 [
                     "kubectl", "--kubeconfig", kubeconfig,
-                    "get", "bmh", "-A",
-                    "-o", "jsonpath={.items[*].status.provisioning.state}",
+                    "get", "cluster", cluster_name, "-n", namespace,
+                    "--ignore-not-found",
+                    "-o", "jsonpath={.metadata.name}",
                 ],
                 capture_output=True, text=True,
             )
-            states = r.stdout.strip().split()
-            if not states:
-                log.info("[clean] No BareMetalHosts found — deprovisioning complete")
+            if not r.stdout.strip():
+                log.info("[clean] Cluster '%s' deleted cleanly during grace period", cluster_name)
                 return
-            non_available = [s for s in states if s not in ("available", "")]
-            if not non_available:
-                log.info("[clean] All BareMetalHosts are 'available' — deprovisioning complete")
-                return
-            log.info("[clean] BMH states: %s — still waiting...", states)
-            time.sleep(15)
+            time.sleep(5)
 
-        log.warning(
-            "[clean] Timed out waiting for BMH deprovisioning. "
-            "Proceeding with mgmt cluster teardown anyway."
+        log.info(
+            "[clean] Cluster '%s' still present after grace period — "
+            "force-removing CAPI/CAPT finalizers to unblock deletion",
+            cluster_name,
         )
+        self._force_clean_capi_objects(kubeconfig=kubeconfig, namespace=namespace)
+
+        # Brief wait for Kubernetes to process the finalizer removals
+        log.info("[clean] Waiting for Cluster CR to disappear after finalizer removal...")
+        for _ in range(12):  # up to 60s
+            r = subprocess.run(
+                [
+                    "kubectl", "--kubeconfig", kubeconfig,
+                    "get", "cluster", cluster_name, "-n", namespace,
+                    "--ignore-not-found",
+                    "-o", "jsonpath={.metadata.name}",
+                ],
+                capture_output=True, text=True,
+            )
+            if not r.stdout.strip():
+                log.info("[clean] Cluster '%s' deleted after finalizer removal", cluster_name)
+                return
+            time.sleep(5)
+
+        log.warning("[clean] Cluster '%s' still present — continuing cleanup anyway", cluster_name)
+
+    # ------------------------------------------------------------------
+    # Force-clean CAPI objects when graceful deletion times out
+    # ------------------------------------------------------------------
+
+    def _force_clean_capi_objects(self, *, kubeconfig: str, namespace: str) -> None:
+        """
+        Forcibly remove CAPI/CAPT object finalizers and delete objects when
+        the graceful CAPI deprovision loop times out.
+
+        Handles: TinkerbellMachine, Machine, MachineDeployment, KubeadmControlPlane,
+        KubeadmConfig, Cluster objects in the given namespace.
+        """
+        log.info("[clean] Force-cleaning CAPI objects in namespace '%s'...", namespace)
+
+        # Resource types with CAPI/CAPT finalizers that can block deletion
+        capi_resources = [
+            "tinkerbellmachines",
+            "machines.cluster.x-k8s.io",
+            "machinedeployments",
+            "kubeadmcontrolplanes",
+            "kubeadmconfigs",
+            "clusters.cluster.x-k8s.io",
+        ]
+
+        for resource in capi_resources:
+            r = subprocess.run(
+                [
+                    "kubectl", "--kubeconfig", kubeconfig,
+                    "get", resource, "-n", namespace,
+                    "-o", "jsonpath={range .items[*]}{.metadata.name}{'\\n'}{end}",
+                    "--ignore-not-found",
+                ],
+                capture_output=True, text=True,
+            )
+            for name in r.stdout.strip().splitlines():
+                if not name:
+                    continue
+                # Remove all finalizers
+                subprocess.run(
+                    [
+                        "kubectl", "--kubeconfig", kubeconfig,
+                        "patch", resource, name, "-n", namespace,
+                        "--type=json",
+                        "-p=[{\"op\":\"remove\",\"path\":\"/metadata/finalizers\"}]",
+                    ],
+                    capture_output=True, text=True,
+                )
+            # Delete all objects of this type
+            subprocess.run(
+                [
+                    "kubectl", "--kubeconfig", kubeconfig,
+                    "delete", resource, "-n", namespace, "--all",
+                    "--ignore-not-found", "--wait=false",
+                ],
+                capture_output=True, text=True,
+            )
+
+        log.info("[clean] CAPI object force-clean complete")
 
     # ------------------------------------------------------------------
     # 1b. Wipe workload node disks (forces PXE boot on next power-on)
@@ -195,58 +290,86 @@ class MgmtClusterCleaner:
         SSH to each workload node and zero the first 100 MB of its boot disk.
         This destroys the MBR/GPT so the node falls through to PXE on next boot.
 
-        Uses the same SSH key as the mgmt cluster but connects as node_ssh_username
-        (default: root) since workload nodes are provisioned with root access.
+        Tries node_ssh_username (default: root) first, then managed_user (builder)
+        as a fallback, since CAPI-provisioned nodes may only have the managed user.
         """
         for hw in mgmt_cfg.hardware:
             log.info(
                 "[clean] Wiping boot disk %s on workload node %s (%s)...",
                 hw.disk, hw.name, hw.ip,
             )
-            try:
-                client = paramiko.SSHClient()
-                client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-
-                connect_kwargs: dict = {
-                    "hostname": hw.ip,
-                    "username": mgmt_cfg.node_ssh_username,
-                    "timeout": 30,
-                }
-
-                if mgmt_cfg.ssh_key:
-                    pkey = None
-                    for key_class in (paramiko.Ed25519Key, paramiko.RSAKey, paramiko.ECDSAKey):
-                        try:
-                            pkey = key_class.from_private_key_file(
-                                str(Path(mgmt_cfg.ssh_key).expanduser())
-                            )
-                            break
-                        except paramiko.ssh_exception.SSHException:
-                            continue
-                    if pkey:
-                        connect_kwargs["pkey"] = pkey
-                    else:
-                        connect_kwargs["key_filename"] = str(Path(mgmt_cfg.ssh_key).expanduser())
+            # Build the key kwargs once — shared across both user attempts
+            key_kwargs: dict = {}
+            if mgmt_cfg.ssh_key:
+                pkey = None
+                for key_class in (paramiko.Ed25519Key, paramiko.RSAKey, paramiko.ECDSAKey):
+                    try:
+                        pkey = key_class.from_private_key_file(
+                            str(Path(mgmt_cfg.ssh_key).expanduser())
+                        )
+                        break
+                    except paramiko.ssh_exception.SSHException:
+                        continue
+                if pkey:
+                    key_kwargs["pkey"] = pkey
                 else:
-                    connect_kwargs["look_for_keys"] = True
-                    connect_kwargs["allow_agent"] = True
+                    key_kwargs["key_filename"] = str(Path(mgmt_cfg.ssh_key).expanduser())
+            else:
+                key_kwargs["look_for_keys"] = True
+                key_kwargs["allow_agent"] = True
 
-                client.connect(**connect_kwargs)
-                ssh = SSHRunner(client)
+            # Try primary username, fall back to managed_user (builder) if auth fails
+            usernames = [mgmt_cfg.node_ssh_username]
+            if mgmt_cfg.managed_user and mgmt_cfg.managed_user != mgmt_cfg.node_ssh_username:
+                usernames.append(mgmt_cfg.managed_user)
+
+            client = None
+            connected_user = None
+            connect_error = None
+            for username in usernames:
                 try:
-                    rc, out, err = ssh.run(
-                        f"dd if=/dev/zero of={hw.disk} bs=1M count=100 conv=noerror 2>&1"
+                    c = paramiko.SSHClient()
+                    c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                    c.connect(hostname=hw.ip, username=username, timeout=30, **key_kwargs)
+                    client = c
+                    connected_user = username
+                    break
+                except paramiko.ssh_exception.AuthenticationException:
+                    log.debug(
+                        "[clean] Auth failed as %s on %s — trying next user", username, hw.name,
                     )
-                    if rc == 0:
-                        log.info("[clean] Disk %s wiped on %s — rebooting", hw.disk, hw.name)
-                    else:
-                        log.warning("[clean] dd exited %d on %s: %s", rc, hw.name, err or out)
-                    # Reboot regardless — best-effort
-                    ssh.run("reboot")
-                finally:
-                    client.close()
-            except Exception:
-                log.exception("[clean] Failed to wipe node %s (%s) — skipping", hw.name, hw.ip)
+                    connect_error = "auth_failed"
+                except Exception as exc:
+                    connect_error = str(exc)
+                    break  # host unreachable — no point trying other usernames
+
+            if client is None:
+                if connect_error == "auth_failed":
+                    log.warning(
+                        "[clean] SSH auth failed on %s (%s) for users %s — skipping wipe",
+                        hw.name, hw.ip, usernames,
+                    )
+                else:
+                    log.info(
+                        "[clean] %s (%s) unreachable (already wiped/rebooted?) — skipping wipe",
+                        hw.name, hw.ip,
+                    )
+                continue
+
+            log.debug("[clean] Connected to %s as %s", hw.name, connected_user)
+            try:
+                ssh = SSHRunner(client)
+                rc, out, err = ssh.run(
+                    f"dd if=/dev/zero of={hw.disk} bs=1M count=100 conv=noerror 2>&1",
+                    sudo=(connected_user != "root"),
+                )
+                if rc == 0:
+                    log.info("[clean] Disk %s wiped on %s — rebooting", hw.disk, hw.name)
+                else:
+                    log.warning("[clean] dd exited %d on %s: %s", rc, hw.name, err or out)
+                ssh.run("reboot", sudo=(connected_user != "root"))
+            finally:
+                client.close()
 
     # ------------------------------------------------------------------
     # Tinkerbell teardown (runs before kubeadm reset, API server still up)
@@ -254,25 +377,93 @@ class MgmtClusterCleaner:
 
     def _clean_tinkerbell(self, kubeconfig: str) -> None:
         """
-        Tear down the Tinkerbell stack from the mgmt cluster.
+        Tear down the Tinkerbell/CAPT stack from the mgmt cluster.
 
-        Steps:
-          1. Wait for Hardware CRs to reach 'provisioned' → 'available'
-          2. helm uninstall tinkerbell -n tinkerbell
-          3. kubectl delete namespace tinkerbell
-          4. clusterctl delete --infrastructure tinkerbell
+        Since all CAPI and Tinkerbell objects live in the 'tinkerbell' namespace,
+        deletion order matters to avoid finalizer deadlocks:
+
+          1. Force-remove finalizers and delete remaining CAPI objects
+             (TinkerbellMachine, Machine, KCP, MachineDeployment, Cluster)
+          2. Force-remove finalizers and delete Tinkerbell Hardware objects
+          3. Delete Tinkerbell Workflow and Template objects
+          4. Delete Rufio Machine and Job objects
+          5. clusterctl delete --infrastructure tinkerbell (removes CAPT CRDs+controllers)
+          6. helm uninstall tinkerbell -n tinkerbell (removes Tink/SMEE/Hegel/Rufio)
+          7. Delete the tinkerbell namespace (catches any stragglers)
+          8. clusterctl delete core/bootstrap/control-plane providers
         """
-        log.info("[clean] Deleting Tinkerbell Hardware objects...")
-        subprocess.run(
-            [
-                "kubectl", "--kubeconfig", kubeconfig,
-                "delete", "hardware", "-A", "--all",
-                "--ignore-not-found",
-            ],
-            capture_output=True, text=True,
-        )
-        log.info("[clean] Hardware objects deleted")
 
+        def _remove_finalizers_and_delete(resource: str) -> None:
+            """Patch finalizers off all instances of a resource (all namespaces), then delete."""
+            r = subprocess.run(
+                [
+                    "kubectl", "--kubeconfig", kubeconfig,
+                    "get", resource, "-A", "--ignore-not-found",
+                    "-o", "jsonpath={range .items[*]}{.metadata.namespace}/{.metadata.name}{'\\n'}{end}",
+                ],
+                capture_output=True, text=True,
+            )
+            for line in r.stdout.strip().splitlines():
+                if "/" not in line:
+                    continue
+                ns, name = line.split("/", 1)
+                subprocess.run(
+                    [
+                        "kubectl", "--kubeconfig", kubeconfig,
+                        "patch", resource, name, "-n", ns,
+                        "--type=json",
+                        "-p=[{\"op\":\"remove\",\"path\":\"/metadata/finalizers\"}]",
+                    ],
+                    capture_output=True, text=True,
+                )
+            subprocess.run(
+                [
+                    "kubectl", "--kubeconfig", kubeconfig,
+                    "delete", resource, "-A", "--all",
+                    "--ignore-not-found", "--wait=false",
+                ],
+                capture_output=True, text=True,
+            )
+
+        # 1. CAPI objects (TinkerbellMachine has a CAPT finalizer; Cluster/Machine have CAPI finalizers)
+        log.info("[clean] Force-removing CAPI/CAPT object finalizers and deleting...")
+        for res in [
+            "tinkerbellmachines",
+            "machines.cluster.x-k8s.io",
+            "machinedeployments.cluster.x-k8s.io",
+            "kubeadmcontrolplanes",
+            "kubeadmconfigs",
+            "clusters.cluster.x-k8s.io",
+        ]:
+            _remove_finalizers_and_delete(res)
+
+        # 2. Hardware CRs (may have tinkerbellmachine finalizer from CAPT)
+        log.info("[clean] Removing finalizers from Hardware objects and deleting...")
+        _remove_finalizers_and_delete("hardware.tinkerbell.org")
+
+        # 3. Tinkerbell Workflows and Templates
+        log.info("[clean] Deleting Tinkerbell Workflow and Template objects...")
+        for res in ["workflows.tinkerbell.org", "templates.tinkerbell.org"]:
+            subprocess.run(
+                ["kubectl", "--kubeconfig", kubeconfig,
+                 "delete", res, "-A", "--all", "--ignore-not-found"],
+                capture_output=True, text=True,
+            )
+
+        # 4. Rufio Jobs and Machines
+        log.info("[clean] Deleting Rufio Job and Machine objects...")
+        for res in ["jobs.bmc.tinkerbell.org", "machines.bmc.tinkerbell.org"]:
+            _remove_finalizers_and_delete(res)
+
+        # 5. Remove CAPT infrastructure provider (deletes CAPT controller + CRDs)
+        log.info("[clean] Removing CAPT infrastructure provider via clusterctl...")
+        subprocess.run(
+            ["clusterctl", "--kubeconfig", kubeconfig,
+             "delete", "--infrastructure", "tinkerbell"],
+            capture_output=True,
+        )
+
+        # 6. Helm uninstall Tinkerbell stack
         log.info("[clean] Uninstalling Tinkerbell Helm release...")
         subprocess.run(
             ["helm", "--kubeconfig", kubeconfig,
@@ -280,21 +471,90 @@ class MgmtClusterCleaner:
             capture_output=True,
         )
 
-        log.info("[clean] Deleting tinkerbell namespace...")
+        # 7. Remove CAPI core providers
+        log.info("[clean] Removing CAPI core providers via clusterctl...")
+        subprocess.run(
+            ["clusterctl", "--kubeconfig", kubeconfig,
+             "delete", "--all"],
+            capture_output=True,
+        )
+
+        # 8. Force-delete tinkerbell namespace (catches any CRs still stuck with finalizers)
+        log.info("[clean] Force-deleting tinkerbell namespace...")
+        # First patch any remaining CRs' finalizers in the namespace
+        for res in ["hardware", "workflows", "templates", "machines", "jobs"]:
+            r = subprocess.run(
+                [
+                    "kubectl", "--kubeconfig", kubeconfig,
+                    "get", res, "-n", "tinkerbell", "--ignore-not-found",
+                    "-o", "jsonpath={range .items[*]}{.metadata.name}{'\\n'}{end}",
+                ],
+                capture_output=True, text=True,
+            )
+            for name in r.stdout.strip().splitlines():
+                if not name:
+                    continue
+                subprocess.run(
+                    [
+                        "kubectl", "--kubeconfig", kubeconfig,
+                        "patch", res, name, "-n", "tinkerbell",
+                        "--type=json",
+                        "-p=[{\"op\":\"remove\",\"path\":\"/metadata/finalizers\"}]",
+                    ],
+                    capture_output=True, text=True,
+                )
         subprocess.run(
             ["kubectl", "--kubeconfig", kubeconfig,
              "delete", "namespace", "tinkerbell", "--ignore-not-found"],
             capture_output=True,
         )
 
-        log.info("[clean] Removing CAPT infrastructure provider...")
-        subprocess.run(
-            ["clusterctl", "--kubeconfig", kubeconfig,
-             "delete", "--infrastructure", "tinkerbell"],
-            capture_output=True,
-        )
-
         log.info("[clean] Tinkerbell teardown complete")
+
+    # ------------------------------------------------------------------
+    # Step 2 — Delete all PVCs (before kubeadm reset kills the API server)
+    # ------------------------------------------------------------------
+
+    def _delete_pvcs(self, kubeconfig: str) -> None:
+        """Delete all PVCs in all namespaces so local-path-provisioner hostPath
+        directories are cleaned up and don't fill the disk."""
+        log.info("[clean] Removing finalizers from PVCs...")
+        r = subprocess.run(
+            [
+                "kubectl", "--kubeconfig", kubeconfig,
+                "get", "pvc", "-A",
+                "-o", "jsonpath={range .items[*]}{.metadata.namespace}/{.metadata.name}{'\\n'}{end}",
+            ],
+            capture_output=True, text=True,
+        )
+        for line in r.stdout.strip().splitlines():
+            if "/" not in line:
+                continue
+            ns, name = line.split("/", 1)
+            subprocess.run(
+                [
+                    "kubectl", "--kubeconfig", kubeconfig,
+                    "patch", "pvc", name, "-n", ns,
+                    "--type=json",
+                    "-p=[{\"op\":\"remove\",\"path\":\"/metadata/finalizers\"}]",
+                ],
+                capture_output=True, text=True,
+            )
+
+        log.info("[clean] Deleting all PVCs across all namespaces...")
+        result = subprocess.run(
+            [
+                "kubectl", "--kubeconfig", kubeconfig,
+                "delete", "pvc", "--all", "--all-namespaces",
+                "--ignore-not-found",
+                "--wait=false",
+            ],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            log.warning("[clean] PVC deletion returned non-zero: %s", result.stderr.strip())
+        else:
+            log.info("[clean] PVCs deleted: %s", result.stdout.strip() or "(none found)")
 
     # ------------------------------------------------------------------
     # Step 2a — kubeadm reset + k8s cleanup
@@ -345,7 +605,7 @@ class MgmtClusterCleaner:
             log.info("[clean] No disk_device configured — skipping wipefs")
 
         log.info("[clean] Removing local-path-provisioner data...")
-        ssh.run("rm -rf /var/lib/rancher/local-path-provisioner 2>/dev/null || true", sudo=True)
+        ssh.run("rm -rf /var/lib/rancher/local-path-provisioner /opt/local-path-provisioner 2>/dev/null || true", sudo=True)
 
     # ------------------------------------------------------------------
     # Step 2c — Metal3 / Ironic / Docker cleanup

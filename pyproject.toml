@@ -11,13 +11,22 @@ version = "0"
 # https://packaging.python.org/en/latest/specifications/version-specifiers/#version-matching
 # This project uses 'uv pip compile' from https://github.com/astral-sh/uv
 # which will ensure the resolved versions of both direct and indirect dependencies are pinned.
-# Therefore we only need to constrain versions when some ranges 
+# Therefore we only need to constrain versions when some ranges
 # of dependency versions are not compatible.
 dependencies = [
 ]
 
+[project.optional-dependencies]
+# Installed only when running the daalu-worker (Temporal worker pod).
+# Keeps the daalu CLI itself free of the temporalio dependency.
+worker = [
+    "temporalio>=1.6.0",
+]
+
 [project.scripts]
 daalu = "daalu.cli.app:app"
+daalu-worker = "daalu.temporal.worker:main"
+daalu-registry = "daalu.temporal.cli:dump_registry"
 
 [tool.setuptools.packages.find]
 where = ["src"]
