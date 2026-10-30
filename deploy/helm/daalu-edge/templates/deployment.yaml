@@ -1,0 +1,182 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: daalu-edge
+  labels: {{- include "daalu-edge.labels" . | nindent 4 }}
+spec:
+  # WireGuard is kernel state in the pod's netns; do not horizontally
+  # scale — only one wg0 per netns. Recreate so the old pod releases
+  # the tunnel before the new one tries to bring it up.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: daalu-edge
+  template:
+    metadata:
+      labels:
+        app: daalu-edge
+        {{- include "daalu-edge.labels" . | nindent 8 }}
+    spec:
+      {{- if .Values.kubeRegistration.enabled }}
+      serviceAccountName: {{ .Values.kubeRegistration.serviceAccountName }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: edge
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          env:
+            - name: OPERATOR_API_URL
+              value: {{ .Values.operator.apiUrl | quote }}
+            - name: CLUSTER_SLUG
+              value: {{ .Values.cluster.slug | quote }}
+            - name: TUNNEL_IP
+              value: {{ .Values.cluster.tunnelIp | quote }}
+            - name: HUB_ENDPOINT
+              value: {{ .Values.hub.endpoint | quote }}
+            {{- if .Values.ourPublicEndpoint }}
+            - name: OUR_PUBLIC_ENDPOINT
+              value: {{ .Values.ourPublicEndpoint | quote }}
+            {{- end }}
+            - name: STATE_DIR
+              value: /var/lib/daalu-edge
+            {{- if .Values.kubeRegistration.enabled }}
+            - name: KUBE_TOKEN_FILE
+              value: /var/run/daalu-edge/kube/token
+            {{- end }}
+            - name: BOOTSTRAP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: daalu-edge-bootstrap
+                  key: BOOTSTRAP_TOKEN
+            - name: HUB_PUBLIC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: daalu-edge-bootstrap
+                  key: HUB_PUBLIC_KEY
+          volumeMounts:
+            - name: state
+              mountPath: /var/lib/daalu-edge
+            - name: modules
+              mountPath: /lib/modules
+              readOnly: true
+            {{- if .Values.kubeRegistration.enabled }}
+            # Long-lived SA token the entrypoint reports to the hub, so the
+            # operator never hand-pastes a kubeconfig. Mounted read-only and
+            # never written to the state PVC.
+            - name: kube-registration
+              mountPath: /var/run/daalu-edge/kube
+              readOnly: true
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+        {{- if .Values.apiserverProxy.enabled }}
+        # API-server reverse proxy. Listens on the pod's wg0 address
+        # (the operator dials it as the kubeconfig `server:`) and
+        # forwards TCP unchanged to the customer's in-cluster kube
+        # apiserver Service. TLS is end-to-end; this container does not
+        # terminate it.
+        - name: apiserver-proxy
+          image: "{{ .Values.apiserverProxy.image }}"
+          imagePullPolicy: {{ .Values.apiserverProxy.imagePullPolicy }}
+          args:
+            - "-d"
+            - "TCP-LISTEN:{{ .Values.apiserverProxy.listenPort }},fork,reuseaddr"
+            - "TCP:{{ .Values.apiserverProxy.upstream }}"
+          ports:
+            - name: kube-api
+              containerPort: {{ .Values.apiserverProxy.listenPort }}
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.apiserverProxy.resources | nindent 12 }}
+        {{- end }}
+        {{- if .Values.edgeProxy.enabled }}
+        # HTTP forward-proxy sidecar. Bound to the pod's wg0 IP only;
+        # nothing outside the tunnel can reach it. The hub uses it as an
+        # httpx proxy for any Integration row that has cluster_tunnel_id
+        # set — that's how `*.svc.cluster.local` URLs resolve from the
+        # hub side. See deploy/edge/proxy.py.
+        - name: edge-proxy
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python3", "/proxy.py"]
+          env:
+            - name: LISTEN_HOST
+              value: {{ .Values.cluster.tunnelIp | quote }}
+            - name: LISTEN_PORT
+              value: {{ .Values.edgeProxy.listenPort | quote }}
+            {{- if .Values.edgeProxy.allowedHosts }}
+            - name: ALLOWED_HOSTS
+              value: {{ .Values.edgeProxy.allowedHosts | quote }}
+            {{- end }}
+          ports:
+            - name: edge-proxy
+              containerPort: {{ .Values.edgeProxy.listenPort }}
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.edgeProxy.resources | nindent 12 }}
+        {{- end }}
+        {{- /* Generic service proxies — one socat sidecar per entry.
+              Each one listens on the pod's wg0 address (tunnel IP) on
+              its declared port and forwards raw TCP to a Service inside
+              this cluster. See docs/nvidia-strategy.md Appendix B for
+              the federation-via-tunnel use case. */}}
+        {{- $defaults := .Values.serviceProxyDefaults }}
+        {{- range $i, $p := .Values.serviceProxies }}
+        {{- if not $p.name }}{{ fail (printf "serviceProxies[%d].name is required" $i) }}{{ end }}
+        {{- if not $p.listenPort }}{{ fail (printf "serviceProxies[%d].listenPort is required" $i) }}{{ end }}
+        {{- if not $p.upstream }}{{ fail (printf "serviceProxies[%d].upstream is required" $i) }}{{ end }}
+        - name: svcproxy-{{ $p.name }}
+          image: "{{ default $defaults.image $p.image }}"
+          imagePullPolicy: {{ default $defaults.imagePullPolicy $p.imagePullPolicy }}
+          args:
+            - "-d"
+            - "TCP-LISTEN:{{ $p.listenPort }},fork,reuseaddr"
+            - "TCP:{{ $p.upstream }}"
+          ports:
+            - name: svc-{{ $p.name | trunc 10 | trimSuffix "-" }}
+              containerPort: {{ $p.listenPort }}
+              protocol: TCP
+          resources:
+            {{- toYaml (default $defaults.resources $p.resources) | nindent 12 }}
+        {{- end }}
+      volumes:
+        - name: state
+        {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: daalu-edge-state
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+        - name: modules
+          hostPath:
+            path: /lib/modules
+            type: Directory
+        {{- if .Values.kubeRegistration.enabled }}
+        - name: kube-registration
+          secret:
+            secretName: {{ .Values.kubeRegistration.serviceAccountName }}-token
+            # The token controller populates this Secret asynchronously, so
+            # on a cold install the pod can start before it has content.
+            # Optional keeps the pod schedulable; the entrypoint retries.
+            optional: true
+        {{- end }}

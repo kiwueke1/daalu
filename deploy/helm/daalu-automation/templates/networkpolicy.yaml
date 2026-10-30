@@ -1,0 +1,115 @@
+{{- if .Values.networkPolicies.enabled -}}
+# Default-deny ingress baseline. Specific allow rules below open up only
+# the traffic the platform needs.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: daalu-default-deny
+  labels: {{- include "daalu.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress: []
+---
+# API + frontend receive traffic from the ingress controller. Traefik
+# on k3s lives in kube-system with the label `app.kubernetes.io/name: traefik`.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: daalu-api-ingress
+  labels: {{- include "daalu.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: { app: daalu-api }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels: { app: daalu-frontend }
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+        # Prometheus scrapes /metrics from the monitoring namespace.
+        # Without this rule the daalu-api Prometheus job sits in DOWN
+        # state with "context deadline exceeded" — the default-deny
+        # baseline drops the TCP SYN before /metrics ever responds.
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: daalu-frontend-ingress
+  labels: {{- include "daalu.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: { app: daalu-frontend }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: TCP
+          port: 3000
+---
+{{- if .Values.postgres.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: daalu-postgres-ingress
+  labels: {{- include "daalu.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: { app: daalu-postgres }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: daalu-api } }
+        - podSelector: { matchLabels: { app: daalu-worker } }
+        - podSelector: { matchLabels: { app: daalu-beat } }
+        - podSelector: { matchLabels: { app: daalu-agents } }
+        - podSelector: { matchLabels: { app: daalu-executor } }
+        # Daalu-hosted gateway reads daalu_hosted_quotas + writes
+        # usage_events on every call.
+        - podSelector: { matchLabels: { app: inference-gateway } }
+        # Workspace-controller reads / writes the workspaces table.
+        - podSelector: { matchLabels: { app: workspace-controller } }
+        # Lifecycle controllers reconcile *_tenants from the same DB.
+        - podSelector: { matchLabels: { app: nautobot-controller } }
+        - podSelector: { matchLabels: { app: config-manager-controller } }
+      ports:
+        - protocol: TCP
+          port: 5432
+---
+{{- end }}
+{{- if .Values.redis.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: daalu-redis-ingress
+  labels: {{- include "daalu.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: { app: daalu-redis }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: daalu-api } }
+        - podSelector: { matchLabels: { app: daalu-worker } }
+        - podSelector: { matchLabels: { app: daalu-beat } }
+        - podSelector: { matchLabels: { app: daalu-agents } }
+        - podSelector: { matchLabels: { app: daalu-executor } }
+        # Gateway uses Redis for per-tenant token-bucket rate limits.
+        - podSelector: { matchLabels: { app: inference-gateway } }
+      ports:
+        - protocol: TCP
+          port: 6379
+{{- end }}
+{{- end }}

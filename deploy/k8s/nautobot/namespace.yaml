@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nautobot
+  # PodSecurity = baseline rather than restricted. The upstream
+  # networktocode/nautobot image runs as the `nautobot` user (uid
+  # 999) by default but a few system containers in this manifest set
+  # (postgres init, redis tmp) don't yet ship the full container-level
+  # securityContext fields restricted requires. Baseline blocks the
+  # obviously-dangerous things (host network, privileged, hostPath)
+  # without forcing a deeper hardening pass right now.
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: restricted

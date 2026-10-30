@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nautobot
+  namespace: nautobot
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [sot.daalu.io]
+      secretName: sot-daalu-io-tls
+  rules:
+    - host: sot.daalu.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: nautobot
+                port:
+                  number: 80

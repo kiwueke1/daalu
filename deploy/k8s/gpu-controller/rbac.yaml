@@ -1,0 +1,50 @@
+# RBAC for the gpu-controller.
+#
+# Bounded like the nautobot-controller's: it can manage the resource
+# kinds the vLLM stack needs, cluster-wide (because in operator-cluster
+# mode it stamps into the shared `daalu` namespace and may create it).
+# In customer-cluster mode it uses the joined cluster's kubeconfig, so
+# this RBAC is irrelevant there.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: daalu-gpu-controller
+  namespace: daalu-automation
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: daalu-gpu-controller
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch", "create", "patch"]
+  # Read nodes to discover schedulable GPUs for the onboarding UI.
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["secrets", "services", "pods"]
+    verbs: ["get", "list", "watch", "create", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "patch", "delete"]
+  - apiGroups: ["policy"]
+    resources: ["poddisruptionbudgets"]
+    verbs: ["get", "list", "watch", "create", "patch", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get", "list", "watch", "create", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: daalu-gpu-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: daalu-gpu-controller
+subjects:
+  - kind: ServiceAccount
+    name: daalu-gpu-controller
+    namespace: daalu-automation

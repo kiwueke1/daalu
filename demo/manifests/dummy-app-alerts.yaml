@@ -1,0 +1,36 @@
+# A fast-firing alert so the demo doesn't make you wait. Lives in the
+# `monitoring` namespace and carries the `release: monitoring` label so the
+# kube-prometheus-stack Prometheus operator picks it up (its default ruleSelector
+# matches that label).
+#
+# The rule reads kube-state-metrics: when the dummy-app Deployment has 0
+# available replicas for 1 minute, it fires `DummyAppDown`. Alertmanager then
+# surfaces it on /api/v2/alerts, which is what Daalu's `prometheus` integration
+# polls. The annotations give the agent (and you) a clear runbook.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: dummy-app-rules
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  groups:
+    - name: dummy-app.rules
+      rules:
+        - alert: DummyAppDown
+          expr: kube_deployment_status_replicas_available{namespace="daalu-demo", deployment="dummy-app"} == 0
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "dummy-app is down (0 available replicas)"
+            description: >-
+              The dummy-app Deployment in namespace daalu-demo has 0 available
+              replicas — the service is down. The most likely cause is a bad
+              container image or a crash-looping container introduced by a recent
+              rollout. Inspect the pods and recent events, identify the cause,
+              and restore service (typically by rolling back the last change).
+            runbook: >-
+              kubectl -n daalu-demo get pods; kubectl -n daalu-demo describe deploy/dummy-app;
+              if a recent rollout is at fault: kubectl -n daalu-demo rollout undo deploy/dummy-app

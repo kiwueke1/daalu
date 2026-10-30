@@ -1,0 +1,35 @@
+{{- /*
+Wildcard Ingress for per-tenant NV-CM tool UIs (*.<baseDomain>).
+
+All paths route to daalu-api, which host-routes ``<tool>-<slug>.<zone>`` to
+the tool reverse proxy (api/tool_proxy.py) and forwards over the tenant's
+WireGuard tunnel. TLS is the wildcard cert from cmtools-certificate.yaml.
+Kept separate from the daalu.example.com Ingress so the two never interfere.
+Gated on cmtools.enabled.
+*/ -}}
+{{- if and .Values.cmtools .Values.cmtools.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cmtools
+  labels:
+    app.kubernetes.io/part-of: daalu-automation
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  ingressClassName: {{ .Values.cmtools.ingressClassName | default "traefik" }}
+  tls:
+    - hosts:
+        - "*.{{ .Values.cmtools.baseDomain | default "cmtools.example.com" }}"
+      secretName: {{ .Values.cmtools.tlsSecretName | default "cmtools-wildcard-tls" }}
+  rules:
+    - host: "*.{{ .Values.cmtools.baseDomain | default "cmtools.example.com" }}"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Values.cmtools.backendService | default "daalu-api" }}
+                port:
+                  number: 80
+{{- end }}

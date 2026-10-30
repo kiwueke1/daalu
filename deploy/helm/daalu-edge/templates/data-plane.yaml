@@ -1,0 +1,184 @@
+{{- if .Values.tenantData.enabled }}
+# Daalu Private edge data plane.
+#
+# Runs the same daalu backend image with --mode=edge so the
+# customer's Postgres serves all tenant-scoped rows (alerts,
+# change proposals, briefings, conversation history, …). The hub's
+# EdgeForwardMiddleware proxies tenant-scoped requests here via
+# the WireGuard tunnel; the hub never touches the rows.
+#
+# See docs/design/edge-data-plane.md.
+---
+# One-shot migration Job: runs `alembic upgrade head` against the
+# local Postgres on first install. ttlSecondsAfterFinished cleans
+# the Job up automatically — re-run by `helm upgrade` if the chart
+# version bumps the schema.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: daalu-edge-migrate-{{ .Release.Revision }}
+  labels:
+    app: daalu-edge-data
+    daalu.io/component: migrate
+spec:
+  ttlSecondsAfterFinished: 600
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: daalu-edge-data
+        daalu.io/component: migrate
+    spec:
+      restartPolicy: OnFailure
+      {{- if .Values.tenantData.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.tenantData.imagePullSecret }}
+      {{- end }}
+      containers:
+        - name: migrate
+          image: {{ .Values.tenantData.image.repository }}:{{ .Values.tenantData.image.tag }}
+          imagePullPolicy: {{ .Values.tenantData.image.pullPolicy }}
+          command: ["alembic", "upgrade", "head"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: daalu-edge-data-secrets
+                  key: DATABASE_URL
+            # Migrations import everything; the service-token key
+            # being unset would break /core/service_tokens.py
+            # import; provide a placeholder so the Job can run.
+            - name: SERVICE_TOKEN_SECRET_KEY
+              value: "migrate-only"
+          resources:
+            requests: { cpu: 50m, memory: 256Mi }
+            limits:   { cpu: 500m, memory: 512Mi }
+---
+# Secrets for the edge-data pod. Contains the per-tenant service
+# token (cleartext on this side — the hub stores only the sha256
+# hash) and the DATABASE_URL pointing at the bundled or BYO
+# Postgres. The chart fails-loud if `tenantData.serviceToken` is
+# empty on first install; operators copy it from the hub's
+# Settings page during provisioning.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: daalu-edge-data-secrets
+type: Opaque
+stringData:
+  SERVICE_TOKEN_SECRET_KEY: {{ required "tenantData.serviceToken is required" .Values.tenantData.serviceToken | quote }}
+  DAALU_EDGE_TENANT_ID: {{ required "tenantData.tenantId is required" .Values.tenantData.tenantId | quote }}
+  DATABASE_URL: {{- if .Values.postgres.enabled }} {{ printf "postgresql+asyncpg://%s:%s@daalu-edge-postgres:5432/%s" .Values.postgres.user .Values.postgres.password .Values.postgres.database | quote }}
+                {{- else }} {{ required "tenantData.dbUrl is required when postgres.enabled=false" .Values.tenantData.dbUrl | quote }}
+                {{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: daalu-edge-data
+  labels:
+    app: daalu-edge-data
+    daalu.io/tier: private
+spec:
+  replicas: {{ .Values.tenantData.replicas | default 1 }}
+  selector:
+    matchLabels: { app: daalu-edge-data }
+  template:
+    metadata:
+      labels:
+        app: daalu-edge-data
+        daalu.io/tier: private
+    spec:
+      {{- if .Values.tenantData.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.tenantData.imagePullSecret }}
+      {{- end }}
+      containers:
+        - name: data-plane
+          image: {{ .Values.tenantData.image.repository }}:{{ .Values.tenantData.image.tag }}
+          imagePullPolicy: {{ .Values.tenantData.image.pullPolicy }}
+          command: ["daalu", "server", "--mode=edge", "--host", "0.0.0.0", "--port", "8000"]
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - secretRef:
+                name: daalu-edge-data-secrets
+          env:
+            - name: DAALU_MODE
+              value: edge
+            - name: ENVIRONMENT
+              value: production
+            - name: LOG_LEVEL
+              value: INFO
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8000 }
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8000 }
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            {{- toYaml .Values.tenantData.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: daalu-edge-data
+  labels: { app: daalu-edge-data }
+spec:
+  selector: { app: daalu-edge-data }
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000
+{{- if .Values.tenantData.networkPolicy.enabled }}
+---
+# Default-deny on the edge-data pod except for traffic coming from
+# the daalu-edge tunnel pod. The tunnel pod terminates the
+# WireGuard hub-to-edge link; whatever it forwards into the pod
+# network is what we accept here.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: daalu-edge-data-ingress
+spec:
+  podSelector:
+    matchLabels: { app: daalu-edge-data }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: daalu-edge
+        # In dev, allow same-namespace probes from anywhere so
+        # `kubectl exec` debugging works. Tighten or remove in prod.
+        {{- range .Values.tenantData.networkPolicy.allowedFromApps }}
+        - podSelector:
+            matchLabels: { app: {{ . }} }
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: 8000
+{{- if .Values.postgres.enabled }}
+---
+# Postgres ingress: only daalu-edge-data + the migration Job.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: daalu-edge-postgres-ingress
+spec:
+  podSelector:
+    matchLabels: { app: daalu-edge-postgres }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: { app: daalu-edge-data }
+      ports:
+        - protocol: TCP
+          port: 5432
+{{- end }}
+{{- end }}
+{{- end }}

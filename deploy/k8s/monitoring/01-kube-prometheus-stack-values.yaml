@@ -1,0 +1,173 @@
+# Helm values for kube-prometheus-stack — Prometheus, Alertmanager,
+# Grafana, kube-state-metrics, node-exporter, plus the CRDs
+# (ServiceMonitor / PodMonitor / PrometheusRule) the rest of our
+# monitoring stack consumes.
+#
+# Install:
+#   helm upgrade --install kube-prom-stack \
+#     prometheus-community/kube-prometheus-stack \
+#     -n monitoring --create-namespace \
+#     -f deploy/k8s/monitoring/01-kube-prometheus-stack-values.yaml
+
+defaultRules:
+  create: true
+  rules:
+    # The kube-* default rules are good; turning off the ones that
+    # would page on healthy single-node k3s clusters.
+    kubeApiserverAvailability: true
+    kubeProxy: false           # k3s ships without kube-proxy
+    kubeScheduler: false       # not exposed in k3s
+    kubeControllerManager: false
+
+prometheus:
+  prometheusSpec:
+    retention: 30d
+    retentionSize: 40GB
+    # Auto-discover ServiceMonitor / PodMonitor / PrometheusRule rows
+    # from *every* namespace, not just `monitoring`. This is what makes
+    # adding a new app's ServiceMonitor "just work" without touching
+    # Prometheus config.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+    # Storage — single-node k3s ships only `local-path`. Switch to
+    # `hcloud-volumes` (Hetzner Cloud CSI) or `gp3`/etc.
+    # if you go multi-node. Kind uses `standard`.
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          resources:
+            requests:
+              storage: 50Gi
+    # Scrape the cluster's own metrics + our app endpoints. Most of the
+    # selection happens via ServiceMonitor — this block is the *static*
+    # path for things we'd rather not author a SM for.
+    additionalScrapeConfigs:
+      # vLLM inside the cluster — picked up via Service annotation in
+      # deploy/k8s/gpu/03-vllm-llama-classifier.yaml
+      - job_name: vllm
+        kubernetes_sd_configs:
+          - role: service
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_service_name]
+            target_label: service
+    resources:
+      requests:
+        memory: 1Gi
+        cpu: 200m
+      limits:
+        memory: 4Gi
+
+alertmanager:
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          resources:
+            requests:
+              storage: 5Gi
+  config:
+    global:
+      resolve_timeout: 5m
+    # Three receivers covering the audience: real pages to PagerDuty,
+    # FYI to Slack, fallback to email. Each receiver's webhook URL /
+    # routing key lives in a Kubernetes Secret mounted into AM — see
+    # deploy/k8s/monitoring/06-alertmanager-secret.example.yaml.
+    receivers:
+      - name: "slack-fyi"
+        slack_configs:
+          - api_url_file: /etc/alertmanager/secrets/alertmanager-secrets/slack_webhook_url
+            channel: "#daalu-alerts"
+            send_resolved: true
+            title: "{{ .GroupLabels.alertname }} ({{ .Status }})"
+            text: |
+              {{ range .Alerts }}
+              *{{ .Labels.severity | toUpper }}* — {{ .Annotations.summary }}
+              {{ .Annotations.description }}
+              {{ if .Annotations.runbook_url }}Runbook: {{ .Annotations.runbook_url }}{{ end }}
+              {{ end }}
+      - name: "pagerduty-critical"
+        pagerduty_configs:
+          - routing_key_file: /etc/alertmanager/secrets/alertmanager-secrets/pagerduty_routing_key
+            severity: "{{ .CommonLabels.severity }}"
+            description: "{{ .CommonAnnotations.summary }}"
+      - name: "blackhole"
+    route:
+      receiver: "slack-fyi"
+      group_by: ["namespace", "alertname"]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 12h
+      routes:
+        # Critical alerts always page.
+        - matchers:
+            - severity = "critical"
+          receiver: "pagerduty-critical"
+          continue: true
+          repeat_interval: 1h
+        # Watchdog — a "this should always fire" heartbeat that we
+        # route to nothing so it doesn't spam, but external dead-man's
+        # switches (DeadMansSnitch, healthchecks.io) can subscribe.
+        - matchers:
+            - alertname = "Watchdog"
+          receiver: "blackhole"
+  ingress:
+    enabled: false  # internal-only; tunnel kubectl port-forward to view
+
+grafana:
+  enabled: true
+  adminPassword: "change-me-in-prod"   # override via --set adminPassword=...
+  defaultDashboardsEnabled: true        # kube/Node defaults
+  persistence:
+    enabled: true
+    storageClassName: local-path
+    size: 5Gi
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+    hosts:
+      - grafana.daalu.io
+    tls:
+      - hosts: [grafana.daalu.io]
+        secretName: grafana-tls
+  # Datasource for Loki — added automatically when Loki is installed in
+  # the same namespace via the sidecar provisioner below.
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: ALL
+    datasources:
+      enabled: true
+      label: grafana_datasource
+      labelValue: "1"
+      searchNamespace: ALL
+  grafana.ini:
+    auth.anonymous:
+      enabled: false
+    feature_toggles:
+      # Lets us link Tempo trace IDs from a log line in Loki.
+      enable: traceqlEditor,traceqlSearch
+
+# kube-state-metrics — already enabled by the chart; tighten the
+# label allowlist so the cardinality of our metrics stays under
+# control. We *do* want pod labels (especially `tenant`) because the
+# billing rollups in core/billing.py depend on them.
+kube-state-metrics:
+  metricLabelsAllowlist:
+    - "pods=[app,tenant,daalu.io/tier]"
+    - "deployments=[app]"
+    - "services=[app]"
+
+# node-exporter is on by default — good as-is.

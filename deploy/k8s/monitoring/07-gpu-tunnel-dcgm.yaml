@@ -1,0 +1,100 @@
+# External-target DCGM scrape for SOVEREIGN GPUs reachable over the WireGuard
+# tunnel. The dcgm-exporters run on the *workload* cluster; daalu-edge runs one
+# socat serviceProxy per GPU node, each pinned to that node's exporter via the
+# nvidia-dcgm-exporter-nodes NodePort (deploy/k8s/gpu/14-dcgm-nodeport.yaml):
+#   tunnel :9400 -> gpu-node-1 (RTX 2000 Ada)
+#   tunnel :9401 -> gpu-node-3 (RTX 6000 Ada)
+# The hub Prometheus has no pod/Endpoint for those targets, so we define a
+# selector-less Service + manual Endpoints pinned to the tunnel IP (one address,
+# one named port per node) and a ServiceMonitor that scrapes both and stamps the
+# owning `tenant` label — the same dimension the AI Factory router queries
+# ({tenant="<id>"}). honorLabels keeps each exporter's own Hostname/UUID/
+# modelName, so the two physical cards stay distinct.
+#
+# A single dcgm proxy through the exporter ClusterIP only ever surfaced ONE node
+# (a ClusterIP load-balances to one backend pod per scrape), which is why the AI
+# Factory page showed a single GPU after gpu-node-3 was onboarded.
+#
+# Reading dcgm-exporter is metrics-only (no /dev/nvidia churn), so it does not
+# touch the RTX firmware-hang fragility.
+#
+# NOTE: static, per-node wiring for the single live GPU tenant (…0010 over
+# 10.200.0.2). TODO(gpu-controller): generate this trio per gpu_tenant / GPU
+# node from the cluster tunnel IP + tenant_id + node InternalIPs so it scales to
+# N sovereign GPUs without hand-maintained ports.
+apiVersion: v1
+kind: Service
+metadata:
+  name: gpu-tunnel-dcgm-0010
+  namespace: monitoring
+  labels:
+    app: gpu-tunnel-dcgm
+    release: kube-prom-stack
+spec:
+  ports:
+    - name: gpu-metrics
+      port: 9400
+      targetPort: 9400
+      protocol: TCP
+    - name: gpu-metrics-gpu-node-3
+      port: 9401
+      targetPort: 9401
+      protocol: TCP
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: gpu-tunnel-dcgm-0010
+  namespace: monitoring
+  labels:
+    app: gpu-tunnel-dcgm
+subsets:
+  - addresses:
+      - ip: 10.200.0.2
+    ports:
+      - name: gpu-metrics
+        port: 9400
+        protocol: TCP
+      - name: gpu-metrics-gpu-node-3
+        port: 9401
+        protocol: TCP
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: gpu-tunnel-dcgm-0010
+  namespace: monitoring
+  labels:
+    release: kube-prom-stack
+spec:
+  namespaceSelector:
+    matchNames: [monitoring]
+  selector:
+    matchLabels:
+      app: gpu-tunnel-dcgm
+  endpoints:
+    # gpu-node-1 — tunnel :9400
+    - port: gpu-metrics
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 15s
+      # Keep the exporter's own labels (Hostname, UUID, namespace, pod, modelName…).
+      honorLabels: true
+      relabelings:
+        # This tunnel belongs to tenant …0010 — stamp it so the router's
+        # tenant-scoped queries match. (Static: one GPU tenant today.)
+        - targetLabel: tenant
+          replacement: "00000000-0000-0000-0000-000000000010"
+        - targetLabel: cluster
+          replacement: "daalu-workload"
+    # gpu-node-3 — tunnel :9401
+    - port: gpu-metrics-gpu-node-3
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 15s
+      honorLabels: true
+      relabelings:
+        - targetLabel: tenant
+          replacement: "00000000-0000-0000-0000-000000000010"
+        - targetLabel: cluster
+          replacement: "daalu-workload"

@@ -1,0 +1,14 @@
+# kind cluster for the Daalu demo lab.
+# extraPortMappings publish the monitoring NodePorts on the host (0.0.0.0) so
+# you can open Grafana/Prometheus/Alertmanager in a browser. Daalu itself reaches
+# the cluster over the shared "kind" Docker network (see demo/up.sh), not these.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: daalu-demo
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      - { containerPort: 30909, hostPort: 9090, listenAddress: "0.0.0.0" }   # Prometheus
+      - { containerPort: 30903, hostPort: 9093, listenAddress: "0.0.0.0" }   # Alertmanager
+      - { containerPort: 30300, hostPort: 3001, listenAddress: "0.0.0.0" }   # Grafana
+      - { containerPort: 30100, hostPort: 3100, listenAddress: "0.0.0.0" }   # Loki

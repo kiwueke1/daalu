@@ -1,0 +1,53 @@
+# A deliberately simple app to break and watch Daalu fix.
+#
+# It's just nginx with a readiness probe. We use the Deployment's
+# "available replicas" (from kube-state-metrics) as the health signal, so the
+# app doesn't need to expose any metrics of its own. strategy: Recreate means
+# that when we push a bad image/command the old pod is torn down first, so the
+# app actually goes DOWN (available replicas → 0) and the alert fires.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: daalu-demo
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dummy-app
+  namespace: daalu-demo
+  labels: { app: dummy-app }
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: { app: dummy-app }
+  template:
+    metadata:
+      labels: { app: dummy-app }
+    spec:
+      containers:
+        - name: dummy
+          image: nginx:1.27-alpine        # the known-good image
+          ports:
+            - { containerPort: 80 }
+          readinessProbe:
+            httpGet: { path: /, port: 80 }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /, port: 80 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits:   { cpu: 100m, memory: 64Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dummy-app
+  namespace: daalu-demo
+spec:
+  selector: { app: dummy-app }
+  ports:
+    - { port: 80, targetPort: 80 }

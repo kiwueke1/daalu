@@ -1,0 +1,61 @@
+# MPS sharing — the production multi-tenant QoS lever on the no-MIG Ada.
+#
+# Where time-slicing (01-time-slicing.yaml) time-multiplexes compute and
+# leaves VRAM **shared and unisolated**, MPS (Multi-Process Service) runs
+# every client inside one CUDA context with **enforced per-client VRAM and
+# compute (active-thread) limits**. A noisy tenant can no longer OOM a
+# neighbour by grabbing all the framebuffer. It is *not* hardware isolation
+# (a faulting client can still wedge the shared context — that needs MIG,
+# which the RTX 6000 Ada does NOT have), but it is materially stronger than
+# time-slicing and is the **production isolation answer for the 48 GB Ada**.
+# See docs/plans/nvidia-ai-factory/01-node-enablement.md §4.3 / §5.
+#
+# Same ConfigMap shape as 01-time-slicing.yaml — keyed per profile under
+# `data`, in namespace `gpu-operator`. The active profile per node is
+# selected by labelling the node `nvidia.com/device-plugin.config=<key>`
+# (and patching the ClusterPolicy `devicePlugin.config`; `scripts/deploy-gpu.sh`
+# step 3 does both). MPS additionally needs the GPU Operator's
+# `mps-control-daemon` enabled (`devicePlugin.config.default` / ClusterPolicy
+# `mps` block) — that toggle is part of the §6 onboarding, not this file.
+#
+# IMPORTANT: time-slicing and MPS are **mutually exclusive per card**. A
+# given node runs one or the other, never both. Keep `ada-16` on
+# time-slicing (RTX 2000 Ada dev/failover, trusted single-tenant) and point
+# the shared RTX 6000 Ada at `ada-48-mps` below.
+#
+# `renameByDefault: false` keeps the resource name `nvidia.com/gpu` so no
+# downstream manifest changes its request. `failRequestsGreaterThanOne: true`
+# blocks a pod from asking for >1 replica of a shared device (meaningless
+# under MPS — a pod gets one client slot).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mps-config
+  namespace: gpu-operator
+data:
+  ada-48-mps: |
+    version: v1
+    sharing:
+      mps:
+        renameByDefault: false
+        failRequestsGreaterThanOne: true
+        resources:
+          - name: nvidia.com/gpu
+            replicas: 8              # 8 MPS clients on the 48 GB Ada.
+            # ~6 GB VRAM each across 48 GB. The device-plugin sets the
+            # per-client memory limit (CUDA_MPS_PINNED_DEVICE_MEM_LIMIT)
+            # and active-thread % (CUDA_MPS_ACTIVE_THREAD_PERCENTAGE ~=
+            # 100/replicas) from `replicas`, so each of the 8 clients is
+            # capped — this is the QoS that time-slicing cannot give.
+  # A 4-client profile for the same card when fewer, fatter tenants want
+  # ~12 GB each (e.g. a denser FP8 14B model per client). Label the node
+  # `nvidia.com/device-plugin.config=ada-48-mps-4` to use it instead.
+  ada-48-mps-4: |
+    version: v1
+    sharing:
+      mps:
+        renameByDefault: false
+        failRequestsGreaterThanOne: true
+        resources:
+          - name: nvidia.com/gpu
+            replicas: 4              # 4 MPS clients, ~12 GB VRAM each.

@@ -1,0 +1,73 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nautobot-default-deny
+  namespace: nautobot
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress: []
+---
+# Web is reachable from the traefik ingress (kube-system) and from the
+# daalu-automation namespace (for the API → Nautobot adapter calls).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nautobot-web-ingress
+  namespace: nautobot
+spec:
+  podSelector:
+    matchLabels:
+      app: nautobot
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: daalu-automation
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+# Postgres + Redis are reachable only from inside the namespace
+# (web + worker + scheduler).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nautobot-postgres-ingress
+  namespace: nautobot
+spec:
+  podSelector:
+    matchLabels:
+      app: nautobot-postgres
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: nautobot } }
+        - podSelector: { matchLabels: { app: nautobot-worker } }
+        - podSelector: { matchLabels: { app: nautobot-scheduler } }
+      ports:
+        - protocol: TCP
+          port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nautobot-redis-ingress
+  namespace: nautobot
+spec:
+  podSelector:
+    matchLabels:
+      app: nautobot-redis
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: nautobot } }
+        - podSelector: { matchLabels: { app: nautobot-worker } }
+        - podSelector: { matchLabels: { app: nautobot-scheduler } }
+      ports:
+        - protocol: TCP
+          port: 6379

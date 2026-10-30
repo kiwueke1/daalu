@@ -1,0 +1,32 @@
+# Per-tenant namespace + GPU quota — copy this file, replace `<TENANT>`,
+# and apply. This is the simplest multi-tenancy primitive: a namespace
+# with a quota on `nvidia.com/gpu` caps how much GPU a tenant can claim.
+#
+# For full GPU-as-a-Service (queued admission, fair-share, priorities),
+# layer Kueue on top — see 06-kueue-flavors.example.yaml.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tenant-<TENANT>
+  labels:
+    tenant: <TENANT>
+    daalu.io/managed: "true"
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: gpu
+  namespace: tenant-<TENANT>
+spec:
+  hard:
+    # Maximum logical GPUs this tenant can hold across all their pods.
+    # With 4-way time-slicing, "2" means 2/4 of one physical Ada-16 card.
+    requests.nvidia.com/gpu: "2"
+    limits.memory: 64Gi
+    requests.memory: 32Gi
+    requests.cpu: "4"
+---
+# Optional: cap how much network egress / aggregate spend per period by
+# rejecting new pods when this LimitRange is exceeded. Not enforced by
+# k8s alone — the Daalu API does the dollar cap via the SKU's
+# `monthly_soft_cap_usd` field.

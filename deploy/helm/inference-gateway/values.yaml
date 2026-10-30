@@ -1,0 +1,39 @@
+# Image — same backend image as daalu-api; entrypoint is `daalu inference-gateway`.
+image:
+  repository: ghcr.io/kiwueke1/daalu-automation
+  tag: ""  # set via --set image.tag=$IMAGE_TAG at install time
+  pullPolicy: IfNotPresent
+  pullSecret: ghcr
+
+replicaCount: 1
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# vLLM upstream (daalu-vllm-pool Service). The gateway is the only
+# client allowed to talk to it (NetworkPolicy).
+upstream:
+  url: "http://daalu-vllm-pool.daalu-automation.svc.cluster.local"
+  apiKey: ""  # vLLM doesn't enforce auth by default; leave empty unless configured
+
+# Existing app secret carries DATABASE_URL, REDIS_URL, SECRET_KEY,
+# SERVICE_TOKEN_SECRET_KEY, etc. The gateway shares the same secret as
+# daalu-api so service-token verification works without separate config.
+existingSecret: daalu-automation-secrets
+
+service:
+  port: 80
+  targetPort: 8080
+
+networkPolicy:
+  enabled: true
+  # Only allow ingress from these app labels (in the same namespace).
+  # If you run daalu-api in a different namespace, add a namespace
+  # selector here.
+  allowedFromApps:
+    - daalu-api

@@ -1,0 +1,35 @@
+# Scrape NVSentinel's own remediation/health metrics into
+# kube-prometheus-stack so the hub's AI-factory Reliability panel can read them
+# and the NvSentinel* alerts (deploy/k8s/monitoring/04-alerting-rules.yaml) can
+# fire. NVSentinel ACTS on faults; the daalu-gpu PrometheusRules remain the
+# human-visible record (doc 03 §1.2).
+#
+# The `release: kube-prometheus-stack` label is what the stack's Prometheus
+# selects ServiceMonitors by (same pattern as the nvidia-dcgm ServiceMonitor).
+# The endpoint port name must match the metrics Service the chart creates
+# (10-values.observe.yaml sets metrics.service.port: 9500).
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: nvsentinel
+  namespace: nvsentinel
+  labels:
+    release: kube-prometheus-stack
+    app.kubernetes.io/part-of: daalu-gpu
+spec:
+  namespaceSelector:
+    matchNames:
+      - nvsentinel
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nvsentinel
+  endpoints:
+    - port: metrics
+      interval: 30s
+      # Stamp a stable job label so the hub's reliability query
+      # (up{job="nvsentinel"}) and the NvSentinel* alerts match regardless of
+      # the chart's default target naming. Keep in sync with
+      # settings.nvsentinel_metrics_job (default "nvsentinel").
+      relabelings:
+        - targetLabel: job
+          replacement: nvsentinel

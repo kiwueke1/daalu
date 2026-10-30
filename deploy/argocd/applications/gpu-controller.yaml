@@ -1,0 +1,32 @@
+# Argo Application for the gpu-controller.
+#
+# Independent of the daalu-automation app so a controller bug can't
+# wedge the hub API. The controller pod lives in daalu-automation; its
+# RBAC is cluster-scoped (to create the shared `daalu` namespace and the
+# vLLM workloads in operator-cluster mode) — see
+# deploy/k8s/gpu-controller/rbac.yaml.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gpu-controller
+  namespace: argocd
+  finalizers: [resources-finalizer.argocd.argoproj.io]
+spec:
+  project: daalu
+  source:
+    repoURL: https://github.com/kiwueke1/daalu
+    targetRevision: main
+    path: deploy/k8s/gpu-controller
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: daalu-automation
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: { duration: 30s, factor: 2, maxDuration: 5m }

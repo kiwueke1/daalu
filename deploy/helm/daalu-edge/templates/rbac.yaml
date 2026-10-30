@@ -1,0 +1,58 @@
+{{- if .Values.kubeRegistration.enabled }}
+{{/*
+Self-registration credential.
+
+Daalu's hub-side controllers (gpu-controller, nautobot-controller/NV-CM,
+kube-console, tinkerbell) drive this cluster through the apiserver-proxy on
+the tunnel, and need a kubeconfig to do it. Historically an operator minted
+one by hand and pasted it into Integrations → Kubernetes; that step was easy
+to forget and — worse — silently invalidated whenever the customer cluster
+was rebuilt, surfacing much later as a bare 401 from the apiserver.
+
+Instead the edge ships its own token: the entrypoint reads the Secret below
+and includes it in the bootstrap callback it already makes, and the hub
+assembles the kubeconfig. Nothing to paste, and a rebuilt cluster re-registers
+itself on first boot.
+
+The token is deliberately NOT the pod's projected ServiceAccount token —
+those are ~1h and auto-rotated, so a stored copy goes stale. A
+`kubernetes.io/service-account-token` Secret is issued by the token
+controller and stays valid for the life of the ServiceAccount.
+*/}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Values.kubeRegistration.serviceAccountName }}
+  labels: {{- include "daalu-edge.labels" . | nindent 4 }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Values.kubeRegistration.serviceAccountName }}-token
+  labels: {{- include "daalu-edge.labels" . | nindent 4 }}
+  annotations:
+    kubernetes.io/service-account.name: {{ .Values.kubeRegistration.serviceAccountName }}
+type: kubernetes.io/service-account-token
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Values.kubeRegistration.serviceAccountName }}
+  labels: {{- include "daalu-edge.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  {{/*
+    cluster-admin is parity with the hand-pasted kubeconfig this replaces:
+    the controllers install Helm charts (NV-CM), create namespaces, label
+    nodes and read arbitrary resources for the cluster overview, so a
+    narrower role breaks features in ways that only show up mid-provision.
+    Set `kubeRegistration.clusterRole` to a scoped role once the exact verb
+    set per controller is pinned down.
+  */}}
+  name: {{ .Values.kubeRegistration.clusterRole }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.kubeRegistration.serviceAccountName }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

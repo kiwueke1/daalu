@@ -1,0 +1,537 @@
+# Fully-pinned dependency lock for the daalu-automation image.
+#
+# DO NOT hand-edit. Regenerate after changing pyproject.toml deps with:
+#   docker run --rm -v "$PWD":/w -w /w python:3.11-slim-bookworm bash -c \
+#     "apt-get update && apt-get install -y --no-install-recommends build-essential libpq-dev curl && \
+#      pip install uv && uv pip compile pyproject.toml --extra dev --python-version 3.11 \
+#      --no-header -o requirements.lock"
+#
+# Why this exists: the Dockerfile installs from this file (not the open
+# `>=` ranges in pyproject) so a rebuild can never silently float a
+# transitive dep — see the 2026-06-15 fastapi 0.137 _IncludedRouter
+# outage. pyproject.toml stays the source of truth for direct deps.
+
+aiofiles==25.1.0
+    # via daalu-automation (pyproject.toml)
+aiohappyeyeballs==2.6.2
+    # via aiohttp
+aiohttp==3.14.1
+    # via
+    #   kubernetes
+    #   kubernetes-asyncio
+aiosignal==1.4.0
+    # via aiohttp
+alembic==1.18.4
+    # via daalu-automation (pyproject.toml)
+amqp==5.3.1
+    # via kombu
+annotated-doc==0.0.4
+    # via
+    #   fastapi
+    #   typer
+annotated-types==0.7.0
+    # via pydantic
+anthropic==0.109.1
+    # via daalu-automation (pyproject.toml)
+anyio==4.13.0
+    # via
+    #   anthropic
+    #   httpx
+    #   openai
+    #   sse-starlette
+    #   starlette
+    #   watchfiles
+arrow==1.4.0
+    # via daalu-automation (pyproject.toml)
+ast-serialize==0.5.0
+    # via mypy
+async-timeout==5.0.1
+    # via redis
+asyncpg==0.31.0
+    # via daalu-automation (pyproject.toml)
+asyncssh==2.23.1
+    # via
+    #   daalu-automation (pyproject.toml)
+    #   scrapli
+attrs==26.1.0
+    # via aiohttp
+azure-core==1.41.0
+    # via
+    #   azure-identity
+    #   azure-mgmt-core
+    #   azure-monitor-query
+azure-identity==1.25.3
+    # via daalu-automation (pyproject.toml)
+azure-mgmt-compute==38.0.0
+    # via daalu-automation (pyproject.toml)
+azure-mgmt-core==1.6.0
+    # via
+    #   azure-mgmt-compute
+    #   azure-mgmt-sql
+    #   azure-mgmt-web
+azure-mgmt-sql==4.0.0b25
+    # via daalu-automation (pyproject.toml)
+azure-mgmt-web==11.0.0
+    # via daalu-automation (pyproject.toml)
+azure-monitor-query==2.0.0
+    # via daalu-automation (pyproject.toml)
+bcrypt==4.0.1
+    # via
+    #   daalu-automation (pyproject.toml)
+    #   passlib
+beautifulsoup4==4.15.0
+    # via daalu-automation (pyproject.toml)
+billiard==4.2.4
+    # via celery
+boto3==1.43.29
+    # via daalu-automation (pyproject.toml)
+botocore==1.43.29
+    # via
+    #   boto3
+    #   s3transfer
+celery==5.6.3
+    # via daalu-automation (pyproject.toml)
+certifi==2026.5.20
+    # via
+    #   httpcore
+    #   httpx
+    #   kubernetes
+    #   kubernetes-asyncio
+    #   requests
+    #   sentry-sdk
+cffi==2.0.0
+    # via cryptography
+charset-normalizer==3.4.7
+    # via requests
+click==8.4.1
+    # via
+    #   celery
+    #   click-didyoumean
+    #   click-plugins
+    #   click-repl
+    #   uvicorn
+click-didyoumean==0.3.1
+    # via celery
+click-plugins==1.1.1.2
+    # via celery
+click-repl==0.3.0
+    # via celery
+coverage==7.14.1
+    # via pytest-cov
+cryptography==49.0.0
+    # via
+    #   daalu-automation (pyproject.toml)
+    #   asyncssh
+    #   azure-identity
+    #   google-auth
+    #   msal
+    #   pyjwt
+distro==1.9.0
+    # via
+    #   anthropic
+    #   openai
+dnspython==2.8.0
+    # via email-validator
+docstring-parser==0.18.0
+    # via anthropic
+durationpy==0.10
+    # via kubernetes
+email-validator==2.3.0
+    # via pydantic
+et-xmlfile==2.0.0
+    # via openpyxl
+factory-boy==3.3.3
+    # via daalu-automation (pyproject.toml)
+faker==40.23.0
+    # via factory-boy
+fastapi==0.136.3
+    # via
+    #   daalu-automation (pyproject.toml)
+    #   sentry-sdk
+frozenlist==1.8.0
+    # via
+    #   aiohttp
+    #   aiosignal
+google-api-core==2.31.0
+    # via
+    #   google-api-python-client
+    #   google-cloud-appengine-logging
+    #   google-cloud-compute
+    #   google-cloud-core
+    #   google-cloud-functions
+    #   google-cloud-logging
+    #   google-cloud-monitoring
+google-api-python-client==2.197.0
+    # via daalu-automation (pyproject.toml)
+google-auth==2.54.0
+    # via
+    #   google-api-core
+    #   google-api-python-client
+    #   google-auth-httplib2
+    #   google-cloud-appengine-logging
+    #   google-cloud-compute
+    #   google-cloud-core
+    #   google-cloud-functions
+    #   google-cloud-logging
+    #   google-cloud-monitoring
+google-auth-httplib2==0.4.0
+    # via google-api-python-client
+google-cloud-appengine-logging==1.10.0
+    # via google-cloud-logging
+google-cloud-audit-log==0.6.0
+    # via google-cloud-logging
+google-cloud-compute==1.48.0
+    # via daalu-automation (pyproject.toml)
+google-cloud-core==2.6.0
+    # via google-cloud-logging
+google-cloud-functions==1.23.0
+    # via daalu-automation (pyproject.toml)
+google-cloud-logging==3.16.0
+    # via daalu-automation (pyproject.toml)
+google-cloud-monitoring==2.31.0
+    # via daalu-automation (pyproject.toml)
+googleapis-common-protos==1.75.0
+    # via
+    #   google-api-core
+    #   google-cloud-audit-log
+    #   grpc-google-iam-v1
+    #   grpcio-status
+greenlet==3.5.1
+    # via sqlalchemy
+grpc-google-iam-v1==0.14.4
+    # via
+    #   google-cloud-functions
+    #   google-cloud-logging
+grpcio==1.81.1
+    # via
+    #   google-api-core
+    #   google-cloud-appengine-logging
+    #   google-cloud-compute
+    #   google-cloud-functions
+    #   google-cloud-logging
+    #   google-cloud-monitoring
+    #   googleapis-common-protos
+    #   grpc-google-iam-v1
+    #   grpcio-status
+grpcio-status==1.81.1
+    # via google-api-core
+h11==0.16.0
+    # via
+    #   httpcore
+    #   uvicorn
+httpcore==1.0.9
+    # via httpx
+httplib2==0.31.2
+    # via
+    #   google-api-python-client
+    #   google-auth-httplib2
+httptools==0.8.0
+    # via uvicorn
+httpx==0.28.1
+    # via
+    #   daalu-automation (pyproject.toml)
+    #   anthropic
+    #   openai
+    #   respx
+idna==3.18
+    # via
+    #   anyio
+    #   email-validator
+    #   httpx
+    #   requests
+    #   yarl
+iniconfig==2.3.0
+    # via pytest
+isodate==0.7.2
+    # via
+    #   azure-mgmt-compute
+    #   azure-mgmt-sql
+    #   azure-mgmt-web
+    #   azure-monitor-query
+jiter==0.15.0
+    # via
+    #   anthropic
+    #   openai
+jmespath==1.1.0
+    # via
+    #   boto3
+    #   botocore
+kombu==5.6.2
+    # via celery
+kubernetes==36.0.2
+    # via daalu-automation (pyproject.toml)
+kubernetes-asyncio==36.1.0
+    # via daalu-automation (pyproject.toml)
+librt==0.11.0
+    # via mypy
+lxml==6.1.1
+    # via scrapli-netconf
+mako==1.3.12
+    # via alembic
+markdown-it-py==4.2.0
+    # via rich
+markupsafe==3.0.3
+    # via mako
+mdurl==0.1.2
+    # via markdown-it-py
+msal==1.37.0
+    # via
+    #   azure-identity
+    #   msal-extensions
+msal-extensions==1.3.1
+    # via azure-identity
+multidict==6.7.1
+    # via
+    #   aiohttp
+    #   yarl
+mypy==2.1.0
+    # via daalu-automation (pyproject.toml)
+mypy-extensions==1.1.0
+    # via mypy
+nats-py==2.15.0
+    # via daalu-automation (pyproject.toml)
+oauthlib==3.3.1
+    # via requests-oauthlib
+openai==2.41.1
+    # via daalu-automation (pyproject.toml)
+openpyxl==3.1.5
+    # via daalu-automation (pyproject.toml)
+opentelemetry-api==1.42.1
+    # via google-cloud-logging
+packaging==26.2
+    # via
+    #   kombu
+    #   pytest
+passlib==1.7.4
+    # via daalu-automation (pyproject.toml)
+pathspec==1.1.1
+    # via mypy
+pluggy==1.6.0
+    # via
+    #   pytest
+    #   pytest-cov
+prometheus-client==0.25.0
+    # via
+    #   daalu-automation (pyproject.toml)
+    #   prometheus-fastapi-instrumentator
+prometheus-fastapi-instrumentator==8.0.0
+    # via daalu-automation (pyproject.toml)
+prompt-toolkit==3.0.52
+    # via click-repl
+propcache==0.5.2
+    # via
+    #   aiohttp
+    #   yarl
+proto-plus==1.28.0
+    # via
+    #   google-api-core
+    #   google-cloud-appengine-logging
+    #   google-cloud-compute
+    #   google-cloud-functions
+    #   google-cloud-logging
+    #   google-cloud-monitoring
+protobuf==7.35.1
+    # via
+    #   google-api-core
+    #   google-cloud-appengine-logging
+    #   google-cloud-audit-log
+    #   google-cloud-compute
+    #   google-cloud-functions
+    #   google-cloud-logging
+    #   google-cloud-monitoring
+    #   googleapis-common-protos
+    #   grpc-google-iam-v1
+    #   grpcio-status
+    #   proto-plus
+psycopg2-binary==2.9.12
+    # via daalu-automation (pyproject.toml)
+pyasn1==0.6.3
+    # via pyasn1-modules
+pyasn1-modules==0.4.2
+    # via google-auth
+pycparser==3.0
+    # via cffi
+pydantic==2.13.4
+    # via
+    #   daalu-automation (pyproject.toml)
+    #   anthropic
+    #   fastapi
+    #   openai
+    #   pydantic-settings
+pydantic-core==2.46.4
+    # via pydantic
+pydantic-settings==2.14.1
+    # via daalu-automation (pyproject.toml)
+pygments==2.20.0
+    # via
+    #   pytest
+    #   rich
+pyjwt==2.13.0
+    # via
+    #   daalu-automation (pyproject.toml)
+    #   msal
+pyparsing==3.3.2
+    # via httplib2
+pytest==9.1.0
+    # via
+    #   daalu-automation (pyproject.toml)
+    #   pytest-asyncio
+    #   pytest-cov
+pytest-asyncio==1.4.0
+    # via daalu-automation (pyproject.toml)
+pytest-cov==7.1.0
+    # via daalu-automation (pyproject.toml)
+python-dateutil==2.9.0.post0
+    # via
+    #   arrow
+    #   botocore
+    #   celery
+    #   kubernetes
+    #   kubernetes-asyncio
+python-dotenv==1.2.2
+    # via
+    #   pydantic-settings
+    #   uvicorn
+python-multipart==0.0.32
+    # via daalu-automation (pyproject.toml)
+python-slugify==8.0.4
+    # via daalu-automation (pyproject.toml)
+pyyaml==6.0.3
+    # via
+    #   daalu-automation (pyproject.toml)
+    #   kubernetes
+    #   kubernetes-asyncio
+    #   uvicorn
+redis==6.4.0
+    # via
+    #   daalu-automation (pyproject.toml)
+    #   kombu
+requests==2.34.2
+    # via
+    #   daalu-automation (pyproject.toml)
+    #   azure-core
+    #   google-api-core
+    #   kubernetes
+    #   msal
+    #   requests-oauthlib
+requests-oauthlib==2.0.0
+    # via kubernetes
+respx==0.23.1
+    # via daalu-automation (pyproject.toml)
+rich==15.0.0
+    # via
+    #   daalu-automation (pyproject.toml)
+    #   typer
+ruff==0.15.17
+    # via daalu-automation (pyproject.toml)
+s3transfer==0.18.0
+    # via boto3
+scrapli==2026.2.20
+    # via
+    #   daalu-automation (pyproject.toml)
+    #   scrapli-netconf
+scrapli-netconf==2026.1.12
+    # via daalu-automation (pyproject.toml)
+sentry-sdk==2.62.0
+    # via daalu-automation (pyproject.toml)
+shellingham==1.5.4
+    # via typer
+six==1.17.0
+    # via
+    #   kubernetes
+    #   kubernetes-asyncio
+    #   python-dateutil
+sniffio==1.3.1
+    # via
+    #   anthropic
+    #   openai
+soupsieve==2.8.4
+    # via beautifulsoup4
+sqlalchemy==2.0.50
+    # via
+    #   daalu-automation (pyproject.toml)
+    #   alembic
+sse-starlette==3.4.4
+    # via daalu-automation (pyproject.toml)
+starlette==1.3.1
+    # via
+    #   fastapi
+    #   prometheus-fastapi-instrumentator
+    #   sse-starlette
+structlog==26.1.0
+    # via daalu-automation (pyproject.toml)
+tenacity==9.1.4
+    # via daalu-automation (pyproject.toml)
+text-unidecode==1.3
+    # via python-slugify
+tomli==2.4.1
+    # via coverage
+tqdm==4.68.2
+    # via openai
+typer==0.26.7
+    # via daalu-automation (pyproject.toml)
+typing-extensions==4.15.0
+    # via
+    #   aiohttp
+    #   aiosignal
+    #   alembic
+    #   anthropic
+    #   anyio
+    #   asyncssh
+    #   azure-core
+    #   azure-identity
+    #   azure-mgmt-compute
+    #   azure-mgmt-sql
+    #   azure-mgmt-web
+    #   azure-monitor-query
+    #   beautifulsoup4
+    #   fastapi
+    #   grpcio
+    #   mypy
+    #   openai
+    #   opentelemetry-api
+    #   pydantic
+    #   pydantic-core
+    #   pytest-asyncio
+    #   sqlalchemy
+    #   starlette
+    #   typing-inspection
+typing-inspection==0.4.2
+    # via
+    #   fastapi
+    #   pydantic
+    #   pydantic-settings
+tzdata==2026.2
+    # via
+    #   arrow
+    #   kombu
+tzlocal==5.3.1
+    # via celery
+uritemplate==4.2.0
+    # via google-api-python-client
+urllib3==2.7.0
+    # via
+    #   botocore
+    #   kubernetes
+    #   kubernetes-asyncio
+    #   requests
+    #   sentry-sdk
+uvicorn==0.49.0
+    # via daalu-automation (pyproject.toml)
+uvloop==0.22.1
+    # via uvicorn
+vine==5.1.0
+    # via
+    #   amqp
+    #   celery
+    #   kombu
+watchfiles==1.2.0
+    # via uvicorn
+wcwidth==0.8.1
+    # via prompt-toolkit
+websocket-client==1.9.0
+    # via kubernetes
+websockets==16.0
+    # via uvicorn
+yarl==1.24.2
+    # via aiohttp

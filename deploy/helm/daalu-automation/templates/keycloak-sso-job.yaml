@@ -1,0 +1,56 @@
+{{- if .Values.config.ensureKeycloakSsoJob }}
+# Idempotent Keycloak hub-SSO provisioner. Runs as a Helm post-install /
+# post-upgrade hook so every install (including a fresh daalu + Keycloak
+# bring-up) ensures the `daalu-hub-ui` OIDC client + the Google identity
+# provider exist — i.e. hub SSO survives re-installs and works out of the
+# box. See engineer book 10-security/59. No-op for objects it already finds.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: daalu-ensure-keycloak-sso
+  labels:
+    {{- include "daalu.labels" . | nindent 4 }}
+    app: daalu-ensure-keycloak-sso
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  # Don't wedge an upgrade forever if Keycloak is briefly unreachable.
+  activeDeadlineSeconds: 300
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app: daalu-ensure-keycloak-sso
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecret }}
+      securityContext:
+        {{- include "daalu.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: ensure-keycloak-sso
+          image: {{ include "daalu.backendImage" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["daalu", "ensure-keycloak-sso"]
+          envFrom:
+            {{- include "daalu.envFrom" . | nindent 12 }}
+          env:
+            {{- include "daalu.commonEnv" . | nindent 12 }}
+          securityContext:
+            {{- include "daalu.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits:   { cpu: 200m, memory: 256Mi }
+      volumes:
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 64Mi
+{{- end }}

@@ -1,0 +1,200 @@
+# vLLM — Qwen3-Coder-30B-A3B-Instruct (FP8, MoE) for the coding assistant.
+#
+# GENERATED, do not hand-edit. Regenerate with:
+#   daalu render-coding-model qwen3-coder-30b-a3b --gpu-class ada-48 \
+#     > deploy/k8s/gpu/12-vllm-qwen3-coder-30b-a3b.yaml
+#
+# Model id, HF repo, context length and the tool-call parser come from
+# src/daalu_automation/core/model_catalog.py (single source of truth).
+# Served model name: qwen/qwen3-coder-30b-a3b-instruct
+# Tool-calling: --enable-auto-tool-choice --tool-call-parser=qwen3_coder —
+# this is the agentic coder; tool-use is its primary mode.
+#
+# Targets the 48 GB RTX 6000 Ada (gpu-class=ada-48). MoE (30B total / ~3B
+# active) → fast decode; FP8 weights (~30 GB) launch at 65536 context
+# (KV-cache-bounded at low concurrency). No --quantization flag: vLLM infers
+# FP8 from the checkpoint. The GPU is allocated exclusively to one pod.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: daalu
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: hf-token
+  namespace: daalu
+type: Opaque
+data:
+  token: ''
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qwen-coder
+  namespace: daalu
+  labels:
+    app: qwen-coder
+    daalu.io/tier: local
+    daalu.io/engine: vllm
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: qwen-coder
+  template:
+    metadata:
+      labels:
+        app: qwen-coder
+        daalu.io/tier: local
+        daalu.io/engine: vllm
+        tenant: operator-coder
+    spec:
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: gpu
+        operator: Exists
+        effect: NoSchedule
+      - key: node.kubernetes.io/unreachable
+        operator: Exists
+        effect: NoExecute
+        tolerationSeconds: 1800
+      nodeSelector:
+        gpu-class: ada-48
+      containers:
+      - name: vllm
+        image: vllm/vllm-openai:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8000
+          name: http
+        args:
+        - --model=Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8
+        - --served-model-name=qwen/qwen3-coder-30b-a3b-instruct
+        - --max-model-len=65536
+        - --gpu-memory-utilization=0.9
+        - --host=0.0.0.0
+        - --port=8000
+        - --enable-auto-tool-choice
+        - --tool-call-parser=qwen3_coder
+        env:
+        - name: HUGGING_FACE_HUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: hf-token
+              key: token
+        - name: HF_HOME
+          value: /var/cache/huggingface
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+            memory: 32Gi
+          requests:
+            nvidia.com/gpu: 1
+            memory: 16Gi
+            cpu: 2
+        volumeMounts:
+        - name: hf-cache
+          mountPath: /var/cache/huggingface
+        - name: dshm
+          mountPath: /dev/shm
+        startupProbe:
+          httpGet:
+            path: /health
+            port: http
+          failureThreshold: 60
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 300
+          periodSeconds: 30
+          failureThreshold: 3
+      volumes:
+      - name: hf-cache
+        hostPath:
+          path: /var/lib/daalu/hf-cache
+          type: DirectoryOrCreate
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 8Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-coder
+  namespace: daalu
+  annotations:
+    prometheus.io/scrape: 'true'
+    prometheus.io/port: '8000'
+    prometheus.io/path: /metrics
+spec:
+  type: ClusterIP
+  selector:
+    app: qwen-coder
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8000
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: qwen-coder
+  namespace: daalu
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: qwen-coder
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: coder-llm-egress
+  namespace: daalu
+spec:
+  podSelector:
+    matchLabels:
+      daalu.io/tier: local
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - ipBlock:
+        cidr: 10.0.0.0/8
+    ports:
+    - port: 443
+    - port: 80
+    - port: 8000
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+    ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+        except:
+        - 10.0.0.0/8
+        - 172.16.0.0/12
+        - 192.168.0.0/16
+        - 169.254.0.0/16
+    ports:
+    - port: 443

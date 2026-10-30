@@ -1,0 +1,106 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: daalu-default-deny
+  namespace: daalu-automation
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress: []
+---
+# API receives traffic from the ingress controller + frontend
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: daalu-api-ingress
+  namespace: daalu-automation
+spec:
+  podSelector:
+    matchLabels:
+      app: daalu-api
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              app: daalu-frontend
+        - namespaceSelector:
+            matchLabels:
+              # traefik (the k3s default IngressClass) runs in kube-system.
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: TCP
+          port: 8000
+---
+# Frontend receives traffic from the ingress controller
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: daalu-frontend-ingress
+  namespace: daalu-automation
+spec:
+  podSelector:
+    matchLabels:
+      app: daalu-frontend
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              # traefik (the k3s default IngressClass) runs in kube-system.
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: TCP
+          port: 3000
+---
+# Postgres + Redis are reachable only from API/worker/agents/beat
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: daalu-postgres-ingress
+  namespace: daalu-automation
+spec:
+  podSelector:
+    matchLabels:
+      app: daalu-postgres
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: daalu-api } }
+        - podSelector: { matchLabels: { app: daalu-worker } }
+        - podSelector: { matchLabels: { app: daalu-beat } }
+        - podSelector: { matchLabels: { app: daalu-agents } }
+        # The lifecycle controllers reconcile their *_tenants tables from
+        # the same DB (nautobot_tenants / config_manager_tenants /
+        # gpu_tenants). Without these their reconcile loops silently time
+        # out on the DB connect (default-deny) — the pod stays Ready
+        # because /healthz doesn't touch Postgres, but nothing ever
+        # provisions.
+        - podSelector: { matchLabels: { app: nautobot-controller } }
+        - podSelector: { matchLabels: { app: config-manager-controller } }
+        - podSelector: { matchLabels: { app: gpu-controller } }
+        - podSelector: { matchLabels: { app: workspace-controller } }
+      ports:
+        - protocol: TCP
+          port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: daalu-redis-ingress
+  namespace: daalu-automation
+spec:
+  podSelector:
+    matchLabels:
+      app: daalu-redis
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: daalu-api } }
+        - podSelector: { matchLabels: { app: daalu-worker } }
+        - podSelector: { matchLabels: { app: daalu-beat } }
+        - podSelector: { matchLabels: { app: daalu-agents } }
+      ports:
+        - protocol: TCP
+          port: 6379

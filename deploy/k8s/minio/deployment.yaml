@@ -1,0 +1,76 @@
+# MinIO is only needed when the platform is NOT pointed at the shared
+# Rook-Ceph RGW. In prod, point at an existing S3/Ceph RGW and skip this manifest.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: daalu-minio-data
+  namespace: daalu-automation
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 30Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: daalu-minio
+  namespace: daalu-automation
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: daalu-minio
+  template:
+    metadata:
+      labels:
+        app: daalu-minio
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: minio
+          image: minio/minio:RELEASE.2024-07-04T14-25-45Z
+          args: ["server", "/data", "--console-address", ":9001"]
+          env:
+            - name: MINIO_ROOT_USER
+              value: daalu_access_key
+            - name: MINIO_ROOT_PASSWORD
+              value: daalu_secret_key
+          ports:
+            - containerPort: 9000
+            - containerPort: 9001
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 1
+              memory: 1Gi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: daalu-minio-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: daalu-minio
+  namespace: daalu-automation
+spec:
+  selector:
+    app: daalu-minio
+  ports:
+    - name: s3
+      port: 9000
+      targetPort: 9000
+    - name: console
+      port: 9001
+      targetPort: 9001

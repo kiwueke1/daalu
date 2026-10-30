@@ -1,0 +1,233 @@
+# ── Global ────────────────────────────────────────────────────────────────
+nameOverride: ""
+fullnameOverride: ""
+
+# Where the platform is reachable externally + the cluster details. The
+# defaults assume a single-node k3s cluster (traefik ingress, local-path storage).
+ingress:
+  enabled: true
+  className: traefik
+  host: daalu.example.com
+  tlsSecretName: daalu-tls
+  clusterIssuer: letsencrypt-prod
+  # Traefik passes SSE through cleanly; these annotations are hints for
+  # operators familiar with nginx-ingress and are ignored by Traefik.
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+
+# Image registry + tags. `tag` is overridable per-deploy (typically the
+# git SHA from CI). Pull secret: name of a docker-registry Secret, if your registry is private.
+image:
+  registry: ghcr.io/kiwueke1
+  backend:
+    repository: daalu-automation
+    tag: latest
+  frontend:
+    repository: daalu-automation-frontend
+    tag: latest
+  pullPolicy: IfNotPresent
+  pullSecret: ghcr
+
+# Anything that lands as ${KEY}=${VALUE} in the container. Sensitive
+# values should NOT live here — put them in the Secret manifest applied
+# alongside the chart (see deploy/scripts/install.sh). This block holds
+# the non-secret overrides only.
+config:
+  environment: production
+  logLevel: INFO
+  apiV1Prefix: /api/v1
+  corsOrigins: '["https://daalu.example.com"]'
+  dailyBriefingCron: "0 7 * * 1-5"
+  briefingLookbackHours: "24"
+  # In-cluster URL of the inference-gateway Service. Empty = bypass
+  # the gateway and call llm_local_base_url directly (single-tenant
+  # legacy path). Set this once the `inference-gateway` Helm chart is
+  # installed in the same namespace. Also handed to workspace pods as
+  # DAALU_GATEWAY_URL so the coding assistant routes through the gateway.
+  daaluHostedGatewayUrl: "http://inference-gateway"
+  # Upstream the gateway proxies to after auth/quota/metering. For the
+  # coding assistant this is the coder vLLM reached over the WireGuard
+  # tunnel to the GPU cluster (e.g. http://10.200.0.x:8000). With no
+  # gpu_pools rows the gateway falls back to this single upstream.
+  daaluHostedUpstreamUrl: ""
+  # In-cluster URL of the workspace-controller Service. It now runs in
+  # this (the hub) namespace, so the short name resolves. Empty disables
+  # the browser-IDE entry points.
+  workspaceControllerUrl: "http://workspace-controller"
+  # Coding models selectable in the Create-Workspace UI — catalog ids
+  # (core/model_catalog.py) whose vLLM is actually deployed. JSON list.
+  # Add the ada-48 ids (qwen2.5-coder-32b, qwen3-coder-30b-a3b) once the
+  # RTX 6000 Ada is online.
+  codingModelsEnabled: '["qwen2.5-coder-14b"]'
+  codingModelDefault: "qwen2.5-coder-14b"
+
+  # ── Hub SSO (human login via Keycloak OIDC) — see book 10-security/59 ──
+  # The realm issuer the hub validates + logs users in against. Same realm
+  # the NV-CM tools trust, so one Keycloak session covers the hub and all
+  # tools. Empty disables both hub OIDC login and NV-CM machine tokens.
+  keycloakIssuerUrl: "https://auth.example.com/realms/daalu"
+  # "password" = legacy local email+password form (default / rollback).
+  # "oidc" = redirect the browser to Keycloak (seamless tool SSO). Flip to
+  # "oidc" to cut over; flip back to "password" to roll back — no rebuild.
+  authMode: "password"
+  keycloakHubClientId: "daalu-hub-ui"
+  # Absolute OIDC callback; must be a registered redirect URI on the client.
+  keycloakHubRedirectUrl: "https://daalu.example.com/api/v1/auth/oidc/callback"
+  keycloakHubPostLogoutUrl: "https://daalu.example.com/login"
+  # Mirror users into Keycloak on invite-redemption (warms the realm before
+  # cutover). The one-shot backfill task handles existing users.
+  oidcMirrorUsers: "false"
+  # Keycloak admin (used by the ensure-keycloak-sso Job + user mirroring).
+  # Realm + base URL derive from keycloakIssuerUrl when blank. The admin
+  # PASSWORD / CLIENT_SECRET are keys in existingSecret (envFrom), not here.
+  keycloakRealm: "daalu"
+  keycloakAdminBaseUrl: "https://auth.example.com"
+  keycloakAdminRealm: "master"
+  # Master-realm admin used by the ensure-keycloak-sso Job + user mirroring.
+  # Password is KEYCLOAK_ADMIN_PASSWORD in daalu-automation-secrets. (Hardening
+  # follow-up: swap for a scoped service-account client via keycloakAdminClientId
+  # + KEYCLOAK_ADMIN_CLIENT_SECRET — see book 10-security/59 §4.)
+  keycloakAdminUsername: "admin"
+  # "Sign in with Google" — client id is non-secret; the secret is a key in
+  # existingSecret. Empty → no Google IdP. Create the OAuth client with
+  # redirect URI https://auth.example.com/realms/daalu/broker/google/endpoint.
+  keycloakGoogleClientId: ""   # your Google OAuth client ID (optional)
+
+  # Run the idempotent Keycloak SSO provisioner (daalu-hub-ui client +
+  # Google IdP) as a Helm post-install/upgrade hook Job, so a fresh
+  # daalu + Keycloak install comes up with hub SSO working out of the box.
+  ensureKeycloakSsoJob: true
+
+  # SERVICE_TOKEN_SECRET_KEY for inter-service tokens lives in the
+  # app secret (rather than in values), so add it to .env before
+  # running install.sh. Same key must be set in the secret read by
+  # inference-gateway + workspace-controller (they read from the same
+  # `existingSecret`, which the install.sh script keeps in sync).
+
+# Name of the Secret (kubernetes.io/Opaque) that holds the LLM keys,
+# S3 creds, integration tokens, etc. Created out-of-band by
+# deploy/scripts/install.sh — see deploy/helm/daalu-automation/README.md.
+existingSecret: daalu-automation-secrets
+
+# ── Remediator (per-alert chat → kube tool calls) ─────────────────────────
+# When enabled, the daalu-api pod is bound to a ServiceAccount with
+# cluster-wide read perms + narrow write perms (patch deployments,
+# delete pods) so the AlertChat panel can execute approved remediation
+# actions. Disable to lock the cluster — the chat falls back to
+# suggest-only mode.
+remediator:
+  enabled: true
+  serviceAccountName: daalu-remediator
+
+# ── API ───────────────────────────────────────────────────────────────────
+api:
+  replicas: 3
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits:   { cpu: 500m, memory: 512Mi }
+  runAlembicInitContainer: true
+
+# ── Workers ───────────────────────────────────────────────────────────────
+worker:
+  replicas: 4
+  concurrency: 4
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits:   { cpu: 1, memory: 768Mi }
+
+beat:
+  replicas: 1   # MUST stay 1 — multiple beats produce duplicate scheduled tasks
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits:   { cpu: 200m, memory: 256Mi }
+
+agents:
+  replicas: 2   # Scales horizontally via Redis consumer groups
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits:   { cpu: 1, memory: 768Mi }
+
+# ── Executor (SoT / device-management push pipeline) ──────────────────────
+# The dedicated pod that drains the approved-but-unexecuted ChangeProposal
+# queue. Single-replica on purpose — adding pods would create racing
+# executor identities on the same approved rows. Scale throughput via
+# `concurrency` inside the process. The identity boundary rests on:
+#   1. Celery queue routing (sot.execute_approved → executor queue)
+#   2. This dedicated ServiceAccount + env (EXECUTOR_JWT_SCOPE)
+#   3. The code-level Actor scope check inside change_proposals.execute()
+executor:
+  replicas: 1
+  concurrency: 2
+  jwtScope: executor
+  serviceAccountName: daalu-executor
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits:   { cpu: 1, memory: 768Mi }
+
+# ── Frontend ──────────────────────────────────────────────────────────────
+frontend:
+  replicas: 2
+  resources:
+    requests: { cpu: 50m, memory: 256Mi }
+    limits:   { cpu: 500m, memory: 512Mi }
+
+# ── Postgres (in-cluster) ────────────────────────────────────────────────
+# Set `enabled: false` to point at an external Postgres — populate
+# DATABASE_URL in the existingSecret instead.
+postgres:
+  enabled: true
+  image: postgres:16-alpine
+  storage: 20Gi
+  storageClass: ""           # cluster default
+  database: daalu_automation
+  username: daalu
+  password: daalu_password   # dev only; override via secret in prod
+  resources:
+    requests: { cpu: 200m, memory: 256Mi }
+    limits:   { cpu: 1, memory: 1Gi }
+
+# ── Redis (in-cluster) ───────────────────────────────────────────────────
+redis:
+  enabled: true
+  image: redis:7-alpine
+  maxmemory: 512mb
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits:   { cpu: 500m, memory: 640Mi }
+
+# ── WireGuard tunnel hub (operator side) ────────────────────────────────
+# Hub Deployment that accepts WireGuard peers from customer-side
+# daalu-edge containers. Each onboarded tenant gets a peer entry that
+# the daalu-api coordinator writes into the Secret below.
+#
+# Disabled by default — only enable if you want UI-driven cluster
+# onboarding. With it off, customer kubeconfigs work only when the
+# customer cluster is already routable from the operator pod network.
+wireguard:
+  enabled: true
+  image: ghcr.io/kiwueke1/daalu-wg-hub:latest
+  listenPort: 51820
+  # Address the hub takes on the WG mesh. /16 reserves ~65k peer IPs
+  # from 10.200.0.0/16 — plenty of headroom and well outside common
+  # corporate/home network ranges so we don't collide with customers'
+  # actual subnets.
+  hubAddress: 10.200.0.1
+  # Set to the operator hub's WG privkey at install time, or leave
+  # empty and run `daalu init wg-hub` once after install to have the
+  # coordinator generate one. The Secret carries helm.sh/resource-policy
+  # "keep" so Helm upgrades won't clobber it.
+  hubPrivateKey: ""
+  # Pin the hub to a specific node — usually the public-facing
+  # operator node, since hostPort 51820 must land where the public
+  # DNS hostname points. Empty = scheduler picks any node.
+  nodeSelector:
+    daalu.io/wireguard-hub: "true"
+
+# ── Network policies ─────────────────────────────────────────────────────
+networkPolicies:
+  enabled: true
+  # ingress-nginx isn't installed on this cluster — Traefik runs in
+  # kube-system. Allow traffic from any namespace; tighten if you
+  # later isolate the ingress controller.
+  ingressNamespaceSelectorLabel: ""

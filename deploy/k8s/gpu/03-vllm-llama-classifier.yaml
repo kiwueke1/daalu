@@ -1,0 +1,207 @@
+# vLLM serving Llama-3.1-8B-Instruct (AWQ INT4) for the classifier tier.
+#
+# Image:   vllm/vllm-openai (Docker Hub, public, Apache 2.0). No pull
+#          secret. Does not require NVIDIA AI Enterprise.
+# Model:   hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4 — Meta
+#          Llama 3.1 8B Instruct, AWQ 4-bit quantized. Fits comfortably
+#          in the RTX 2000 Ada's 16 GB VRAM (~4.5 GB weights, leaves
+#          ~10 GB for KV cache + activations + headroom).
+#          The base Meta model is HF-gated (free click-through licence).
+#          The AWQ derivative inherits that gate — needs an HF token
+#          with read access.
+# Served-name override: `meta/llama-3.1-8b-instruct` so the existing
+#          `LLM_LOCAL_MODEL_CLASSIFIER` env var on the router needs no
+#          change.
+#
+# Lands on a node with `gpu-class=ada-16`. Requests one logical GPU —
+# with 4-way time-slicing that's one slice of the physical card; in
+# practice you only run one heavyweight vLLM pod per Ada-16 card since
+# VRAM is shared across slices.
+#
+# Daalu's classifier tier (core/llm.py) reaches this via the
+# `llm-classifier` Service, which is what `LLM_LOCAL_BASE_URL` points at.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llama-classifier
+  namespace: daalu
+  labels:
+    app: llama-classifier
+    daalu.io/tier: local
+    daalu.io/engine: vllm
+spec:
+  replicas: 1
+  strategy:
+    # Inference pods are stateful in VRAM — RollingUpdate would double
+    # the memory requirement for the duration of the rollout. Recreate
+    # is the right strategy until the cluster has more than one GPU per
+    # gpu-class.
+    type: Recreate
+  selector:
+    matchLabels:
+      app: llama-classifier
+  template:
+    metadata:
+      labels:
+        app: llama-classifier
+        daalu.io/tier: local
+        daalu.io/engine: vllm
+        # Tenant label drives the DCGM-joined billing rollup in
+        # `core/billing.breakdown_by_tier`. For the shared "operator
+        # internal" instance the label is fixed; tenant-isolated
+        # instances (when we have them) get a per-tenant label.
+        tenant: operator-internal
+    spec:
+      tolerations:
+        # gpu-node-1 in the workload cluster is a control-plane node and
+        # carries the standard control-plane taint. Tolerate it so the
+        # pod schedules there. Harmless on nodes without that taint.
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+        # Optional dedicated-GPU taint (Appendix B); harmless if absent.
+        - key: gpu
+          operator: Exists
+          effect: NoSchedule
+        # Survive 30 min of unreachability (ISP wobble) without eviction.
+        # Re-scheduling means re-downloading weights into the host cache
+        # (cheap because the volume is persistent) but also re-loading
+        # them onto the GPU and rebuilding CUDA graphs (~60 s).
+        - key: node.kubernetes.io/unreachable
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 1800
+      nodeSelector:
+        gpu-class: ada-16
+      containers:
+        - name: vllm
+          # Pin in production once a version is qualified against the
+          # router's eval suite. `latest` is acceptable for the initial
+          # bring-up; switch to `vllm/vllm-openai:vX.Y.Z` afterwards.
+          image: vllm/vllm-openai:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+              name: http
+          # The official image's ENTRYPOINT is the OpenAI-compatible
+          # API server; `args` are appended after it.
+          args:
+            - --model=hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4
+            # Keep the served name stable so app config doesn't churn.
+            - --served-model-name=meta/llama-3.1-8b-instruct
+            # AWQ is auto-detected from the model's quantization_config,
+            # but stating it explicitly avoids surprises if the upstream
+            # repo ever ships a different default.
+            - --quantization=awq_marlin
+            # Llama 3.1 supports 128k context. We don't need it; capping
+            # at 8k saves ~4 GB of KV cache and keeps latency tight for
+            # classifier prompts.
+            - --max-model-len=8192
+            # Fraction of free VRAM vLLM is allowed to occupy. Stay
+            # below 0.95 so DCGM / driver have headroom.
+            - --gpu-memory-utilization=0.90
+            - --host=0.0.0.0
+            - --port=8000
+            # (Prometheus metrics are served on the same port at /metrics
+            # by default — no flag needed.)
+          env:
+            # HF token for the gated Llama repo. Free to obtain; click
+            # through Meta's licence at
+            # https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct
+            # and create a `read` token at
+            # https://huggingface.co/settings/tokens.
+            - name: HUGGING_FACE_HUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hf-token
+                  key: token
+            # Pin HF cache to the volume mount so weights survive pod
+            # restarts and we don't re-download ~5 GB every time.
+            - name: HF_HOME
+              value: /var/cache/huggingface
+            # vLLM also looks at HF_HUB_OFFLINE / TRANSFORMERS_OFFLINE
+            # if we ever want to lock the pod to its cache (P1 — once
+            # we trust the on-disk cache).
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+              memory: 20Gi
+            requests:
+              nvidia.com/gpu: 1
+              memory: 12Gi
+              cpu: 2
+          volumeMounts:
+            - name: hf-cache
+              mountPath: /var/cache/huggingface
+            # vLLM uses /dev/shm for IPC between worker processes. The
+            # container default (64 MB) causes OOM on bigger models;
+            # tmpfs at 8 GB is comfortably enough for one 8 B AWQ
+            # instance.
+            - name: dshm
+              mountPath: /dev/shm
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            # vLLM downloads weights (~5 GB AWQ) + loads the model +
+            # compiles CUDA graphs on first start. 10 min covers a
+            # slow HF mirror; subsequent restarts are <60 s.
+            failureThreshold: 60
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 300
+            periodSeconds: 30
+            failureThreshold: 3
+      volumes:
+        - name: hf-cache
+          hostPath:
+            path: /var/lib/daalu/hf-cache
+            type: DirectoryOrCreate
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 8Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  # Service name is unchanged from the NIM era — the router's
+  # LLM_LOCAL_BASE_URL points at this DNS name. Renaming would require
+  # an ops-side config flip.
+  name: llm-classifier
+  namespace: daalu
+  annotations:
+    # Scraped by the cluster's Prometheus — vLLM exposes Prometheus
+    # metrics on /metrics on the same port as /v1/* (request count,
+    # token counts, queue depth, GPU cache hit rate, etc.).
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8000"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  selector:
+    app: llama-classifier
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: llama-classifier
+  namespace: daalu
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: llama-classifier

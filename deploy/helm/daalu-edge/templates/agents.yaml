@@ -1,0 +1,60 @@
+{{- if .Values.agents.enabled }}
+# daalu-edge-agents — Daalu Private edge-side agent host.
+#
+# When this Deployment is enabled, the agent loop for this tenant
+# runs inside the customer cluster (not on the Daalu hub). The hub
+# learns it should *stop* running agents for the tenant from
+# `tenant.edge_agents_enabled` on the hub side; both ends MUST agree.
+#
+# See docs/design/daalu-private.md §5.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: daalu-edge-agents
+  labels:
+    app: daalu-edge-agents
+    daalu.io/tier: private
+spec:
+  replicas: {{ .Values.agents.replicas | default 1 }}
+  selector:
+    matchLabels: { app: daalu-edge-agents }
+  template:
+    metadata:
+      labels:
+        app: daalu-edge-agents
+        daalu.io/tier: private
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: agents
+          image: {{ .Values.agents.image.repository }}:{{ .Values.agents.image.tag }}
+          imagePullPolicy: {{ .Values.agents.image.pullPolicy }}
+          # `--mode=edge` makes the agent host poll the hub's internal
+          # API for tenants flagged edge_agents_enabled, run the loop
+          # locally, and POST back synthesised results.
+          # The mode flag is the seam — the same `daalu agents`
+          # command behaves identically on hub or edge depending on
+          # this argument.
+          command: ["daalu", "agents", "--mode=edge"]
+          env:
+            - name: DAALU_AGENT_MODE
+              value: "edge"
+            - name: DAALU_HUB_INTERNAL_API_URL
+              value: {{ .Values.agents.hubInternalApiUrl | default .Values.operator.apiUrl | quote }}
+            - name: DAALU_TENANT_SLUG
+              value: {{ .Values.cluster.slug | quote }}
+            # Service token is rotated by the hub; mounted from the
+            # Secret as DAALU_AGENT_SERVICE_TOKEN.
+            - name: DAALU_AGENT_SERVICE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.agents.serviceTokenSecretName }}
+                  key: token
+          resources:
+            {{- toYaml .Values.agents.resources | nindent 12 }}
+          readinessProbe:
+            exec:
+              command: ["/bin/sh", "-c", "test -f /tmp/daalu-edge-agent-ready"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+{{- end }}

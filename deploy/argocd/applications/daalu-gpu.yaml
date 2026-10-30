@@ -1,0 +1,60 @@
+# GPU stack — NVIDIA GPU Operator (Helm) + the static manifests
+# in deploy/k8s/gpu/ that depend on it.
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gpu-operator
+  namespace: argocd
+  finalizers: [resources-finalizer.argocd.argoproj.io]
+spec:
+  project: daalu
+  source:
+    repoURL: https://helm.ngc.nvidia.com/nvidia
+    chart: gpu-operator
+    # v25.10.1 (not v24.9.1): chart v24.9.x ships container-toolkit v1.17.3
+    # which cannot parse the workload node's containerd-2.x config.toml
+    # (version = 3) and crash-loops the toolkit DaemonSet. v25.3.0+ is
+    # required on containerd-2.x nodes; matches 00-install-gpu-operator.sh.
+    targetRevision: v25.10.1
+    helm:
+      values: |
+        driver:
+          enabled: false
+        toolkit:
+          env:
+            - { name: CONTAINERD_CONFIG,        value: /var/lib/rancher/k3s/agent/etc/containerd/config.toml.tmpl }
+            - { name: CONTAINERD_SOCKET,        value: /run/k3s/containerd/containerd.sock }
+            - { name: CONTAINERD_RUNTIME_CLASS, value: nvidia }
+            - { name: CONTAINERD_SET_AS_DEFAULT, value: "true" }
+        daemonsets:
+          tolerations:
+            - { key: gpu, operator: Exists, effect: NoSchedule }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: gpu-operator
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true, ServerSideApply=true]
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gpu-workloads
+  namespace: argocd
+  finalizers: [resources-finalizer.argocd.argoproj.io]
+spec:
+  project: daalu
+  source:
+    repoURL: https://github.com/kiwueke1/daalu
+    targetRevision: main
+    path: deploy/k8s/gpu
+    directory:
+      # 01- time-slicing, 03- vLLM stack, 05- network policy, 07- MPS config.
+      # Skips *.example.yaml (04/06 templates, hf-token) and the .sh installer.
+      include: "{01-,03-,05-,07-}*"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: daalu
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }

@@ -1,0 +1,84 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.workspacesNamespace }}
+  labels:
+    # Drives the NetworkPolicy that allows daalu-api to talk to the
+    # workspace pods. The controller's RBAC is scoped to this namespace.
+    daalu.io/purpose: workspaces
+---
+# Default-deny everything in the workspaces namespace. Each workspace
+# Deployment gets its own narrow NetworkPolicy from the controller
+# (TODO §production-hardening — the MVP relies on this default deny
+# plus the IDE proxy's auth check).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: {{ .Values.workspacesNamespace }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+# Allow daalu-api → workspace pods on port 8080 (the proxy path).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api-to-workspaces
+  namespace: {{ .Values.workspacesNamespace }}
+spec:
+  podSelector:
+    matchLabels: { app: daalu-workspace }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+          podSelector:
+            matchLabels: { app: daalu-api }
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+# Workspace pods need DNS + access to the inference-gateway. Egress to
+# tenant infrastructure goes through the wg-edge sidecar's network
+# namespace which is unaffected by this Egress rule.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-workspace-egress-to-gateway-and-dns
+  namespace: {{ .Values.workspacesNamespace }}
+spec:
+  podSelector:
+    matchLabels: { app: daalu-workspace }
+  policyTypes: [Egress]
+  egress:
+    # DNS
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+    # Inference gateway
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+          podSelector:
+            matchLabels: { app: inference-gateway }
+      ports:
+        - protocol: TCP
+          port: 80
+    # daalu-api for the change-proposal CLI tools.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+          podSelector:
+            matchLabels: { app: daalu-api }
+      ports:
+        - protocol: TCP
+          port: 8000

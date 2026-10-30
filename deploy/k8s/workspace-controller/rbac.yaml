@@ -1,0 +1,81 @@
+# RBAC for workspace-controller.
+#
+# The controller pod runs in daalu-automation (so it gets DB + signing-key
+# env from daalu-automation-secrets) but materialises per-user code-server
+# Deployments/PVCs/Services and mirrors the signing-key Secret in the
+# daalu-workspaces namespace. So its ServiceAccount lives in
+# daalu-automation and is bound to a Role IN daalu-workspaces. Blast
+# radius stays "those two namespaces only" — no cluster-scoped grants.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: daalu-workspace-controller
+  namespace: daalu-automation
+---
+# Workspace-pod management, scoped to daalu-workspaces.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: daalu-workspace-controller
+  namespace: daalu-workspaces
+rules:
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "create", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "deployments/scale"]
+    verbs: ["get", "list", "watch", "create", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch", "create", "patch", "delete"]
+  # Secret mirror target: write the signing-key copy + the ghcr pull
+  # secret here so workspace pods can mint tokens and pull the image.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "create", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: daalu-workspace-controller
+  namespace: daalu-workspaces
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: daalu-workspace-controller
+subjects:
+  - kind: ServiceAccount
+    name: daalu-workspace-controller
+    namespace: daalu-automation
+---
+# Read-only access to daalu-automation-secrets in the hub namespace so
+# the mirror_secret_into_workspaces helper can pull SERVICE_TOKEN_SECRET_KEY
+# and copy it into daalu-workspaces. Scoped to a single resourceName so the
+# controller can't read other secrets in daalu-automation.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: daalu-workspace-controller-secret-reader
+  namespace: daalu-automation
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["daalu-automation-secrets"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: daalu-workspace-controller-secret-reader
+  namespace: daalu-automation
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: daalu-workspace-controller-secret-reader
+subjects:
+  - kind: ServiceAccount
+    name: daalu-workspace-controller
+    namespace: daalu-automation

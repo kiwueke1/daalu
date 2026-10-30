@@ -1,0 +1,82 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nautobot-postgres-data
+  namespace: nautobot
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nautobot-postgres
+  namespace: nautobot
+spec:
+  serviceName: nautobot-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nautobot-postgres
+  template:
+    metadata:
+      labels:
+        app: nautobot-postgres
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          env:
+            - name: POSTGRES_DB
+              value: nautobot
+            - name: POSTGRES_USER
+              value: nautobot
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nautobot-secrets
+                  key: POSTGRES_PASSWORD
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "nautobot"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 1
+              memory: 1Gi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: nautobot-postgres-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nautobot-postgres
+  namespace: nautobot
+spec:
+  clusterIP: None
+  selector:
+    app: nautobot-postgres
+  ports:
+    - port: 5432
+      targetPort: 5432

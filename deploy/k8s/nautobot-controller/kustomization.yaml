@@ -1,0 +1,17 @@
+# nautobot-controller — per-tenant Nautobot lifecycle manager.
+#
+# Lives in daalu-automation (alongside daalu-api). Materialises
+# per-tenant Nautobot stacks into either the operator's cluster
+# (default) or the customer's federated cluster (when the
+# nautobot_tenants row has target_cluster_tunnel_id set).
+#
+# Engineer chapter: docs/book-engineer/04-source-of-truth/60-per-tenant-nautobot.md.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: daalu-automation
+
+resources:
+  - rbac.yaml
+  - deployment.yaml
+  - networkpolicy.yaml

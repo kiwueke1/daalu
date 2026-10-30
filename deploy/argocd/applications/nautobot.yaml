@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: nautobot
+  namespace: argocd
+  finalizers: [resources-finalizer.argocd.argoproj.io]
+spec:
+  project: daalu
+  source:
+    repoURL: https://github.com/kiwueke1/daalu
+    targetRevision: main
+    path: deploy/k8s/nautobot
+    # Supply the nautobot-secrets Secret out-of-band (SOPS / Sealed Secrets).
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: nautobot
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: { duration: 30s, factor: 2, maxDuration: 5m }

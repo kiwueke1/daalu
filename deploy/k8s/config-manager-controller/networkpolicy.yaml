@@ -1,0 +1,30 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: config-manager-controller-ingress
+  namespace: daalu-automation
+  labels:
+    app: config-manager-controller
+    app.kubernetes.io/part-of: daalu-automation
+spec:
+  podSelector:
+    matchLabels:
+      app: config-manager-controller
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: daalu-api
+              app.kubernetes.io/part-of: daalu-automation
+        - podSelector:
+            matchLabels:
+              app: daalu-worker
+              app.kubernetes.io/part-of: daalu-automation
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 8083
+          protocol: TCP

@@ -1,0 +1,168 @@
+name: Build and push container images
+
+# Manual only: published images are pushed to ghcr.io/<owner>/…; run this
+# from the Actions tab (or re-enable a push trigger in your fork).
+on:
+  workflow_dispatch: {}
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/daalu-automation
+          tags: |
+            # Bare full git SHA as the tag
+            # (the default `type=sha` mode prefixes with `sha-`, which
+            # breaks `helm --set image.tag=$(git rev-parse HEAD)`).
+            type=raw,value=${{ github.sha }}
+            type=raw,value=latest,enable={{is_default_branch}}
+      - id: buildmeta
+        run: echo "build_time=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BUILD_SHA=${{ github.sha }}
+            BUILD_TIME=${{ steps.buildmeta.outputs.build_time }}
+          cache-from: type=gha,scope=daalu-backend
+          cache-to: type=gha,mode=max,scope=daalu-backend
+
+  frontend:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/daalu-automation-frontend
+          tags: |
+            # Bare full git SHA as the tag
+            # (the default `type=sha` mode prefixes with `sha-`, which
+            # breaks `helm --set image.tag=$(git rev-parse HEAD)`).
+            type=raw,value=${{ github.sha }}
+            type=raw,value=latest,enable={{is_default_branch}}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=daalu-frontend
+          cache-to: type=gha,mode=max,scope=daalu-frontend
+
+  wg-hub:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/daalu-wg-hub
+          tags: |
+            type=raw,value=${{ github.sha }}
+            type=raw,value=latest,enable={{is_default_branch}}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./deploy/wg-hub
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=daalu-wg-hub
+          cache-to: type=gha,mode=max,scope=daalu-wg-hub
+
+  edge:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/daalu-edge
+          tags: |
+            type=raw,value=${{ github.sha }}
+            type=raw,value=latest,enable={{is_default_branch}}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./deploy/edge
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=daalu-edge
+          cache-to: type=gha,mode=max,scope=daalu-edge
+
+  edge-chart:
+    # Publishes the daalu-edge Helm chart as an OCI artifact at
+    # oci://ghcr.io/${owner}/charts/daalu-edge:<chart-version>. The
+    # customer-side install snippet in core/wireguard.py:render_edge_install_snippet
+    # references this path; without this job the snippet 404s.
+    #
+    # The chart version comes from deploy/helm/daalu-edge/Chart.yaml — bump
+    # it on every meaningful chart change so customers can pin. GHCR
+    # allows overwriting an existing tag, so forgetting to bump won't
+    # break the publish, it just leaves old installs pinned to the same
+    # version label.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.2
+      - name: Log in to GHCR for helm push
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: Package and push chart
+        run: |
+          helm package deploy/helm/daalu-edge -d /tmp/chart-out
+          helm push /tmp/chart-out/daalu-edge-*.tgz \
+            "oci://ghcr.io/${{ github.repository_owner }}/charts"

@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    # Label propagates to every sub-resource so NetworkPolicies can
+    # whitelist Prometheus / Grafana traffic by namespace selector
+    # without hard-coding pod labels.
+    daalu.io/managed: "true"
+    # prometheus-node-exporter needs hostNetwork/hostPID/hostPath/hostPort
+    # — those are forbidden under PSA baseline. The whole monitoring
+    # stack is cluster-trusted infra, so `privileged` is correct here.
+    pod-security.kubernetes.io/enforce: privileged

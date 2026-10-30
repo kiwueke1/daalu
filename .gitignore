@@ -1,0 +1,44 @@
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+.env
+.env.local
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.env.local
+frontend/tsconfig.tsbuildinfo
+frontend/next-env.d.ts
+
+# Editor + OS
+.vscode/
+.idea/
+.DS_Store
+
+# Secrets (encrypted versions are committed)
+deploy/k8s/secrets.yaml
+deploy/k8s-prod/secrets.yaml
+!deploy/k8s/secrets.yaml.example
+!deploy/k8s-prod/secrets.enc.yaml
+
+# Local runtime artifacts (event captures, snapshots) — regenerated on demand
+/events.jsonl
+/snapshots/
+/tests/events.jsonl
+/tests/events.jsonl.backup
+/tests/events_raw.jsonl
+
+# Claude Code runtime artifacts — but skills are shared project assets
+.claude/*
+!.claude/skills/

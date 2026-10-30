@@ -1,0 +1,22 @@
+{{- if .Values.persistence.enabled }}
+# Holds the WireGuard keypair so a pod restart keeps the same pubkey.
+# Without this, every restart would generate a fresh pubkey and the
+# operator's hub Secret would refuse the connection until the operator
+# re-onboards. Small (64Mi) — only ~150 bytes are actually written.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: daalu-edge-state
+  labels: {{- include "daalu-edge.labels" . | nindent 4 }}
+spec:
+  accessModes:
+{{- range .Values.persistence.accessModes }}
+    - {{ . | quote }}
+{{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.size }}
+{{- if .Values.persistence.storageClassName }}
+  storageClassName: {{ .Values.persistence.storageClassName | quote }}
+{{- end }}
+{{- end }}

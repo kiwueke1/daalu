@@ -1,0 +1,33 @@
+# Spectrum-X lab fabric — ready to upload at Operations → Bulk import
+# (https://ops.daalu.io/operations?tab=bulk-import). Columns match the
+# authoritative header row: name | primary_ip | transport | site |
+# device_type | role | platform.
+#
+# Matches docs/content/lab/spectrum-x.clab.yml — 12 devices:
+#   2 spines · 4 rail leaves (rail0-3) · 1 storage leaf · 4 GPU servers · 1 storage node
+# Explainer: ../season-01-network-and-server/E02-lab-and-simulation.md → "Appendix".
+#
+# Prereq: site `lab-site`, device types `cumulus-vx` + `gpu-server` +
+# `storage-server`, roles `spine`/`leaf`/`server` and platforms
+# `cumulus-linux`/`linux` must already exist in the tenant's Nautobot, or the
+# dry-run flags them. Additionally (fail at Apply, not dry-run): prefix
+# `172.20.20.0/24` in namespace Global, and the `daalu_transport` custom field
+# on dcim | device. Full seeding table: onboard-to-daalu.md §5.2.
+devices:
+  # --- Spine layer ---------------------------------------------------------
+  - {name: spine1,    primary_ip: 172.20.20.11/24, transport: linux_ssh, site: lab-site, device_type: cumulus-vx,     role: spine,  platform: cumulus-linux}
+  - {name: spine2,    primary_ip: 172.20.20.12/24, transport: linux_ssh, site: lab-site, device_type: cumulus-vx,     role: spine,  platform: cumulus-linux}
+  # --- Compute fabric: rail leaves (rail 0-3) ------------------------------
+  - {name: leaf1,     primary_ip: 172.20.20.21/24, transport: linux_ssh, site: lab-site, device_type: cumulus-vx,     role: leaf,   platform: cumulus-linux}
+  - {name: leaf2,     primary_ip: 172.20.20.22/24, transport: linux_ssh, site: lab-site, device_type: cumulus-vx,     role: leaf,   platform: cumulus-linux}
+  - {name: leaf3,     primary_ip: 172.20.20.23/24, transport: linux_ssh, site: lab-site, device_type: cumulus-vx,     role: leaf,   platform: cumulus-linux}
+  - {name: leaf4,     primary_ip: 172.20.20.24/24, transport: linux_ssh, site: lab-site, device_type: cumulus-vx,     role: leaf,   platform: cumulus-linux}
+  # --- Storage fabric ------------------------------------------------------
+  - {name: storleaf1, primary_ip: 172.20.20.25/24, transport: linux_ssh, site: lab-site, device_type: cumulus-vx,     role: leaf,   platform: cumulus-linux}
+  # --- GPU servers (4 rail NICs + 1 storage NIC each) ----------------------
+  - {name: gpu1,      primary_ip: 172.20.20.31/24, transport: linux_ssh, site: lab-site, device_type: gpu-server,     role: server, platform: linux}
+  - {name: gpu2,      primary_ip: 172.20.20.32/24, transport: linux_ssh, site: lab-site, device_type: gpu-server,     role: server, platform: linux}
+  - {name: gpu3,      primary_ip: 172.20.20.33/24, transport: linux_ssh, site: lab-site, device_type: gpu-server,     role: server, platform: linux}
+  - {name: gpu4,      primary_ip: 172.20.20.34/24, transport: linux_ssh, site: lab-site, device_type: gpu-server,     role: server, platform: linux}
+  # --- Storage node --------------------------------------------------------
+  - {name: stor1,     primary_ip: 172.20.20.41/24, transport: linux_ssh, site: lab-site, device_type: storage-server, role: server, platform: linux}

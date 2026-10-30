@@ -1,0 +1,54 @@
+# RBAC for the WireGuard coordinator that runs inside daalu-api.
+#
+# The coordinator reads `daalu-wireguard-peers` (to discover the hub's
+# current wg0.conf and pubkey) and patches it (to append new peers when
+# a cluster is onboarded). It also `kubectl exec`s into the hub pod to
+# run `wg show wg0 dump` every 30s for liveness rollup.
+#
+# Scoped per-resource and per-name so a compromised daalu-api can't
+# touch unrelated Secrets in the namespace.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: daalu-remediator
+  namespace: daalu-automation
+  labels:
+    app.kubernetes.io/part-of: daalu-automation
+imagePullSecrets:
+  - name: ghcr
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: daalu-wireguard-coordinator
+  namespace: daalu-automation
+  labels:
+    app.kubernetes.io/part-of: daalu-automation
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["daalu-wireguard-peers"]
+    verbs: ["get", "patch", "update"]
+  # Beat task execs `wg show wg0 dump` in the hub pod every 30s.
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["get", "create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: daalu-wireguard-coordinator
+  namespace: daalu-automation
+  labels:
+    app.kubernetes.io/part-of: daalu-automation
+subjects:
+  - kind: ServiceAccount
+    name: daalu-remediator
+    namespace: daalu-automation
+roleRef:
+  kind: Role
+  name: daalu-wireguard-coordinator
+  apiGroup: rbac.authorization.k8s.io

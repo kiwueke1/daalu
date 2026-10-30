@@ -1,0 +1,45 @@
+# Build + push the code-server-with-daalu image used by every
+# workspace pod. Triggers on changes to the extension source or the
+# Dockerfile only — the image is large and we don't want to rebuild
+# it on docs / unrelated commits.
+name: Build code-server-with-daalu image
+
+# Manual only: published images are pushed to ghcr.io/<owner>/…; run this
+# from the Actions tab (or re-enable a push trigger in your fork).
+on:
+  workflow_dispatch: {}
+
+concurrency:
+  group: build-code-server-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/kiwueke1/code-server-with-daalu
+          tags: |
+            type=raw,value=${{ github.sha }}
+            type=raw,value=latest,enable={{is_default_branch}}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/docker/code-server-with-daalu/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=code-server-with-daalu
+          cache-to: type=gha,mode=max,scope=code-server-with-daalu

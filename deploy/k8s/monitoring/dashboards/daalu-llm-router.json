@@ -1,0 +1,91 @@
+{
+  "title": "Daalu — LLM Router",
+  "uid": "daalu-llm-router",
+  "tags": ["daalu", "llm"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "time": { "from": "now-3h", "to": "now" },
+  "refresh": "30s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Requests by tier (success vs fail)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum by (served_by, outcome) (rate(daalu_llm_requests_total[1m]))",
+          "legendFormat": "{{served_by}} / {{outcome}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Fallback rate (failed_tier / total classifier)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum by (failed_tier) (rate(daalu_llm_fallbacks_total[5m])) / clamp_min(sum(rate(daalu_llm_requests_total{requested_tier=\"classifier\"}[5m])), 0.001)",
+          "legendFormat": "{{failed_tier}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit" } }
+    },
+    {
+      "id": 3,
+      "type": "heatmap",
+      "title": "Latency distribution — local tier",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum by (le) (rate(daalu_llm_latency_seconds_bucket{served_by=\"local\"}[1m]))",
+          "format": "heatmap",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "heatmap",
+      "title": "Latency distribution — Anthropic tier",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum by (le) (rate(daalu_llm_latency_seconds_bucket{served_by=\"external_quality\"}[1m]))",
+          "format": "heatmap",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Tokens / sec by direction",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "sum by (direction, served_by) (rate(daalu_llm_tokens_total[1m]))",
+          "legendFormat": "{{served_by}} / {{direction}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "barchart",
+      "title": "Top tenants by $ (1h)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        {
+          "expr": "topk(10, sum by (tenant_id) (rate(daalu_llm_cost_usd_total[1h])) * 3600)",
+          "legendFormat": "{{tenant_id}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "currencyUSD" } }
+    }
+  ]
+}

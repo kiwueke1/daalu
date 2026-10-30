@@ -1,0 +1,30 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: daalu-automation
+  namespace: argocd
+  finalizers: [resources-finalizer.argocd.argoproj.io]
+spec:
+  project: daalu
+  source:
+    repoURL: https://github.com/kiwueke1/daalu
+    targetRevision: main
+    # Base manifests. For a real deployment, fork the repo and point this
+    # at your own overlay (e.g. deploy/k8s-<env>/) that patches hostnames,
+    # replicas and image tags and supplies the `daalu-automation-secrets`
+    # Secret (see deploy/k8s/secrets.yaml.example) — via SOPS, Sealed
+    # Secrets or External Secrets.
+    path: deploy/k8s
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: daalu-automation
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: { duration: 30s, factor: 2, maxDuration: 5m }

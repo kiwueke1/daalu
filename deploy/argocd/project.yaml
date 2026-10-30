@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: daalu
+  namespace: argocd
+spec:
+  description: "Daalu Automation — all managed Applications belong to this project."
+  sourceRepos:
+    - https://github.com/kiwueke1/daalu
+    - https://prometheus-community.github.io/helm-charts
+    - https://grafana.github.io/helm-charts
+    - https://helm.ngc.nvidia.com/nvidia
+  destinations:
+    - namespace: "*"
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - { group: "*", kind: "*" }    # Namespaces, CRDs, ClusterRoles, etc.
+  namespaceResourceWhitelist:
+    - { group: "*", kind: "*" }
+  orphanedResources:
+    warn: true

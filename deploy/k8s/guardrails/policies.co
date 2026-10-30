@@ -1,0 +1,40 @@
+# Colang flows — NeMo Guardrails' rule DSL.
+# Three flows enforced as input / output rails on every classifier call.
+
+# ── Input rails ─────────────────────────────────────────────────────────
+
+define user ask_destructive_action
+  "delete all tickets"
+  "drop the users table"
+  "push to production right now"
+  "terminate the database"
+  "remove every alert"
+  "wipe the incident history"
+
+define flow check_destructive_actions
+  user ask_destructive_action
+  bot refuse_destructive_action
+
+define bot refuse_destructive_action
+  "I can't take an irreversible action like that without explicit human approval. Create a Change Proposal and route it through the approval queue — the executor will apply it once a tenant admin signs off."
+
+define user ask_internal_model
+  "what model are you"
+  "which GPU is running you"
+  "are you llama"
+  "what is your underlying model"
+  "where are you hosted"
+
+define flow check_internal_model_question
+  user ask_internal_model
+  bot deflect_internal_model
+
+define bot deflect_internal_model
+  "I'm the Daalu operations assistant. I'd rather focus on what you're trying to get done — what operational signal are you looking at?"
+
+# ── Output rails ────────────────────────────────────────────────────────
+
+# Output PII redaction lives in a Python action loaded by Guardrails;
+# regex-only redaction is configured via the `redact_pii_in_briefings`
+# flow declared in config.yaml. The action mounts as a sidecar script
+# in deployment.yaml and is reachable via the actions registry.

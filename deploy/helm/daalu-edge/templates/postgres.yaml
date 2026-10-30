@@ -1,0 +1,102 @@
+{{- if and .Values.tenantData.enabled .Values.postgres.enabled }}
+# Bundled Postgres for Daalu Private (edge data plane).
+#
+# Single-instance StatefulSet, accessible only from
+# daalu-edge-data via NetworkPolicy. Storage is a PVC; size
+# defaults to 50Gi which is plenty for the operational metadata
+# of a single tenant for years.
+#
+# For production deployments customers typically replace this with
+# a managed Postgres (RDS / CNPG / Cloud SQL). Disable this block
+# by setting `postgres.enabled=false` and pointing
+# `tenantData.dbUrl` at their own DB.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: daalu-edge-postgres
+type: Opaque
+stringData:
+  # The chart will fail-loud if neither this nor an existing Secret
+  # is provided; we do NOT auto-generate a password at render time
+  # because Helm renders are not idempotent across upgrades (a
+  # second `helm upgrade` would rotate the password and break the
+  # running pod). Operators must set this once on first install.
+  POSTGRES_PASSWORD: {{ required "postgres.password is required on first install" .Values.postgres.password | quote }}
+  POSTGRES_USER: {{ .Values.postgres.user | quote }}
+  POSTGRES_DB: {{ .Values.postgres.database | quote }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: daalu-edge-postgres
+  labels: { app: daalu-edge-postgres }
+spec:
+  clusterIP: None  # headless — direct pod DNS
+  selector: { app: daalu-edge-postgres }
+  ports:
+    - port: 5432
+      name: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: daalu-edge-postgres
+spec:
+  serviceName: daalu-edge-postgres
+  replicas: 1
+  selector:
+    matchLabels: { app: daalu-edge-postgres }
+  template:
+    metadata:
+      labels: { app: daalu-edge-postgres }
+    spec:
+      containers:
+        - name: postgres
+          image: {{ .Values.postgres.image | quote }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5432
+              name: postgres
+          envFrom:
+            - secretRef:
+                name: daalu-edge-postgres
+          # Pin data dir under /var/lib/postgresql/data/pgdata to
+          # avoid the official-image quirk where mounting at
+          # /var/lib/postgresql/data fails with "subdirectory
+          # exists but is not empty" on some volume types.
+          env:
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -U $POSTGRES_USER -d $POSTGRES_DB
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -U $POSTGRES_USER -d $POSTGRES_DB
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            {{- toYaml .Values.postgres.resources | nindent 12 }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- if .Values.postgres.storageClassName }}
+        storageClassName: {{ .Values.postgres.storageClassName | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.postgres.storage | quote }}
+{{- end }}

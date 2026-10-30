@@ -1,0 +1,52 @@
+# Lock the local-tier inference pod's egress to the cluster CIDR + DNS
+# + public HTTPS (for the Hugging Face Hub download). Without this, a
+# compromised inference container could pivot from the GPU node onto
+# whatever else lives on its L2/L3 segment (router admin, NAS,
+# OpenStack mgmt plane on gpu-node-1, etc.).
+#
+# The WG mesh routes 10.200.0.0/16. 10.0.0.0/8 is broad enough to
+# cover the workload cluster's pod/service CIDRs plus the WG mesh.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: local-llm-egress
+  namespace: daalu
+spec:
+  podSelector:
+    matchLabels:
+      daalu.io/tier: local
+  policyTypes: [Egress]
+  egress:
+    # Cluster + WG mesh.
+    - to:
+        - ipBlock:
+            cidr: 10.0.0.0/8
+      ports:
+        - port: 443
+        - port: 80
+        - port: 8000
+    # DNS resolution.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # Hugging Face Hub — needed at startup to fetch the model weights
+    # if they're not already in the hostPath cache (/var/lib/daalu/
+    # hf-cache). HF Hub fronts via Cloudflare anycast so we can't pin
+    # to a small CIDR. RFC1918 ranges are excluded so a compromised
+    # pod cannot scan the host network.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+      ports:
+        - port: 443

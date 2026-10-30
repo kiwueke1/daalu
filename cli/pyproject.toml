@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "daalu-cli"
+version = "0.1.1"
+description = "Daalu coding agent for your terminal — chat with Daalu's sovereign coding model from any local project."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "Proprietary" }
+authors = [{ name = "Daalu" }]
+keywords = ["daalu", "coding-agent", "llm", "cli"]
+# Deliberately tiny: httpx is the only runtime dependency so PyInstaller
+# binaries stay small and `pipx install daalu-cli` is fast. The CLI talks to
+# the public HTTP API only — it never imports the daalu-automation backend.
+dependencies = ["httpx>=0.27"]
+
+[project.urls]
+Homepage = "https://daalu.io"
+Documentation = "https://docs.daalu.io"
+
+[project.scripts]
+daalu = "daalu_cli.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["daalu_cli*"]

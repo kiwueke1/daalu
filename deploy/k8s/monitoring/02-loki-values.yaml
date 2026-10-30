@@ -1,0 +1,50 @@
+# Loki — log aggregation. Pairs with Promtail (the log collector
+# DaemonSet) and a Grafana datasource. Single-binary mode for our
+# scale; scale-out (microservices mode) is a Phase-2 swap.
+#
+# Install:
+#   helm upgrade --install loki grafana/loki \
+#     -n monitoring -f deploy/k8s/monitoring/02-loki-values.yaml
+#   helm upgrade --install promtail grafana/promtail \
+#     -n monitoring -f deploy/k8s/monitoring/02-promtail-values.yaml
+
+deploymentMode: SingleBinary
+
+loki:
+  auth_enabled: false
+  commonConfig:
+    replication_factor: 1
+  storage:
+    type: filesystem
+  schemaConfig:
+    configs:
+      - from: "2024-04-01"
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: loki_index_
+          period: 24h
+  limits_config:
+    retention_period: 14d
+    max_query_lookback: 30d
+    reject_old_samples: true
+    reject_old_samples_max_age: 24h
+
+singleBinary:
+  replicas: 1
+  persistence:
+    enabled: true
+    storageClass: local-path
+    size: 30Gi
+
+# Disable the scalable-mode components (we're on SingleBinary).
+read: { replicas: 0 }
+write: { replicas: 0 }
+backend: { replicas: 0 }
+chunksCache: { enabled: false }
+resultsCache: { enabled: false }
+
+# Provision Loki as a Grafana datasource via the sidecar.
+test: { enabled: false }
+gateway: { enabled: false }

@@ -1,0 +1,73 @@
+# RBAC for the workspace-controller.
+#
+# The controller pod runs in the release namespace (the hub —
+# daalu-automation) so it inherits DB + signing-key env, and manages
+# workspace pods in {{ .Values.workspacesNamespace }} via the cross-
+# namespace Role below. Blast radius is "those two namespaces only" — no
+# cluster-scoped grants.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: daalu-workspace-controller
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: daalu-workspace-controller
+  namespace: {{ .Values.workspacesNamespace }}
+rules:
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "create", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "deployments/scale"]
+    verbs: ["get", "list", "watch", "create", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch", "create", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: daalu-workspace-controller
+  namespace: {{ .Values.workspacesNamespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: daalu-workspace-controller
+subjects:
+  - kind: ServiceAccount
+    name: daalu-workspace-controller
+    namespace: {{ .Release.Namespace }}
+---
+# Read-only access to the signing-key Secret in the release namespace so
+# mirror_secret_into_workspaces can copy SERVICE_TOKEN_SECRET_KEY into the
+# workspaces namespace. Scoped to the one Secret.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: daalu-workspace-controller-secret-reader
+  namespace: {{ .Release.Namespace }}
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: [{{ .Values.existingSecret | quote }}]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: daalu-workspace-controller-secret-reader
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: daalu-workspace-controller-secret-reader
+subjects:
+  - kind: ServiceAccount
+    name: daalu-workspace-controller
+    namespace: {{ .Release.Namespace }}

@@ -1,0 +1,107 @@
+# RBAC for the config-manager-controller.
+#
+# Unlike the nautobot-controller (which applies a fixed, known set of
+# raw manifests), this controller runs `helm upgrade --install` of the
+# *vendored NV-CM chart*. In local/host-cluster mode (row.target_cluster_
+# tunnel_id is null) helm authenticates as THIS ServiceAccount, so the SA
+# must be able to create every kind the chart stamps. That is a broad,
+# chart-installer-shaped grant — effectively cluster-admin-equivalent for
+# the resource kinds below, including `bind`/`escalate` on RBAC so helm
+# can create the chart's own Roles/RoleBindings.
+#
+# Blast radius is bounded by:
+#   * the *kinds* enumerated here (it cannot touch, e.g., nodes, PVs, or
+#     arbitrary CRDs outside the NV-CM dependency set),
+#   * the fact that customer-cluster mode uses the tunnel kubeconfig
+#     instead — there this SA's rights are irrelevant, and the customer's
+#     own cluster RBAC governs the install,
+#   * Tier-A operators (Envoy Gateway / cert-manager / CNPG / ESO) being
+#     installed once out-of-band; this SA only creates their *CRs*, not
+#     the operators or their CRDs.
+#
+# When that trade-off is unacceptable for a given host cluster, install
+# NV-CM into a customer-mode tunnel cluster instead of daalu-local.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: daalu-config-manager-controller
+  namespace: daalu-automation
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: daalu-config-manager-controller
+rules:
+  # Namespaces — helm --create-namespace stamps one per tenant.
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch", "create", "patch", "delete"]
+  # Core workloads + config the chart materialises.
+  - apiGroups: [""]
+    resources:
+      - secrets
+      - configmaps
+      - services
+      - serviceaccounts
+      - persistentvolumeclaims
+      - pods
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses", "networkpolicies"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Read CRDs so the host_cluster_ready precheck can confirm the Tier-A
+  # operators' CRDs are installed before it tries to create their CRs.
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["get", "list", "watch"]
+  # RBAC the chart defines for its own components. `bind` + `escalate`
+  # are required because Kubernetes otherwise refuses to let this SA grant
+  # permissions it does not itself hold.
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings", "clusterroles", "clusterrolebindings"]
+    verbs:
+      ["get", "list", "watch", "create", "update", "patch", "delete", "bind", "escalate"]
+  # Tier-A operator CRs the chart stamps (the operators + their CRDs are
+  # installed once, out-of-band — see §64.2 step 1). Read GatewayClass to
+  # confirm the shared `envoy-gateway` class exists (precheck).
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["gatewayclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["gateways", "httproutes", "grpcroutes", "referencegrants"]
+    verbs: ["*"]
+  - apiGroups: ["gateway.envoyproxy.io"]
+    resources:
+      ["securitypolicies", "envoyproxies", "backendtrafficpolicies", "clienttrafficpolicies", "backends"]
+    verbs: ["*"]
+  - apiGroups: ["cert-manager.io"]
+    resources: ["certificates", "issuers", "clusterissuers"]
+    verbs: ["*"]
+  - apiGroups: ["postgresql.cnpg.io"]
+    resources: ["clusters", "poolers", "scheduledbackups", "backups"]
+    verbs: ["*"]
+  - apiGroups: ["external-secrets.io"]
+    resources: ["externalsecrets", "secretstores", "clustersecretstores"]
+    verbs: ["*"]
+  - apiGroups: ["spire.spiffe.io"]
+    resources: ["clusterspiffeids", "clusterfederatedtrustdomains"]
+    verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: daalu-config-manager-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: daalu-config-manager-controller
+subjects:
+  - kind: ServiceAccount
+    name: daalu-config-manager-controller
+    namespace: daalu-automation

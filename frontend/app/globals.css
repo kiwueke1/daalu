@@ -1,0 +1,502 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Cinematic surface system.
+ *
+ * Three families of utility classes carry the entire visual identity:
+ *   .surface         — illuminated glass panel (every card / section)
+ *   .surface-hero    — same idea, scaled up + extra bloom (greeting, AI core)
+ *   .ambient-bg      — body-level atmospheric lighting + vignette + grain
+ *
+ * The goal is depth-by-light, not depth-by-borders. Hairlines stay just
+ * visible enough to define a shape; everything else (separation,
+ * elevation, focus) comes from radial glows, gradients, and shadows.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* Surfaces — kept as gradients (top → bottom), not flat fills */
+  --bg-base: #06100d;
+  --bg-base-deep: #030806;
+  --surface-top: rgba(20, 30, 26, 0.82);
+  --surface-bot: rgba(11, 19, 16, 0.92);
+  --surface-top-hero: rgba(26, 40, 34, 0.72);
+  --surface-bot-hero: rgba(12, 22, 18, 0.92);
+
+  /* Borders — barely there; depth comes from lighting */
+  --hairline: rgba(255, 255, 255, 0.04);
+  --hairline-strong: rgba(255, 255, 255, 0.07);
+
+  /* Text */
+  --text: #e7efe9;
+  --text-muted: #8a9a93;
+
+  /* Accents — keep the raw RGB triple as its own token so callers that
+     need ad-hoc alphas can do `rgba(var(--accent-rgb), 0.18)` and have
+     it adapt to the active theme instead of hardcoding the dark-mode
+     emerald. */
+  --accent: #22d3a6;
+  --accent-rgb: 34, 211, 166;
+  --accent-soft: rgba(34, 211, 166, 0.14);
+  --accent-glow: rgba(34, 211, 166, 0.30);
+  --accent-bloom: rgba(34, 211, 166, 0.45);
+  --critical: #ef4444;
+  --warning: #f59e0b;
+  --info: #22d3a6;
+
+  /* Aliases the older Tailwind utilities still resolve to */
+  --bg-surface: #0a1612;
+  --bg-card: #0c1814;
+  --bg-elevated: #112019;
+  --line: var(--hairline);
+  --line-strong: var(--hairline-strong);
+
+  /* Ambient body lighting — radial passes anchored at corners */
+  --ambient-top-left: rgba(34, 211, 166, 0.10);
+  --ambient-bottom-right: rgba(34, 211, 166, 0.06);
+  --ambient-mid: rgba(34, 211, 166, 0.04);
+  --vignette: rgba(0, 0, 0, 0.55);
+
+  /* Circuitry — visible but never loud. */
+  --circuit: rgba(34, 211, 166, 0.22);
+  --circuit-strong: rgba(34, 211, 166, 0.38);
+  --circuit-node: rgba(34, 211, 166, 0.55);
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+
+  /* Slightly warmer, slightly darker base so the white cards above
+     register as actually-elevated rather than vanishing into the page.
+     The eyedropper test on a real light-mode product (Linear, Notion)
+     shows ~F4F5F6 / ~E5E8EA — two distinct steps, not one-and-a-half. */
+  --bg-base: #eef2f0;
+  --bg-base-deep: #e2e8e5;
+  --surface-top: rgba(255, 255, 255, 0.98);
+  --surface-bot: rgba(252, 254, 253, 0.98);
+  --surface-top-hero: #ffffff;
+  --surface-bot-hero: #f8fbfa;
+
+  /* Hairlines a touch stronger so cards have a defined edge against
+     the slightly warmer base. */
+  --hairline: rgba(15, 30, 24, 0.09);
+  --hairline-strong: rgba(15, 30, 24, 0.14);
+
+  --text: #0a1612;
+  --text-muted: #5e6d68;
+
+  --accent: #0f9d75;
+  --accent-rgb: 15, 157, 117;
+  --accent-soft: rgba(15, 157, 117, 0.10);
+  --accent-glow: rgba(15, 157, 117, 0.22);
+  --accent-bloom: rgba(15, 157, 117, 0.32);
+  --critical: #dc2626;
+  --warning: #d97706;
+  --info: #0f9d75;
+
+  --bg-surface: #ffffff;
+  --bg-card: #ffffff;
+  --bg-elevated: #f1f5f3;
+  --line: var(--hairline);
+  --line-strong: var(--hairline-strong);
+
+  --ambient-top-left: rgba(15, 157, 117, 0.06);
+  --ambient-bottom-right: rgba(15, 157, 117, 0.04);
+  --ambient-mid: rgba(15, 157, 117, 0.025);
+  --vignette: rgba(15, 30, 24, 0.08);
+
+  --circuit: rgba(15, 100, 70, 0.18);
+  --circuit-strong: rgba(15, 100, 70, 0.32);
+  --circuit-node: rgba(15, 157, 117, 0.55);
+}
+
+html,
+body {
+  background: var(--bg-base);
+  color: var(--text);
+  font-family: Inter, Geist, Satoshi, ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "ss01", "ss02", "cv01", "cv02";
+  min-height: 100%;
+}
+
+* {
+  border-color: var(--hairline);
+}
+
+/* ── Ambient body lighting ─────────────────────────────────────────────
+ *
+ * Painted into a fixed-position absolutely-positioned ::before so it
+ * never scrolls and never adds an extra DOM node. Three radial passes
+ * + a soft vignette + a grain veil. The grain is an inline SVG with
+ * fractalNoise at low opacity; it's what makes the surface feel
+ * expensive instead of plasticky.
+ */
+.ambient-bg {
+  position: relative;
+  isolation: isolate;
+}
+.ambient-bg::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background:
+    radial-gradient(60% 50% at 18% 12%, var(--ambient-top-left), transparent 55%),
+    radial-gradient(45% 45% at 88% 85%, var(--ambient-bottom-right), transparent 60%),
+    radial-gradient(40% 35% at 50% 50%, var(--ambient-mid), transparent 65%),
+    radial-gradient(120% 90% at 50% 100%, var(--vignette), transparent 60%),
+    radial-gradient(120% 90% at 50% 0%, var(--vignette), transparent 60%),
+    linear-gradient(180deg, var(--bg-base) 0%, var(--bg-base-deep) 100%);
+}
+.ambient-bg::after {
+  /* 1.5% grain veil. Makes everything feel like a coated surface. */
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.06;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.6 0'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='0.5'/></svg>");
+}
+
+/* ── The illuminated-glass surface ─────────────────────────────────────
+ *
+ * Every card / panel / section in the UI uses one of these classes.
+ * Borders are kept to a single 1px hairline; the rest of the depth
+ * (top-edge highlight, inner glow, outer shadow diffusion, emerald
+ * bloom) is light, not strokes.
+ */
+.surface {
+  position: relative;
+  border-radius: 18px;
+  background: linear-gradient(180deg, var(--surface-top), var(--surface-bot));
+  border: 1px solid var(--hairline);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.01),
+    0 1px 0 rgba(255, 255, 255, 0.02),
+    0 18px 40px -18px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(34, 211, 166, 0.02),
+    0 0 28px -8px rgba(34, 211, 166, 0.06);
+  backdrop-filter: blur(14px) saturate(120%);
+  -webkit-backdrop-filter: blur(14px) saturate(120%);
+}
+
+.surface-hero {
+  position: relative;
+  border-radius: 22px;
+  background: linear-gradient(170deg, var(--surface-top-hero), var(--surface-bot-hero));
+  border: 1px solid var(--hairline);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.015),
+    0 1px 0 rgba(255, 255, 255, 0.02),
+    0 30px 80px -30px rgba(0, 0, 0, 0.7),
+    0 0 60px -12px rgba(34, 211, 166, 0.12);
+  backdrop-filter: blur(18px) saturate(125%);
+  -webkit-backdrop-filter: blur(18px) saturate(125%);
+}
+
+/* Top-edge light specular — a 1px horizontal sheen at the top of every
+ * surface. Reads as light hitting a polished panel from above. */
+.surface::before,
+.surface-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 60% at 50% -10%, rgba(255, 255, 255, 0.05), transparent 60%);
+}
+
+/* Soft inner emerald bloom — appears only on surfaces marked focused or
+ * containing active content. Add `.surface-bloom` to opt in. */
+.surface-bloom::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(80% 60% at 50% 110%, var(--accent-soft), transparent 70%);
+  opacity: 0.6;
+}
+
+html[data-theme="light"] .surface,
+html[data-theme="light"] .surface-hero {
+  /* Light mode wants visible elevation — pure white cards on a barely
+     darker base lose their edge without a soft drop shadow. */
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 1px 2px rgba(15, 30, 24, 0.06),
+    0 8px 24px -10px rgba(15, 30, 24, 0.10),
+    0 18px 48px -22px rgba(15, 30, 24, 0.14),
+    0 0 24px -10px rgba(var(--accent-rgb), 0.10);
+  backdrop-filter: blur(12px) saturate(108%);
+  -webkit-backdrop-filter: blur(12px) saturate(108%);
+}
+
+html[data-theme="light"] .surface::before,
+html[data-theme="light"] .surface-hero::before {
+  background:
+    radial-gradient(120% 60% at 50% -10%, rgba(15, 157, 117, 0.06), transparent 60%);
+}
+
+/* ── Circuit-pattern background ────────────────────────────────────────
+ *
+ * Used by the left Sidebar and the right AlertChatRail. Two layers
+ * stacked behind nav content:
+ *
+ *   1. .sidebar-bg-dark / .sidebar-bg-light — the photographic
+ *      circuit render. Background-size: contain + repeat-y so the
+ *      pattern wallpapers the column.
+ *   2. .sidebar-tint — a thin readability gradient on top.
+ *
+ * Saturation + contrast bumped via `filter:` so the emerald/teal
+ * traces read clearly without us cranking the underlying tint (which
+ * would hurt the photographic look).
+ */
+.sidebar-bg {
+  background-repeat: repeat-y;
+  background-position: top center;
+  background-size: contain;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    black 8%,
+    black 92%,
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    black 8%,
+    black 92%,
+    transparent 100%
+  );
+  display: none;
+}
+.sidebar-bg-dark {
+  background-image: url("/assets/sidebar/circuit-dark.png");
+}
+.sidebar-bg-light {
+  background-image: url("/assets/sidebar/circuit-light.png");
+}
+html[data-theme="dark"] .sidebar-bg-dark {
+  display: block;
+  opacity: 1;
+  /* Boost the emerald traces without crushing the dark background. */
+  filter: saturate(1.6) contrast(1.25) brightness(1.05);
+}
+html[data-theme="light"] .sidebar-bg-light {
+  display: block;
+  opacity: 1;
+  /* Pale teal lines need darker, more saturated treatment to read on
+     near-white. */
+  filter: saturate(1.8) contrast(1.4) brightness(0.92);
+}
+html[data-theme="dark"] .sidebar-tint {
+  background: linear-gradient(
+    180deg,
+    rgba(7, 14, 12, 0.10) 0%,
+    rgba(5, 11, 9, 0.22) 100%
+  );
+}
+html[data-theme="light"] .sidebar-tint {
+  background: linear-gradient(
+    180deg,
+    rgba(244, 248, 250, 0.04) 0%,
+    rgba(232, 240, 244, 0.08) 100%
+  );
+}
+
+/* ── Sidebar shell ─────────────────────────────────────────────────────
+ *
+ * Drives the gradient + bevel of the left nav column independently of
+ * the circuit imagery sitting inside it. The dark theme reads as a
+ * polished graphite slab; the light theme as a frosted white panel
+ * with a faint teal undertone so the new circuit-light image lands on
+ * a surface that matches it.
+ */
+.sidebar-shell {
+  background: linear-gradient(180deg, rgba(10, 18, 15, 0.92) 0%, rgba(4, 10, 8, 0.96) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    inset -1px 0 0 rgba(255, 255, 255, 0.025),
+    12px 0 60px rgba(0, 0, 0, 0.55),
+    0 0 80px -20px rgba(34, 211, 166, 0.06);
+}
+html[data-theme="light"] .sidebar-shell {
+  background: linear-gradient(180deg, rgba(244, 248, 250, 0.96) 0%, rgba(234, 242, 246, 0.96) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset -1px 0 0 rgba(15, 30, 24, 0.04),
+    1px 0 0 rgba(15, 30, 24, 0.06),
+    8px 0 40px -16px rgba(15, 30, 24, 0.10),
+    0 0 60px -20px rgba(15, 157, 117, 0.10);
+}
+.sidebar-specular {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.10), transparent);
+}
+html[data-theme="light"] .sidebar-specular {
+  background: linear-gradient(90deg, transparent, rgba(15, 157, 117, 0.18), transparent);
+}
+
+/* ── Sidebar nav chips ────────────────────────────────────────────────
+ *
+ * Every nav link sits on a frosted chip so the label reads clearly
+ * over the photographic circuit pattern. Three states:
+ *
+ *   .sidebar-nav-chip  — always on, the base "I'm a button" frosted
+ *                        surface. backdrop-blur softens the
+ *                        circuit pattern directly behind the text
+ *                        without hiding it; a faint border + sheen
+ *                        keeps the chip readable on both themes.
+ *   .sidebar-nav-hover — additive accent wash, applied on hover.
+ *   .sidebar-nav-active — strong accent fill + glow, applied on the
+ *                         current route.
+ */
+.sidebar-nav-chip {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(20, 32, 28, 0.55) 0%,
+      rgba(12, 22, 18, 0.62) 100%
+    );
+  backdrop-filter: blur(4px) saturate(1.05);
+  -webkit-backdrop-filter: blur(4px) saturate(1.05);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 1px 0 rgba(0, 0, 0, 0.25);
+}
+html[data-theme="light"] .sidebar-nav-chip {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.78) 0%,
+      rgba(244, 248, 250, 0.70) 100%
+    );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 0 0 1px rgba(15, 30, 24, 0.05),
+    0 1px 0 rgba(15, 30, 24, 0.04);
+}
+.sidebar-nav-hover {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--accent) 18%, rgba(20, 32, 28, 0.65)) 0%,
+      color-mix(in srgb, var(--accent) 6%, rgba(12, 22, 18, 0.70)) 100%
+    );
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--accent) 12%, rgba(255, 255, 255, 0.06)),
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 16%, rgba(255, 255, 255, 0.04));
+}
+html[data-theme="light"] .sidebar-nav-hover {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--accent) 12%, rgba(255, 255, 255, 0.85)) 0%,
+      color-mix(in srgb, var(--accent) 4%, rgba(244, 248, 250, 0.80)) 100%
+    );
+}
+.sidebar-nav-active {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--accent) 30%, rgba(20, 32, 28, 0.70)) 0%,
+      color-mix(in srgb, var(--accent) 14%, rgba(12, 22, 18, 0.78)) 100%
+    );
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--accent) 35%, rgba(255, 255, 255, 0.08)),
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent),
+    inset 0 0 24px color-mix(in srgb, var(--accent) 12%, transparent),
+    0 0 28px -10px var(--accent-glow);
+}
+html[data-theme="light"] .sidebar-nav-active {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--accent) 22%, rgba(255, 255, 255, 0.95)) 0%,
+      color-mix(in srgb, var(--accent) 10%, rgba(244, 248, 250, 0.92)) 100%
+    );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent),
+    0 0 18px -6px var(--accent-glow);
+}
+.sidebar-divider {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+}
+html[data-theme="light"] .sidebar-divider {
+  background: linear-gradient(90deg, transparent, rgba(15, 30, 24, 0.10), transparent);
+}
+
+/* Scrollbars — kept whisper-thin so they don't break the surface. */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: var(--hairline-strong);
+  border-radius: 999px;
+}
+
+/* Soft emerald gradient outline kept around for the AI insight headline. */
+.gradient-border {
+  position: relative;
+  border-radius: 18px;
+}
+.gradient-border::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  border-radius: 18px;
+  background: linear-gradient(
+    140deg,
+    rgba(34, 211, 166, 0.45),
+    rgba(34, 211, 166, 0.06) 60%,
+    rgba(34, 211, 166, 0)
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.glow-emerald {
+  box-shadow: 0 0 36px -6px var(--accent-glow);
+}
+
+/* ── Brand mark theme swap ────────────────────────────────────────────
+ *
+ * The DaaluMark component renders both the dark and light PNGs stacked;
+ * these classes hide the one that doesn't match the active theme. CSS
+ * is the right layer for this — no hydration flash, no useEffect, no
+ * theme prop threaded through every entry point.
+ */
+.daalu-mark-dark,
+.daalu-mark-light {
+  display: none;
+}
+html[data-theme="dark"] .daalu-mark-dark {
+  display: block;
+}
+html[data-theme="light"] .daalu-mark-light {
+  display: block;
+}
+
+/* Subtle horizontal text gradient for the "AI" header glyphs. */
+.text-emerald-gradient {
+  background: linear-gradient(180deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 70%, var(--bg-base)) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}

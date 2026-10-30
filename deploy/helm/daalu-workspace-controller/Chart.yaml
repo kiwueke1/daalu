@@ -1,0 +1,8 @@
+apiVersion: v2
+name: daalu-workspace-controller
+description: Controller for per-tenant browser-IDE (code-server) workspaces.
+  Reconciles the workspaces table against K8s Deployments + PVCs.
+  See docs/design/coding-assistant.md.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

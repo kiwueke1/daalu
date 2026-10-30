@@ -1,0 +1,25 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: daalu-automation
+
+resources:
+  - namespace.yaml
+  - networkpolicy.yaml
+  - postgres/deployment.yaml
+  - redis/deployment.yaml
+  - api/deployment.yaml
+  - workers/deployment.yaml
+  - frontend/deployment.yaml
+  - frontend/ingress.yaml
+  # WireGuard hub for cluster federation. The peer Secret
+  # (`daalu-wireguard-peers`) is intentionally NOT in this kustomization
+  # — it's bootstrapped once with the hub's [Interface] block and then
+  # owned by the daalu-api coordinator at runtime. If Argo managed it,
+  # every reconcile would clobber the appended peers.
+  - wg-hub/rbac.yaml
+  - wg-hub/deployment.yaml
+  # Uncomment for installs not pointed at the shared Rook-Ceph RGW.
+  # - minio/deployment.yaml
+
+commonLabels:
+  app.kubernetes.io/part-of: daalu-automation

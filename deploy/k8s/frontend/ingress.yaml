@@ -1,0 +1,59 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: daalu-frontend-ingress
+  namespace: daalu-automation
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  # k3s clusters run traefik as the only IngressClass; the
+  # k3s default ships traefik, and we never installed ingress-nginx.
+  # Ingress objects with ingressClassName=nginx were silently ignored
+  # by traefik, so daalu.example.com previously 404'd from the traefik
+  # default backend.
+  ingressClassName: traefik
+  tls:
+    - hosts: [daalu.example.com]
+      secretName: daalu-tls
+  rules:
+    - host: daalu.example.com
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: daalu-api
+                port:
+                  number: 80
+          # The browser-IDE reverse proxy (code-server) lives on daalu-api
+          # at /ide/{workspace_id}/... (Starlette routes on the main app,
+          # NOT under /api). Without this rule /ide falls into the "/"
+          # catch-all → the Next.js frontend → 404 inside the app shell
+          # when you click "Open IDE". Traefik prioritises the longer
+          # prefix, so /ide wins over /. Carries the session cookie the
+          # proxy authenticates against; WebSocket upgrades (terminal/LSP)
+          # pass through natively.
+          - path: /ide
+            pathType: Prefix
+            backend:
+              service:
+                name: daalu-api
+                port:
+                  number: 80
+          # In-browser device terminal: Starlette WebSocketRoute at
+          # /ws/device-terminal/{id} on daalu-api — same shape as /ide.
+          - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: daalu-api
+                port:
+                  number: 80
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: daalu-frontend
+                port:
+                  number: 80

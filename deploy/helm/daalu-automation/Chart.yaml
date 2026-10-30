@@ -1,0 +1,21 @@
+apiVersion: v2
+name: daalu-automation
+description: |
+  AI Operations Command Center — event-driven operational intelligence
+  platform. Continuously gathers signals from across a company's
+  systems, reasons over them with LLMs, and turns them into briefings,
+  alerts, recommendations, and automated workflows.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/kiwueke1/daalu
+sources:
+  - https://github.com/kiwueke1/daalu
+maintainers:
+  - name: Kezie Iwueke
+keywords:
+  - ai
+  - operations
+  - automation
+  - revops
+  - sre

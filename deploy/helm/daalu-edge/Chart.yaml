@@ -1,0 +1,19 @@
+apiVersion: v2
+name: daalu-edge
+description: |
+  Customer-side WireGuard edge for daalu-automation. Brings up a
+  WireGuard tunnel back to the operator's hub and registers the cluster
+  via a one-shot bootstrap callback. Install this on the cluster you
+  want the daalu-automation operator to manage.
+type: application
+version: 0.5.0
+appVersion: "0.5.0"
+home: https://github.com/kiwueke1/daalu
+sources:
+  - https://github.com/kiwueke1/daalu
+maintainers:
+  - name: Kezie Iwueke
+keywords:
+  - wireguard
+  - daalu
+  - cluster-onboarding

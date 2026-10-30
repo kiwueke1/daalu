@@ -1,0 +1,1 @@
+{"mode":"oidc","sso_login_path":"/api/v1/auth/oidc/login","sso_providers":[{"id":"google","label":"Google"}],"self_signup_enabled":false,"password_login_enabled":true}

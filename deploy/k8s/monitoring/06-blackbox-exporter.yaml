@@ -1,0 +1,59 @@
+# Blackbox exporter — synthetic external probe of /health from outside
+# the cluster's own network. If our Prometheus *inside* the cluster
+# says we're up but a real user can't reach us, we want to know. The
+# probe pretends to be a user.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: blackbox-exporter
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: blackbox-exporter } }
+  template:
+    metadata:
+      labels: { app: blackbox-exporter }
+    spec:
+      containers:
+        - name: blackbox-exporter
+          image: prom/blackbox-exporter:v0.25.0
+          ports: [{ containerPort: 9115, name: http }]
+          resources:
+            requests: { cpu: 20m, memory: 32Mi }
+            limits: { cpu: 100m, memory: 64Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: blackbox-exporter
+  namespace: monitoring
+spec:
+  selector: { app: blackbox-exporter }
+  ports:
+    - name: http
+      port: 9115
+      targetPort: 9115
+---
+# Probe — Prometheus operator CRD that tells kube-prometheus-stack to
+# scrape blackbox with these target URLs.
+apiVersion: monitoring.coreos.com/v1
+kind: Probe
+metadata:
+  name: daalu-external-health
+  namespace: monitoring
+  labels:
+    release: kube-prom-stack
+spec:
+  jobName: daalu-external-health
+  prober:
+    url: blackbox-exporter:9115
+    scheme: http
+  module: http_2xx
+  interval: 30s
+  scrapeTimeout: 10s
+  targets:
+    staticConfig:
+      static:
+        - https://app.daalu.io/health
+        - https://grafana.daalu.io/api/health

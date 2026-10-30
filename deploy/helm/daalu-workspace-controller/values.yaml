@@ -1,0 +1,31 @@
+image:
+  repository: ghcr.io/kiwueke1/daalu-automation
+  tag: ""
+  pullPolicy: IfNotPresent
+  pullSecret: ghcr
+
+# Namespace where the workspace pods live. Created by this chart so a
+# fresh install needs no manual prep. Strict isolation (NetworkPolicy
+# defaults to default-deny) is applied here.
+workspacesNamespace: daalu-workspaces
+
+replicaCount: 1
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 256Mi
+  limits:
+    cpu: 200m
+    memory: 512Mi
+
+existingSecret: daalu-automation-secrets
+
+service:
+  port: 80
+  targetPort: 8081
+
+networkPolicy:
+  enabled: true
+  allowedFromApps:
+    - daalu-api

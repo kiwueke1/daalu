@@ -1,0 +1,76 @@
+# KAI Scheduler Queue tree — hierarchical per-tenant GPU fair-share on the
+# shared operator card. See docs/plans/nvidia-ai-factory/06-kai-scheduler.md §4.2.
+#
+# This REPLACES the static `04-tenant-quota.example.yaml` ResourceQuota and the
+# `06-kueue-flavors.example.yaml` Kueue admission layer: unlike either, KAI does
+# DRF fair-share, borrowing, and preemption/reclaim — the things a single shared
+# non-MIG card actually needs to be sold to >1 tenant.
+#
+# .example.yaml: a TEMPLATE, not auto-deployed. In prod the gpu_controller owns
+# the per-tenant child Queues — when daalu-api provisions a GpuTenant row, the
+# controller reconciles a Queue named `tenant-<tenant_id>` alongside the
+# namespace/vLLM stack. Apply this by hand only to bootstrap / experiment.
+#
+# CRD group is `scheduling.run.ai/v2` (KAI's open-sourced Run:ai core). Apply
+# AFTER installing KAI (see 00-install.md) — the CRDs ship with the chart.
+#
+# GPU quota units are *fractions of a card* (MPS-backed soft fractions on the
+# no-MIG Ada): 0.5 = half the RTX 6000 Ada's compute/VRAM budget.
+---
+# Root of the tree — the whole shared-card GPU pool. -1 = unbounded (the pool
+# is whatever the cluster's GPUs sum to); children carve it up.
+apiVersion: scheduling.run.ai/v2
+kind: Queue
+metadata:
+  name: root
+spec:
+  resources:
+    gpu:    {quota: -1, limit: -1, overQuotaWeight: 1}
+    cpu:    {quota: -1, limit: -1, overQuotaWeight: 1}
+    memory: {quota: -1, limit: -1, overQuotaWeight: 1}
+---
+# Parent project Queue for the operator's own shared pool. Daalu's own vLLM
+# (the trusted co-tenant image) and the per-tenant child Queues hang under it.
+# `deserved` 0 + `limit` unbounded means it holds no guaranteed slice itself —
+# it is the borrowing pool its children draw from and lend to.
+apiVersion: scheduling.run.ai/v2
+kind: Queue
+metadata:
+  name: operator-shared
+  labels:
+    daalu.io/pool: operator-shared
+spec:
+  parentQueue: root
+  resources:
+    gpu:    {quota: 0, limit: -1, overQuotaWeight: 1}
+    cpu:    {quota: 0, limit: -1, overQuotaWeight: 1}
+    memory: {quota: 0, limit: -1, overQuotaWeight: 1}
+---
+# Per-tenant child Queue — COPY THIS STANZA per tenant, replacing <TENANT_ID>.
+# In prod the gpu_controller generates one of these per GpuTenant.
+#   - quota (deserved): the tenant's guaranteed fraction of the shared card.
+#   - limit:            the most it may hold, borrowing idle capacity from
+#                       siblings (1.0 = may burst to a whole card when free).
+#   - overQuotaWeight:  DRF weight when contended capacity is divided.
+# When the lender wants its deserved share back, KAI PREEMPTS the borrower and
+# returns the capacity — the reclaim that 04/06 cannot do.
+apiVersion: scheduling.run.ai/v2
+kind: Queue
+metadata:
+  name: tenant-<TENANT_ID>
+  labels:
+    daalu.io/tenant: "<TENANT_ID>"
+spec:
+  parentQueue: operator-shared
+  resources:
+    gpu:
+      quota: 0.5            # deserved fraction of the shared RTX 6000 Ada
+      limit: 1.0            # may borrow up to a whole card while siblings idle
+      overQuotaWeight: 1    # DRF weight for contended capacity
+    cpu:    {quota: 2,  limit: 8,  overQuotaWeight: 1}
+    memory: {quota: 16, limit: 64, overQuotaWeight: 1}    # GiB
+# The vLLM pods that land in this Queue carry `schedulerName: kai-scheduler`
+# and the queue label `kai.scheduler/queue: tenant-<TENANT_ID>`, both emitted
+# by gpu_controller/manifests.py (NOT in this file). The gateway token quota
+# (models/daalu_hosted_quota.py) is the orthogonal billing layer above this —
+# both key on the same tenant_id. See 06-kai-scheduler.md §5.

@@ -1,0 +1,65 @@
+---
+# Dedicated ServiceAccount so cluster-level RBAC can target the
+# executor distinctly from the rest of the worker pool. The executor
+# is the only identity in the platform that can push config to real
+# devices (via change_proposals.execute()), and the JWT-scope gate
+# inside that function is what keeps the engine from doing it directly.
+# Separating the SA gives ops a single place to revoke that capability
+# at the cluster level if something goes wrong.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: daalu-executor
+  namespace: daalu-automation
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: daalu-executor
+  namespace: daalu-automation
+spec:
+  # Single replica on purpose — see workers/executor.py for the
+  # rationale. Adding pods would create additional executor identities
+  # racing on the same approved rows. Scale throughput inside the
+  # process with --concurrency=N instead.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: daalu-executor
+  template:
+    metadata:
+      labels:
+        app: daalu-executor
+    spec:
+      serviceAccountName: daalu-executor
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: executor
+          image: ghcr.io/kiwueke1/daalu-automation:93b7ef50fb03c98d979f938333e28e67cf348103
+          imagePullPolicy: IfNotPresent
+          # daalu executor subscribes only to the executor queue (see
+          # workers/celery_app.py task_routes). The main worker pool
+          # consumes the default queue and therefore physically cannot
+          # pick up sot.execute_approved.
+          command: ["daalu", "executor", "--concurrency=2"]
+          envFrom:
+            - secretRef:
+                name: daalu-automation-secrets
+          env:
+            # Pinned explicitly even though it matches the default — an
+            # ops-level secret rotation that omits this key should be
+            # loud, not silently re-bind the identity gate to the
+            # default scope string.
+            - name: EXECUTOR_JWT_SCOPE
+              value: "executor"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 1
+              memory: 768Mi

@@ -1,0 +1,31 @@
+# Hugging Face access token — needed by vLLM to download the gated
+# Meta Llama 3.1 8B weights on first start.
+#
+# How to get one (free):
+#   1. Sign in at https://huggingface.co (or create an account).
+#   2. Visit https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct
+#      and click "Agree and access repository" — accepts Meta's
+#      Llama Community Licence. The same accept covers any AWQ
+#      derivative under `hugging-quants/Meta-Llama-3.1-8B-Instruct-*`.
+#   3. Create a token at https://huggingface.co/settings/tokens.
+#      Token type: "Read". Scope: Read access to gated repos you
+#      have access to is implicit. No extra scope to enable.
+#
+# NEVER commit a real token. Either copy this file to
+# `02-hf-token.yaml`, substitute the placeholder, and gitignore the
+# copy — or use the simpler `kubectl create secret generic` form:
+#
+#   kubectl -n daalu create secret generic hf-token \
+#     --from-literal=token="$HF_TOKEN" \
+#     --dry-run=client -o yaml | kubectl apply -f -
+#
+# Daalu's app pods never read this secret directly — only the vLLM
+# Deployment in `03-vllm-llama-classifier.yaml` mounts it.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: hf-token
+  namespace: daalu
+type: Opaque
+stringData:
+  token: <HF_TOKEN>

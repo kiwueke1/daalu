@@ -1,0 +1,32 @@
+# Promtail — DaemonSet that ships every pod's stdout/stderr to Loki.
+# The default config already picks up Kubernetes labels; we just
+# point it at our Loki Service and add a regex stage that promotes
+# `level=...` and `event=...` from structlog's JSON to Loki labels.
+
+config:
+  clients:
+    - url: http://loki:3100/loki/api/v1/push
+  snippets:
+    pipelineStages:
+      - cri: {}                 # strip the CRI prefix (timestamp / stream)
+      - json:
+          expressions:
+            level: level
+            event: event
+            module: module
+            served_by: served_by
+            agent: agent
+      - labels:
+          level:
+          event:
+          module:
+          served_by:
+          agent:
+      - drop:
+          # Don't ingest Kubernetes liveness/readiness probe noise into
+          # Loki — they account for ~80% of log volume and never matter.
+          expression: '.*GET /health.*'
+
+# Only daalu-* namespaces by default; expand here for system logs.
+serviceMonitor:
+  enabled: true

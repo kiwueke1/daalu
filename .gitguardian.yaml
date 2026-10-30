@@ -1,0 +1,35 @@
+# GitGuardian configuration.
+#
+# Exclude the vendored upstream NVIDIA NV-CM installer from secret scanning.
+# `src/nv_config_manager_installer/` is a verbatim, Apache-2.0 vendored copy
+# (see src/nv_config_manager_installer/VENDORED.md) of NVIDIA's installer. Its
+# secret-*generation* code naturally contains many `password`/`token`
+# dict-key patterns (e.g. `{"password": nats_pw}` where `nats_pw` is a value
+# fetched from the in-memory secrets state, not a literal) — these are false
+# positives, not hardcoded credentials. We do not hand-edit vendored code, so
+# scope the exclusion to that directory only; the rest of the repo is still
+# fully scanned.
+version: 2
+secret:
+  ignored-paths:
+    - "src/nv_config_manager_installer/**"
+    # Vendored upstream NV-CM bootstrap jobs (Apache-2.0, see
+    # components/VENDORED.md). The Nautobot migration runner references
+    # credential *env-var names* (NAUTOBOT_SUPERUSER_PASSWORD, …) and the
+    # bootstrap data YAML uses `password`/`token` as config *keys* (e.g.
+    # `password: root_password`, a key reference) — pattern matches, not
+    # hardcoded secrets. Vendored verbatim, not hand-edited.
+    - "components/nautobot/nv_config_manager_jobs/**"
+  ignored-matches:
+    # The cluster-internal Keycloak Service URL Envoy uses to fetch the OIDC
+    # JWKS for svc-* JWT validation (KEYCLOAK_INTERNAL_ISSUER_URL on the
+    # config-manager-controller Deployment). A plain in-cluster DNS name with
+    # no embedded credential — GitGuardian's generic detector flags the
+    # `scheme://host:port/realms/...` shape, but there is no secret here.
+    - name: nvcm-internal-keycloak-jwks-url
+      match: "http://keycloak.daalu-automation.svc.cluster.local:8080/realms/daalu"
+    # The historical `auth-system` namespace, before Keycloak was rehomed onto
+    # the prod cluster. No longer referenced anywhere in the tree — kept solely
+    # so history-walking scans of the commits that did carry it stay green.
+    - name: nvcm-internal-keycloak-jwks-url-legacy
+      match: "http://keycloak.auth-system.svc.cluster.local:8080/realms/daalu"

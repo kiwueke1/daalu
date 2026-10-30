@@ -1,0 +1,179 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: daalu-worker
+  labels:
+    {{- include "daalu.labels" . | nindent 4 }}
+    app: daalu-worker
+spec:
+  replicas: {{ .Values.worker.replicas }}
+  selector:
+    matchLabels:
+      app: daalu-worker
+  template:
+    metadata:
+      labels:
+        app: daalu-worker
+        {{- include "daalu.labels" . | nindent 8 }}
+    spec:
+      {{- if .Values.remediator.enabled }}
+      # Worker runs celery tasks that talk to the API server: the
+      # wireguard-health beat task execs into the daalu-wireguard-hub
+      # pod for `wg show wg0 dump`, and core.kube_tools tasks may
+      # patch/read shared cluster state. RBAC is granted to the
+      # daalu-remediator SA in templates/remediator-rbac.yaml and the
+      # wireguard-coordinator RoleBinding in
+      # templates/wireguard-hub.yaml.
+      serviceAccountName: {{ .Values.remediator.serviceAccountName }}
+      automountServiceAccountToken: true
+      {{- else }}
+      automountServiceAccountToken: false
+      {{- end }}
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecret }}
+      securityContext:
+        {{- include "daalu.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: worker
+          image: {{ include "daalu.backendImage" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["daalu", "worker", "--concurrency={{ .Values.worker.concurrency }}"]
+          envFrom:
+            {{- include "daalu.envFrom" . | nindent 12 }}
+          env:
+            {{- include "daalu.commonEnv" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.worker.resources | nindent 12 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: daalu-beat
+  labels:
+    {{- include "daalu.labels" . | nindent 4 }}
+    app: daalu-beat
+spec:
+  # Beat MUST stay 1 — multiple schedulers fire duplicate tasks.
+  replicas: {{ .Values.beat.replicas }}
+  selector:
+    matchLabels:
+      app: daalu-beat
+  template:
+    metadata:
+      labels:
+        app: daalu-beat
+        {{- include "daalu.labels" . | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecret }}
+      securityContext:
+        {{- include "daalu.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: beat
+          image: {{ include "daalu.backendImage" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["daalu", "beat"]
+          envFrom:
+            {{- include "daalu.envFrom" . | nindent 12 }}
+          env:
+            {{- include "daalu.commonEnv" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.beat.resources | nindent 12 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: daalu-agents
+  labels:
+    {{- include "daalu.labels" . | nindent 4 }}
+    app: daalu-agents
+spec:
+  replicas: {{ .Values.agents.replicas }}
+  selector:
+    matchLabels:
+      app: daalu-agents
+  template:
+    metadata:
+      labels:
+        app: daalu-agents
+        {{- include "daalu.labels" . | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecret }}
+      securityContext:
+        {{- include "daalu.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: agents
+          image: {{ include "daalu.backendImage" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["daalu", "agents"]
+          envFrom:
+            {{- include "daalu.envFrom" . | nindent 12 }}
+          env:
+            {{- include "daalu.commonEnv" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.agents.resources | nindent 12 }}
+---
+# Dedicated ServiceAccount so cluster-level RBAC can target the
+# executor distinctly from the rest of the worker pool. The executor
+# is the only identity in the platform that can push config to real
+# devices (via change_proposals.execute()), and the JWT-scope gate
+# inside that function is what keeps the engine from doing it directly.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Values.executor.serviceAccountName }}
+  labels:
+    {{- include "daalu.labels" . | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: daalu-executor
+  labels:
+    {{- include "daalu.labels" . | nindent 4 }}
+    app: daalu-executor
+spec:
+  # Single replica on purpose — see workers/executor.py for the
+  # rationale. Adding pods would create additional executor identities
+  # racing on the same approved rows. Scale throughput inside the
+  # process via --concurrency=N instead.
+  replicas: {{ .Values.executor.replicas }}
+  selector:
+    matchLabels:
+      app: daalu-executor
+  template:
+    metadata:
+      labels:
+        app: daalu-executor
+        {{- include "daalu.labels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.executor.serviceAccountName }}
+      automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecret }}
+      securityContext:
+        {{- include "daalu.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: executor
+          image: {{ include "daalu.backendImage" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # daalu executor subscribes only to the executor queue (see
+          # workers/celery_app.py task_routes). The main worker pool
+          # consumes the default queue and therefore physically cannot
+          # pick up sot.execute_approved.
+          command: ["daalu", "executor", "--concurrency={{ .Values.executor.concurrency }}"]
+          envFrom:
+            {{- include "daalu.envFrom" . | nindent 12 }}
+          env:
+            {{- include "daalu.commonEnv" . | nindent 12 }}
+            # Pinned explicitly even though it matches the default — an
+            # ops-level secret rotation that omits this key should be
+            # loud, not silently re-bind the identity gate to the
+            # default scope string.
+            - name: EXECUTOR_JWT_SCOPE
+              value: {{ .Values.executor.jwtScope | quote }}
+          resources:
+            {{- toYaml .Values.executor.resources | nindent 12 }}

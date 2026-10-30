@@ -1,0 +1,47 @@
+# Node-pinned NodePort for the GPU-Operator dcgm-exporter DaemonSet.
+#
+# Why this exists
+# ---------------
+# The hub Prometheus scrapes the workload cluster's GPU metrics over the
+# WireGuard tunnel via a socat serviceProxy on daalu-edge. The exporter's
+# default Service (`nvidia-dcgm-exporter`, ClusterIP) load-balances to ONE
+# backend pod per connection, so a single tunnel port only ever surfaces one
+# GPU node — with gpu-node-1 + gpu-node-3 both running dcgm-exporter, gpu-node-3 never reached the
+# hub and the AI Factory page showed a single card.
+#
+# This NodePort with `externalTrafficPolicy: Local` gives each GPU node a stable
+# address that resolves to ITS OWN exporter pod only: hitting
+# <nodeInternalIP>:30940 returns the dcgm-exporter local to that node (Local
+# policy drops traffic for nodes without a local endpoint, and every GPU node in
+# the DaemonSet has exactly one). daalu-edge then runs one socat proxy per node
+# (9400→gpu-node-1, 9401→gpu-node-3 — see scripts/deploy-gpu.sh), and the hub scrapes both
+# ports (deploy/k8s/monitoring/07-gpu-tunnel-dcgm.yaml).
+#
+# Reading dcgm-exporter is metrics-only (no /dev/nvidia churn), so it does not
+# touch the RTX firmware-hang fragility.
+#
+# TODO(gpu-controller): generate this + the per-node edge proxies + the hub
+# scrape from the gpu_tenant rows so it scales to N GPU nodes without static
+# node IPs.
+apiVersion: v1
+kind: Service
+metadata:
+  name: nvidia-dcgm-exporter-nodes
+  namespace: gpu-operator
+  labels:
+    app: nvidia-dcgm-exporter
+    daalu.io/role: dcgm-node-scrape
+spec:
+  type: NodePort
+  # Local: a request to a node's IP is served only by that node's exporter pod,
+  # so per-node socat proxies map 1:1 to GPU nodes (no cross-node hop, stable
+  # identity per scrape).
+  externalTrafficPolicy: Local
+  selector:
+    app: nvidia-dcgm-exporter
+  ports:
+    - name: gpu-metrics
+      port: 9400
+      targetPort: 9400
+      nodePort: 30940
+      protocol: TCP

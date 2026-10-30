@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nautobot-worker
+  namespace: nautobot
+spec:
+  # Celery workers run background jobs (system jobs, scheduled tasks,
+  # Git repository syncs). One replica is plenty for our scale; the
+  # `-c 4` flag gives it 4 concurrent slots.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nautobot-worker
+  template:
+    metadata:
+      labels:
+        app: nautobot-worker
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+      containers:
+        - name: worker
+          image: networktocode/nautobot:2.2-py3.11
+          command: ["nautobot-server"]
+          args: ["celery", "worker", "--loglevel=info", "--concurrency=4"]
+          envFrom:
+            - configMapRef:
+                name: nautobot-env
+            - secretRef:
+                name: nautobot-secrets
+          resources:
+            requests:
+              cpu: 100m
+              memory: 384Mi
+            limits:
+              cpu: 1
+              memory: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nautobot-scheduler
+  namespace: nautobot
+spec:
+  # Celery beat — emits scheduled task instances. There must be exactly
+  # one of these in the cluster (else duplicate tasks).
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nautobot-scheduler
+  template:
+    metadata:
+      labels:
+        app: nautobot-scheduler
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+      containers:
+        - name: scheduler
+          image: networktocode/nautobot:2.2-py3.11
+          command: ["nautobot-server"]
+          args: ["celery", "beat", "--loglevel=info"]
+          envFrom:
+            - configMapRef:
+                name: nautobot-env
+            - secretRef:
+                name: nautobot-secrets
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi

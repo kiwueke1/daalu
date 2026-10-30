@@ -1,0 +1,104 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: config-manager-controller
+  namespace: daalu-automation
+  labels:
+    app: config-manager-controller
+    app.kubernetes.io/part-of: daalu-automation
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: config-manager-controller
+  template:
+    metadata:
+      labels:
+        app: config-manager-controller
+        # Required to match the daalu-postgres-ingress / redis NetworkPolicy
+        # `from` selectors, which the daalu-automation kustomize base stamps
+        # with this part-of label (commonLabels). Without it the reconcile
+        # loop's DB connection is silently blocked (default-deny).
+        app.kubernetes.io/part-of: daalu-automation
+    spec:
+      serviceAccountName: daalu-config-manager-controller
+      automountServiceAccountToken: true
+      imagePullSecrets:
+        - name: ghcr
+      containers:
+        - name: controller
+          image: ghcr.io/kiwueke1/daalu-automation:93b7ef50fb03c98d979f938333e28e67cf348103
+          imagePullPolicy: IfNotPresent
+          command: ["daalu", "config-manager-controller", "--port", "8083"]
+          ports:
+            - name: http
+              containerPort: 8083
+          env:
+            # Harbor mirror the NV-CM images live in. render_values()
+            # repoints every global.images.<key>.repository here (the chart
+            # has no global.imageRegistry knob). Non-secret host:port, so
+            # it's an inline env, not in the secret. Engineer chapter 64.
+            - name: CONFIG_MANAGER_HARBOR_REGISTRY
+              value: "harbor.example.internal"   # set to your registry mirror
+            - name: CONFIG_MANAGER_USE_DEPLOYER
+              value: "true"
+            # Cluster-internal Keycloak URL Envoy uses to fetch the OIDC JWKS
+            # for svc-* JWT validation. The external issuer (auth.example.com, in
+            # the secret's KEYCLOAK_ISSUER_URL) isn't routable from Envoy
+            # in-cluster → "Jwks remote fetch is failed" → 401 on every authed
+            # svc-* call. Non-secret in-cluster URL, so inline here.
+            # Engineer chapter 48 (config-manager go-live).
+            #
+            # Namespace is `daalu-automation`, not the historical `auth-system`:
+            # Keycloak was rehomed onto the prod cluster (see your overlay,
+            # book 13-auth-integrations/74). The old value pointed at a Service
+            # that no longer exists anywhere.
+            #
+            # This applies ONLY to environments installed into this cluster.
+            # values.render_values / deployer_config drop it for environments
+            # targeting a customer cluster over WireGuard, which runs no
+            # Keycloak — see the target_cluster_tunnel_id gate in both.
+            - name: KEYCLOAK_INTERNAL_ISSUER_URL
+              value: "http://keycloak.daalu-automation.svc.cluster.local:8080/realms/daalu"
+          envFrom:
+            # Needs DATABASE_URL (the reconcile loop reads
+            # config_manager_tenants from the same DB as daalu-api),
+            # SERVICE_TOKEN_SECRET_KEY to verify daalu-api's calls, and
+            # SECRET_KEY (core/crypto derives the field-encryption key from
+            # it) to decrypt the per-tenant tunnel kubeconfig. The
+            # KEYCLOAK_* knobs (when set) ride along in the same secret and
+            # are read off get_settings().
+            - secretRef:
+                name: daalu-automation-secrets
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8083 }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8083 }
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            requests:
+              # helm renders + waits in-process; give it a little more
+              # headroom than the manifest-applying nautobot-controller.
+              cpu: 100m
+              memory: 384Mi
+            limits:
+              cpu: 500m
+              memory: 768Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: config-manager-controller
+  namespace: daalu-automation
+  labels:
+    app: config-manager-controller
+spec:
+  selector:
+    app: config-manager-controller
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8083

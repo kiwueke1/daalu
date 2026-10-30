@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gpu-controller
+  namespace: daalu-automation
+  labels:
+    app: gpu-controller
+    app.kubernetes.io/part-of: daalu-automation
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gpu-controller
+  template:
+    metadata:
+      labels:
+        app: gpu-controller
+        # Required to match the daalu-postgres-ingress NetworkPolicy so
+        # the controller's DB connection isn't default-denied.
+        app.kubernetes.io/part-of: daalu-automation
+    spec:
+      serviceAccountName: daalu-gpu-controller
+      automountServiceAccountToken: true
+      imagePullSecrets:
+        - name: ghcr
+      containers:
+        - name: controller
+          image: ghcr.io/kiwueke1/daalu-automation:93b7ef50fb03c98d979f938333e28e67cf348103
+          imagePullPolicy: IfNotPresent
+          command: ["daalu", "gpu-controller", "--port", "8084"]
+          ports:
+            - name: http
+              containerPort: 8084
+          envFrom:
+            # DATABASE_URL (reads gpu_tenants), SERVICE_TOKEN_SECRET_KEY
+            # (verify daalu-api calls), FIELD_ENCRYPTION_KEY (decrypt the
+            # HF token it materialises into the hf-token Secret).
+            - secretRef:
+                name: daalu-automation-secrets
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8084 }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8084 }
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              cpu: 200m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gpu-controller
+  namespace: daalu-automation
+  labels:
+    app: gpu-controller
+spec:
+  selector:
+    app: gpu-controller
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8084

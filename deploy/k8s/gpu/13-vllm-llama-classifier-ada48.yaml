@@ -1,0 +1,173 @@
+# vLLM serving Llama-3.1-8B-Instruct (AWQ-INT4) for the classifier tier
+# on the RTX 6000 Ada (48 GB) — node gpu-node-3, gpu-class=ada-48.
+#
+# This is the §A (ada-48) counterpart of 03-vllm-llama-classifier.yaml and
+# the MANUAL-PATH mirror of what the gpu-controller renders for the
+# operator tenant once its GpuTenant.gpu_class is `ada-48`. It keeps the
+# SAME Deployment/Service names (`llama-classifier` / `llm-classifier`) so
+# it REPOINTS the classifier tier from gpu-node-1's contended 16 GB card onto
+# gpu-node-3's idle 48 GB card.
+#
+# Model: AWQ-INT4 — same checkpoint the controller hardcodes
+#        (manifests.DEFAULT_HF_MODEL). The classifier tier does cheap
+#        routing/classification, so INT4 8B is more than adequate; the
+#        48 GB headroom buys a large KV cache (high --max-num-seqs) rather
+#        than full-precision weights. Serving full BF16 / FP8 here would
+#        need the gpu-controller to grow hf_model/quantization columns —
+#        tracked as a follow-up; the 48 GB headroom is meant for the
+#        shared pool / quality model, not the classifier.
+#
+# Image:   vllm/vllm-openai (Docker Hub, public, Apache 2.0). No pull
+#          secret, no NVIDIA AI Enterprise.
+# Served-name override stays `meta/llama-3.1-8b-instruct` so the router's
+#          LLM_LOCAL_MODEL_CLASSIFIER and the daalu-edge serviceProxy
+#          (vllm :8000 -> llm-classifier.daalu.svc:80) need NO change.
+#
+# Sharing: gpu-node-3 advertises nvidia.com/gpu: 8 via 8-way time-slicing
+#          (profile ada-48). One logical GPU = one slice of the shared
+#          physical card; VRAM is shared, not isolated (no MIG on Ada).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llama-classifier
+  namespace: daalu
+  labels:
+    app: llama-classifier
+    daalu.io/tier: local
+    daalu.io/engine: vllm
+spec:
+  replicas: 1
+  strategy:
+    # Inference pods are stateful in VRAM — Recreate avoids doubling the
+    # memory requirement during a rollout.
+    type: Recreate
+  selector:
+    matchLabels:
+      app: llama-classifier
+  template:
+    metadata:
+      labels:
+        app: llama-classifier
+        daalu.io/tier: local
+        daalu.io/engine: vllm
+        # Drives the DCGM-joined billing rollup in
+        # core/billing.breakdown_by_tier. Shared operator-provider card.
+        tenant: operator-internal
+    spec:
+      tolerations:
+        # Harmless on gpu-node-3 (a worker); kept so the manifest is portable
+        # back to a control-plane GPU node.
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+        - key: gpu
+          operator: Exists
+          effect: NoSchedule
+        - key: node.kubernetes.io/unreachable
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 1800
+      nodeSelector:
+        # Selects gpu-node-3 — the RTX 6000 Ada.
+        gpu-class: ada-48
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+              name: http
+          args:
+            # AWQ-INT4 — the controller's default checkpoint. Mirror it
+            # here so the manual path and the controller agree.
+            - --model=hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4
+            # Keep the served name stable so app config doesn't churn.
+            - --served-model-name=meta/llama-3.1-8b-instruct
+            - --quantization=awq_marlin
+            - --max-model-len=8192
+            # 48 GB tolerates 0.90 comfortably.
+            - --gpu-memory-utilization=0.90
+            # Higher batch — the VRAM headroom is here (vs 16 GB card).
+            - --max-num-seqs=256
+            - --host=0.0.0.0
+            - --port=8000
+          env:
+            - name: HUGGING_FACE_HUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hf-token
+                  key: token
+            - name: HF_HOME
+              value: /var/cache/huggingface
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+              memory: 32Gi
+            requests:
+              nvidia.com/gpu: 1
+              memory: 20Gi
+              cpu: 4
+          volumeMounts:
+            - name: hf-cache
+              mountPath: /var/cache/huggingface
+            - name: dshm
+              mountPath: /dev/shm
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            # First start downloads ~16 GB BF16 weights + loads + compiles
+            # CUDA graphs. 15 min covers a slow HF mirror; restarts <90 s.
+            failureThreshold: 90
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 300
+            periodSeconds: 30
+            failureThreshold: 3
+      volumes:
+        - name: hf-cache
+          hostPath:
+            path: /var/lib/daalu/hf-cache
+            type: DirectoryOrCreate
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 8Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-classifier
+  namespace: daalu
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8000"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  selector:
+    app: llama-classifier
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: llama-classifier
+  namespace: daalu
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: llama-classifier

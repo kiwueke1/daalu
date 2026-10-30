@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nautobot-env
+  namespace: nautobot
+data:
+  # ── Database ─────────────────────────────────────────────────────────
+  NAUTOBOT_DB_HOST: nautobot-postgres.nautobot.svc.cluster.local
+  NAUTOBOT_DB_PORT: "5432"
+  NAUTOBOT_DB_NAME: nautobot
+  NAUTOBOT_DB_USER: nautobot
+  # ── Cache / queues ───────────────────────────────────────────────────
+  NAUTOBOT_REDIS_HOST: nautobot-redis.nautobot.svc.cluster.local
+  NAUTOBOT_REDIS_PORT: "6379"
+  # ── Web ──────────────────────────────────────────────────────────────
+  # ALLOWED_HOSTS must include the public hostname Django sees. We add
+  # the in-cluster Service name so curl-based health checks from neighbor
+  # pods don't 400 on Host header rewrites. Nautobot's settings parser
+  # uses `.split()` on this env var (whitespace, not comma) — entries
+  # MUST be space-separated.
+  NAUTOBOT_ALLOWED_HOSTS: "sot.daalu.io nautobot nautobot.nautobot.svc.cluster.local localhost 127.0.0.1"
+  # Bind under /, no subpath. Django's CSRF needs the full origin.
+  NAUTOBOT_CSRF_TRUSTED_ORIGINS: "https://sot.daalu.io"
+  # ── Superuser bootstrap ──────────────────────────────────────────────
+  # CREATE_SUPERUSER=true makes the entrypoint script run
+  # `nautobot-server createsuperuser --noinput` once; subsequent runs
+  # noop because the user already exists.
+  NAUTOBOT_CREATE_SUPERUSER: "true"
+  NAUTOBOT_SUPERUSER_NAME: admin
+  NAUTOBOT_SUPERUSER_EMAIL: admin@daalu.io

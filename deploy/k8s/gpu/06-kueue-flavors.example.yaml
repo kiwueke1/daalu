@@ -1,0 +1,71 @@
+# Kueue resource flavors + cluster queues. Apply *after* installing
+# Kueue itself:
+#
+#   kubectl apply --server-side -f \
+#     https://github.com/kubernetes-sigs/kueue/releases/download/v0.8.1/manifests.yaml
+#
+# This is the queue layer for *batch* workloads (fine-tuning Jobs, eval
+# runs, model conversion). Inference Deployments don't use Kueue — they
+# go through standard k8s scheduling with the ResourceQuotas from
+# 04-tenant-quota.example.yaml.
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: ResourceFlavor
+metadata:
+  name: ada-16
+spec:
+  nodeLabels:
+    gpu-class: ada-16
+  tolerations:
+    - key: gpu
+      operator: Exists
+      effect: NoSchedule
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: ResourceFlavor
+metadata:
+  name: ada-48
+spec:
+  nodeLabels:
+    gpu-class: ada-48
+  tolerations:
+    - key: gpu
+      operator: Exists
+      effect: NoSchedule
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: ClusterQueue
+metadata:
+  name: ada-16-queue
+spec:
+  namespaceSelector: {}
+  resourceGroups:
+    - coveredResources: [nvidia.com/gpu]
+      flavors:
+        - name: ada-16
+          resources:
+            - name: nvidia.com/gpu
+              nominalQuota: 4
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: ClusterQueue
+metadata:
+  name: ada-48-queue
+spec:
+  namespaceSelector: {}
+  resourceGroups:
+    - coveredResources: [nvidia.com/gpu]
+      flavors:
+        - name: ada-48
+          resources:
+            - name: nvidia.com/gpu
+              nominalQuota: 8
+---
+# Each tenant namespace gets a LocalQueue that maps to the right
+# ClusterQueue. Copy this stanza per tenant, replacing <TENANT>.
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: LocalQueue
+metadata:
+  name: default
+  namespace: tenant-<TENANT>
+spec:
+  clusterQueue: ada-16-queue

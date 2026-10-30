@@ -1,0 +1,315 @@
+# Daalu-specific alert rules. Three groups:
+#
+#   * api          — HTTP error rate, latency, restart loops
+#   * llm-router   — fallback rate, local-GPU offline, cost spikes
+#   * gpu          — DCGM-derived alerts (temp, ECC, util)
+#
+# Every alert carries a runbook_url annotation pointing at the
+# corresponding doc in `docs/runbooks/`. Alerts without runbooks should
+# not exist — if you can't write a runbook, the alert is too vague.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: daalu-rules
+  namespace: monitoring
+  labels:
+    release: kube-prom-stack
+spec:
+  groups:
+    # ── API ─────────────────────────────────────────────────────────
+    - name: daalu-api
+      interval: 30s
+      rules:
+        - alert: DaaluApiHighErrorRate
+          expr: |
+            sum(rate(http_requests_total{job="daalu-api",status=~"5.."}[5m]))
+              /
+            sum(rate(http_requests_total{job="daalu-api"}[5m]))
+            > 0.05
+          for: 10m
+          labels:
+            severity: warning
+            component: api
+          annotations:
+            summary: "Daalu API 5xx rate above 5% for 10 minutes"
+            description: |
+              Error rate is {{ $value | humanizePercentage }} on
+              daalu-api. Check `kubectl logs -n daalu-automation -l
+              app=daalu-api --tail=200` and the API panel in
+              Grafana.
+            runbook_url: "https://github.com/kiwueke1/daalu/blob/main/docs/runbooks/api-high-error-rate.md"
+
+        - alert: DaaluApiHighLatency
+          expr: |
+            histogram_quantile(0.95,
+              sum by (le) (rate(http_request_duration_seconds_bucket{job="daalu-api"}[5m]))
+            ) > 1.5
+          for: 10m
+          labels:
+            severity: warning
+            component: api
+          annotations:
+            summary: "p95 latency on daalu-api above 1.5s"
+            description: "p95={{ $value }}s. Could be DB pool exhaustion or LLM tier degradation."
+            runbook_url: "https://github.com/kiwueke1/daalu/blob/main/docs/runbooks/api-high-latency.md"
+
+        - alert: DaaluApiPodCrashLooping
+          expr: |
+            rate(kube_pod_container_status_restarts_total{namespace=~"daalu.*",pod=~"daalu-api.*"}[10m]) > 0
+          for: 10m
+          labels:
+            severity: critical
+            component: api
+          annotations:
+            summary: "daalu-api pod is crash-looping"
+            description: "Pod {{ $labels.pod }} restarted in the last 10 minutes."
+            runbook_url: "https://github.com/kiwueke1/daalu/blob/main/docs/runbooks/api-crashloop.md"
+
+    # ── LLM router ──────────────────────────────────────────────────
+    - name: daalu-llm
+      interval: 30s
+      rules:
+        - alert: LocalGpuOffline
+          expr: daalu_llm_local_healthy == 0
+          for: 5m
+          labels:
+            severity: warning
+            component: llm-router
+          annotations:
+            summary: "Local NIM has been unhealthy for 5 minutes"
+            description: |
+              The router has been falling back to the external classifier
+              tier. This is graceful — paying customers are unaffected
+              modulo cost — but the home GPU needs a look.
+            runbook_url: "https://github.com/kiwueke1/daalu/blob/main/docs/runbooks/local-gpu-offline.md"
+
+        - alert: ClassifierFallbackRateHigh
+          expr: |
+            sum(rate(daalu_llm_fallbacks_total{failed_tier="local"}[10m]))
+              /
+            clamp_min(sum(rate(daalu_llm_requests_total{requested_tier="classifier"}[10m])), 0.001)
+            > 0.30
+          for: 15m
+          labels:
+            severity: warning
+            component: llm-router
+          annotations:
+            summary: "More than 30% of classifier calls fell back from local"
+            description: |
+              The local NIM is online (or this would be a LocalGpuOffline)
+              but ≥30% of attempts fail. Likely VRAM saturation, model
+              load issue, or a flaky tunnel.
+            runbook_url: "https://github.com/kiwueke1/daalu/blob/main/docs/runbooks/classifier-fallback-rate-high.md"
+
+        - alert: LlmCostSpike
+          expr: |
+            sum(rate(daalu_llm_cost_usd_total[1h]))
+              /
+            clamp_min(avg_over_time(sum(rate(daalu_llm_cost_usd_total[1h]))[7d:1h]), 0.0001)
+            > 3
+          for: 30m
+          labels:
+            severity: warning
+            component: llm-router
+          annotations:
+            summary: "LLM cost rate 3x above weekly average"
+            description: "Investigate which `served_by` / `model` is responsible."
+            runbook_url: "https://github.com/kiwueke1/daalu/blob/main/docs/runbooks/llm-cost-spike.md"
+
+        - alert: LlmAllTiersFailing
+          expr: |
+            sum(rate(daalu_llm_requests_total{outcome="failed"}[5m]))
+              == bool sum(rate(daalu_llm_requests_total[5m]))
+          for: 3m
+          labels:
+            severity: critical
+            component: llm-router
+          annotations:
+            summary: "Every LLM call is failing across every tier"
+            description: "Local + external + Anthropic all unreachable. Check secrets, network, and provider status."
+            runbook_url: "https://github.com/kiwueke1/daalu/blob/main/docs/runbooks/llm-all-tiers-down.md"
+
+    # ── GPU (DCGM) ──────────────────────────────────────────────────
+    - name: daalu-gpu
+      interval: 30s
+      rules:
+        - alert: GpuHighTemperature
+          expr: DCGM_FI_DEV_GPU_TEMP > 85
+          for: 10m
+          labels:
+            severity: warning
+            component: gpu
+          annotations:
+            summary: "GPU {{ $labels.gpu }} on {{ $labels.Hostname }} > 85°C for 10 min"
+            description: |
+              Sustained high temperature degrades silicon lifetime. The
+              RTX 2000 Ada throttles at 90°C — get someone to check
+              airflow on the home node.
+            runbook_url: "https://github.com/kiwueke1/daalu/blob/main/docs/runbooks/gpu-high-temp.md"
+
+        - alert: GpuEccErrors
+          expr: |
+            rate(DCGM_FI_DEV_XID_ERRORS[5m]) > 0
+            OR rate(DCGM_FI_DEV_ECC_DBE_VOL_TOTAL[5m]) > 0
+          for: 5m
+          labels:
+            severity: critical
+            component: gpu
+          annotations:
+            summary: "GPU ECC / XID errors on {{ $labels.Hostname }}"
+            description: "Hardware-level error. Cordon the node and inspect dmesg."
+            runbook_url: "https://github.com/kiwueke1/daalu/blob/main/docs/runbooks/gpu-ecc-errors.md"
+
+        - alert: DcgmExporterDown
+          # If dcgm-exporter stops being scraped we are flying blind on
+          # every GPU health signal below — temp, ECC, XID. Treat the loss
+          # of the telemetry source as critical in its own right.
+          expr: up{job="nvidia-dcgm"} == 0
+          for: 5m
+          labels:
+            severity: critical
+            component: gpu
+          annotations:
+            summary: "dcgm-exporter target down — GPU telemetry is dark"
+            description: |
+              Prometheus has not scraped dcgm-exporter for 5 minutes
+              (`up{job="nvidia-dcgm"} == 0`). All DCGM_FI_DEV_* alerts are
+              now blind. Check the exporter DaemonSet and, for remote BYO
+              nodes, the daalu-edge tunnel serviceProxy on :9400.
+            runbook_url: "https://github.com/kiwueke1/daalu/blob/main/docs/runbooks/dcgm-exporter-down.md"
+
+        - alert: GpuMemoryNearFull
+          # KV-cache pressure: vLLM runs at --gpu-memory-utilization=0.90, so
+          # FB-used legitimately sits high, but >97% sustained means the card
+          # is one request away from OOM-ing the KV cache and dropping streams.
+          expr: |
+            (DCGM_FI_DEV_FB_USED / (DCGM_FI_DEV_FB_USED + DCGM_FI_DEV_FB_FREE)) > 0.97
+          for: 10m
+          labels:
+            severity: warning
+            component: gpu
+          annotations:
+            summary: "GPU {{ $labels.gpu }} on {{ $labels.Hostname }} >97% VRAM for 10 min"
+            description: |
+              Framebuffer is near-full. On the shared Ada this risks KV-cache
+              OOM and dropped streams; check for an over-eager
+              --gpu-memory-utilization, too many MPS clients on the card, or a
+              tenant model that doesn't fit its slice.
+            runbook_url: "https://github.com/kiwueke1/daalu/blob/main/docs/runbooks/gpu-memory-near-full.md"
+
+        - alert: GpuUnderUtilised
+          # FYI-only: paying for a GPU running at <5% for half a day is
+          # cost we should know about, not necessarily fix immediately.
+          expr: |
+            avg_over_time(DCGM_FI_DEV_GPU_UTIL[12h]) < 5
+          for: 30m
+          labels:
+            severity: info
+            component: gpu
+          annotations:
+            summary: "GPU averaged <5% utilisation over 12 h"
+            description: "Could mean traffic is low, or that routing is bypassing local. Worth a glance."
+            runbook_url: "https://github.com/kiwueke1/daalu/blob/main/docs/runbooks/gpu-underutilised.md"
+
+    # ── GPU reliability (NVSentinel auto-remediation) ───────────────────
+    # NVSentinel ACTS on faults (cordon/drain/reboot); these alerts watch the
+    # remediator itself so a silent failure of the SLA layer is visible.
+    # See docs/plans/nvidia-ai-factory/03-nvsentinel-resiliency.md §1.2.
+    # Inactive (no series) until NVSentinel is piloted + scraped
+    # (deploy/k8s/gpu/09-nvsentinel/) — these stay dormant, not firing, while
+    # absent.
+    - name: daalu-gpu-reliability
+      interval: 30s
+      rules:
+        - alert: NvSentinelDown
+          # The auto-remediation layer is the BYO-GPU SLA play; if it stops
+          # being scraped we are back to manual cordon/inspect with no signal.
+          expr: up{job="nvsentinel"} == 0
+          for: 10m
+          labels:
+            severity: warning
+            component: gpu
+          annotations:
+            summary: "NVSentinel target down — GPU auto-remediation is dark"
+            description: |
+              Prometheus has not scraped NVSentinel for 10 minutes
+              (`up{job="nvsentinel"} == 0`). GPU faults will not be
+              auto-remediated; fall back to the manual runbooks
+              (gpu-ecc-errors / gpu-high-temp) until it recovers.
+            runbook_url: "https://github.com/kiwueke1/daalu/blob/main/docs/runbooks/nvsentinel-remediation-failed.md"
+
+        - alert: NvSentinelRemediationFailed
+          # A remediation that NVSentinel could not complete (e.g. a GSP hang
+          # that a soft reboot can't clear — needs the Rufio/BMC power-cycle
+          # hook, [[hardware_gpu_fragility]]). Page a human.
+          expr: increase(nvsentinel_remediations_failed_total[15m]) > 0
+          for: 0m
+          labels:
+            severity: critical
+            component: gpu
+          annotations:
+            summary: "NVSentinel remediation FAILED on {{ $labels.node }}"
+            description: |
+              NVSentinel attempted a remediation and it did not succeed. On the
+              RTX 2000 Ada this is the GSP-hang case a soft reboot can't clear —
+              escalate to a Rufio/BMC hard power-cycle and inspect the node.
+            runbook_url: "https://github.com/kiwueke1/daalu/blob/main/docs/runbooks/nvsentinel-remediation-failed.md"
+
+        - alert: NvSentinelNodeStuckCordoned
+          # A GPU node cordoned by NVSentinel for a long time = lost capacity
+          # that never came back (remediation stalled before re-admission).
+          expr: |
+            kube_node_spec_unschedulable
+              * on(node) group_left() kube_node_labels{label_nvidia_com_gpu_present="true"}
+            == 1
+          for: 1h
+          labels:
+            severity: warning
+            component: gpu
+          annotations:
+            summary: "GPU node {{ $labels.node }} cordoned for >1h"
+            description: |
+              A GPU node has been unschedulable for over an hour. If NVSentinel
+              cordoned it for a fault, remediation + the dcgmi-diag re-admission
+              gate (doc 02 §4.1) may be stuck — check and re-admit or replace.
+            runbook_url: "https://github.com/kiwueke1/daalu/blob/main/docs/runbooks/nvsentinel-remediation-failed.md"
+
+    # ── Infrastructure ──────────────────────────────────────────────
+    - name: daalu-infra
+      interval: 30s
+      rules:
+        - alert: DbPoolNearSaturation
+          # SQLAlchemy doesn't expose pool stats natively; we rely on
+          # asyncpg-derived custom metric. If absent the rule is inert.
+          expr: |
+            (sum by (pod) (daalu_db_pool_in_use)
+              / sum by (pod) (daalu_db_pool_size)) > 0.9
+          for: 10m
+          labels:
+            severity: warning
+            component: db
+          annotations:
+            summary: "DB connection pool >90% on {{ $labels.pod }}"
+            description: "Tune db_pool_size / db_max_overflow or find the leaking caller."
+
+        - alert: CeleryQueueBacklog
+          # celery-exporter publishes celery_queue_length.
+          expr: sum(celery_queue_length{queue!="executor"}) > 1000
+          for: 10m
+          labels:
+            severity: warning
+            component: workers
+          annotations:
+            summary: "Celery queue depth >1000 for 10 min"
+            description: "Workers are not keeping up. Scale `daalu-worker` Deployment."
+
+        # Heartbeat — the last 5xx is the alert that confirms the alerting
+        # pipeline itself is working. Routed to a blackhole receiver; the
+        # absence of this firing tells external dead-man's switches that
+        # Prometheus → Alertmanager is broken.
+        - alert: Watchdog
+          expr: vector(1)
+          labels:
+            severity: none
+          annotations:
+            summary: "Alerting pipeline is alive."

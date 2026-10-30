@@ -1,0 +1,46 @@
+# Kind cluster — local k8s that mirrors the prod topology *minus* the
+# GPU (Kind doesn't pass through NVIDIA devices; for end-to-end GPU
+# testing we still federate the home node into a real cluster).
+#
+# Two nodes so PodDisruptionBudgets / multi-replica Deployments behave
+# realistically. Port mappings forward the cluster's ingress + Grafana
+# to localhost.
+
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: daalu-dev
+nodes:
+  - role: control-plane
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+    extraPortMappings:
+      - containerPort: 80
+        hostPort: 8080
+        protocol: TCP
+      - containerPort: 443
+        hostPort: 8443
+        protocol: TCP
+      # Grafana, exposed directly for inner-loop dev
+      - containerPort: 3000
+        hostPort: 3000
+        protocol: TCP
+      # Prometheus
+      - containerPort: 9090
+        hostPort: 9090
+        protocol: TCP
+  - role: worker
+    kubeadmConfigPatches:
+      - |
+        kind: JoinConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "daalu.io/role=worker"
+
+# Use the default CNI; nothing fancy needed for inner-loop dev.
+networking:
+  apiServerAddress: "127.0.0.1"
+  apiServerPort: 6443

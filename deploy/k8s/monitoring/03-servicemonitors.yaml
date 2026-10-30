@@ -1,0 +1,128 @@
+# ServiceMonitors — tell Prometheus what to scrape. One per app
+# Service that exposes /metrics.
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: daalu-api
+  namespace: monitoring
+  labels:
+    release: kube-prom-stack
+spec:
+  namespaceSelector:
+    matchNames: [daalu-automation, daalu]
+  selector:
+    matchLabels:
+      app: daalu-api
+  endpoints:
+    - port: http        # named port from the Service
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      # Promote the pod's `tenant` label (set by deployment.yaml) so
+      # we can roll up usage and cost per tenant in Grafana / PromQL.
+      relabelings:
+        - action: labelmap
+          regex: __meta_kubernetes_pod_label_(tenant|app|daalu_io_tier)
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: vllm-classifier
+  namespace: monitoring
+  labels:
+    release: kube-prom-stack
+spec:
+  namespaceSelector:
+    matchNames: [daalu]
+  selector:
+    matchLabels:
+      app: llama-classifier
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s         # vLLM throughput moves fast; scrape often
+      scrapeTimeout: 10s
+      relabelings:
+        - action: labelmap
+          regex: __meta_kubernetes_pod_label_(tenant|app|daalu_io_tier|daalu_io_engine|gpu_class)
+---
+# DCGM exporter — standalone DaemonSet (see nvidia-strategy.md Appendix
+# B §B.5). Lives in the nvidia-device-plugin namespace alongside the
+# device-plugin DaemonSet, NOT under gpu-operator (which we don't
+# install on the workload cluster). Adjust namespaceSelector if you
+# install dcgm-exporter elsewhere.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: nvidia-dcgm
+  namespace: monitoring
+  labels:
+    release: kube-prom-stack
+spec:
+  namespaceSelector:
+    matchNames: [nvidia-device-plugin, gpu-operator]
+  selector:
+    matchLabels:
+      app: nvidia-dcgm-exporter
+  endpoints:
+    - port: gpu-metrics
+      path: /metrics
+      interval: 15s
+      # Per-tenant GPU billing/dashboards. dcgm-exporter must run in
+      # kubernetes mode (Operator value `dcgmExporter.env DCGM_EXPORTER_KUBERNETES=true`
+      # / `--kubernetes=true`) so each DCGM_FI_DEV_* series is stamped with
+      # the owning pod via `exported_pod` / `exported_namespace`. We then:
+      #   1. promote those into stable `pod` / `exported_namespace` labels, and
+      #   2. derive a `tenant` label from the namespace (tenant-<id> pattern
+      #      used by 04-tenant-quota.example.yaml) so the same `tenant`
+      #      dimension the rest of the stack uses (daalu-api, vllm-classifier)
+      #      lines up for cross-joins and per-tenant cost rollups.
+      # Mirrors the labelmap style used by daalu-api / vllm-classifier above.
+      relabelings:
+        - action: labelmap
+          regex: __meta_kubernetes_pod_label_(tenant|gpu_class|daalu_io_tier)
+        # exported_namespace (set by dcgm-exporter in kubernetes mode) ->
+        # tenant, stripping the `tenant-` namespace prefix when present.
+        - action: replace
+          sourceLabels: [exported_namespace]
+          regex: tenant-(.+)
+          targetLabel: tenant
+          replacement: $1
+---
+# Celery workers — expose /metrics on :9100 (see workers/celery_app.py).
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: daalu-workers
+  namespace: monitoring
+  labels:
+    release: kube-prom-stack
+spec:
+  namespaceSelector:
+    matchNames: [daalu-automation, daalu]
+  selector:
+    matchLabels:
+      app: daalu-worker
+  podMetricsEndpoints:
+    - port: metrics
+      interval: 30s
+---
+# Postgres + Redis — exporters installed alongside their charts.
+# These ServiceMonitors are placeholders if you wire exporters in.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: postgres-exporter
+  namespace: monitoring
+  labels:
+    release: kube-prom-stack
+spec:
+  namespaceSelector:
+    matchNames: [daalu-automation, daalu]
+  selector:
+    matchLabels:
+      app: postgres-exporter
+  endpoints:
+    - port: http
+      interval: 30s

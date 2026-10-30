@@ -1,0 +1,101 @@
+# Monitoring stack — kube-prometheus-stack + Loki + Promtail.
+# Modelled as three sub-Applications so a chart upgrade doesn't ripple
+# changes across unrelated workloads. ArgoCD shows them in a tree.
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+  finalizers: [resources-finalizer.argocd.argoproj.io]
+spec:
+  project: daalu
+  sources:
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: kube-prometheus-stack
+      targetRevision: 65.3.1
+      helm:
+        # Match the historical helm release name so ArgoCD adopts
+        # existing resources instead of treating them as Missing
+        # (deploy/k8s/monitoring/install.sh installs as kube-prom-stack).
+        releaseName: kube-prom-stack
+        valueFiles:
+          - $values/deploy/k8s/monitoring/01-kube-prometheus-stack-values.yaml
+    - repoURL: https://github.com/kiwueke1/daalu
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true, ServerSideApply=true]
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: loki
+  namespace: argocd
+  finalizers: [resources-finalizer.argocd.argoproj.io]
+spec:
+  project: daalu
+  sources:
+    - repoURL: https://grafana.github.io/helm-charts
+      chart: loki
+      targetRevision: 6.16.0
+      helm:
+        valueFiles:
+          - $values/deploy/k8s/monitoring/02-loki-values.yaml
+    - repoURL: https://github.com/kiwueke1/daalu
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: promtail
+  namespace: argocd
+  finalizers: [resources-finalizer.argocd.argoproj.io]
+spec:
+  project: daalu
+  sources:
+    - repoURL: https://grafana.github.io/helm-charts
+      chart: promtail
+      targetRevision: 6.16.6
+      helm:
+        valueFiles:
+          - $values/deploy/k8s/monitoring/02-promtail-values.yaml
+    - repoURL: https://github.com/kiwueke1/daalu
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+---
+# Static manifests (ServiceMonitors, PrometheusRule, blackbox).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring-config
+  namespace: argocd
+  finalizers: [resources-finalizer.argocd.argoproj.io]
+spec:
+  project: daalu
+  source:
+    repoURL: https://github.com/kiwueke1/daalu
+    targetRevision: main
+    path: deploy/k8s/monitoring
+    directory:
+      include: "{03-,04-,06-,dashboards/}*"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }

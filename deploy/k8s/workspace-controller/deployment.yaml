@@ -1,0 +1,100 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: workspace-controller
+  # Runs in the hub namespace alongside its sibling controllers
+  # (gpu/nautobot/config-manager) so it gets DATABASE_URL +
+  # SERVICE_TOKEN_SECRET_KEY natively from daalu-automation-secrets via
+  # envFrom. It manages per-user code-server pods in the SEPARATE
+  # daalu-workspaces namespace through the cross-namespace Role in
+  # rbac.yaml. (It used to live in daalu-workspaces, where the secret
+  # does not exist — so it had no DATABASE_URL and 502'd. See engineer
+  # ch. 36.)
+  namespace: daalu-automation
+  labels:
+    app: workspace-controller
+    app.kubernetes.io/part-of: daalu-automation
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: workspace-controller
+  template:
+    metadata:
+      labels:
+        app: workspace-controller
+        # Required to match daalu-postgres-ingress / daalu-redis-ingress
+        # so the controller's DB connection isn't default-denied.
+        app.kubernetes.io/part-of: daalu-automation
+    spec:
+      serviceAccountName: daalu-workspace-controller
+      automountServiceAccountToken: true
+      imagePullSecrets:
+        - name: ghcr
+      containers:
+        - name: controller
+          image: ghcr.io/kiwueke1/daalu-automation:93b7ef50fb03c98d979f938333e28e67cf348103
+          imagePullPolicy: IfNotPresent
+          command: ["daalu", "workspace-controller", "--port", "8081"]
+          ports:
+            - name: http
+              containerPort: 8081
+          env:
+            # Namespace the controller reconciles workspace pods into.
+            - name: DAALU_WORKSPACES_NAMESPACE
+              value: daalu-workspaces
+            # Namespace the secret-mirror reads daalu-automation-secrets
+            # from (now the controller's own namespace).
+            - name: DAALU_HUB_NAMESPACE
+              value: daalu-automation
+            # Gateway URL baked into every workspace pod as
+            # DAALU_GATEWAY_URL (see k8s._fqdn_gateway_url). The Daalu
+            # Assistant extension POSTs <url>/v1/chat/completions here.
+            # Until the in-hub inference-gateway is deployed we point
+            # straight at the local-GPU qwen-coder vLLM over the
+            # WireGuard tunnel (edge wg0 IP → svcproxy-vllm socat →
+            # llm-coder.daalu.svc in the workload cluster). Set as an
+            # explicit env (not via the shared secret) so it overrides
+            # the blank secret value and stays scoped to the IDE path —
+            # daalu-api's own LLM routing is untouched. Keep the egress
+            # NetworkPolicy (namespace.yaml) in sync with this IP:port.
+            - name: DAALU_HOSTED_GATEWAY_URL
+              value: http://10.200.0.2:8000
+          envFrom:
+            # DATABASE_URL (workspaces table) + SERVICE_TOKEN_SECRET_KEY
+            # (verify daalu-api calls; sign the token-minter sidecar's
+            # JWTs). Non-optional now: a missing secret must fail loudly,
+            # not silently fall back to a localhost DB default.
+            - secretRef:
+                name: daalu-automation-secrets
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8081 }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8081 }
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              cpu: 200m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: workspace-controller
+  namespace: daalu-automation
+  labels:
+    app: workspace-controller
+    app.kubernetes.io/part-of: daalu-automation
+spec:
+  selector:
+    app: workspace-controller
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8081

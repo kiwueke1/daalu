@@ -1,0 +1,28 @@
+# The "app-of-apps" — one Application that points at the
+# `applications/` directory and recursively discovers every child
+# Application. Adding a new managed component is then a single PR
+# adding a file under `deploy/argocd/applications/`.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: daalu-root
+  namespace: argocd
+  finalizers: [resources-finalizer.argocd.argoproj.io]
+spec:
+  project: daalu
+  source:
+    repoURL: https://github.com/kiwueke1/daalu
+    targetRevision: main
+    path: deploy/argocd/applications
+    directory:
+      recurse: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - PruneLast=true

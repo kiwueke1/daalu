@@ -1,0 +1,132 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: daalu-worker
+  namespace: daalu-automation
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: daalu-worker
+  template:
+    metadata:
+      labels:
+        app: daalu-worker
+    spec:
+      # Bind to the daalu-remediator SA so `wireguard.poll_tunnel_health`
+      # can exec into the daalu-wireguard-hub pod to run `wg show wg0
+      # dump`. The Role + RoleBinding live in deploy/k8s/wg-hub/rbac.yaml.
+      # Without this the task silently returns reason='no_cluster' every
+      # 30s and ClusterTunnel.status never ages out of `connected`.
+      serviceAccountName: daalu-remediator
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          image: ghcr.io/kiwueke1/daalu-automation:93b7ef50fb03c98d979f938333e28e67cf348103
+          imagePullPolicy: IfNotPresent
+          command: ["daalu", "worker", "--concurrency=4"]
+          envFrom:
+            - secretRef:
+                name: daalu-automation-secrets
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 1
+              memory: 768Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: daalu-beat
+  namespace: daalu-automation
+spec:
+  # Only one beat scheduler — multiple would emit duplicate scheduled tasks.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: daalu-beat
+  template:
+    metadata:
+      labels:
+        app: daalu-beat
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: beat
+          image: ghcr.io/kiwueke1/daalu-automation:93b7ef50fb03c98d979f938333e28e67cf348103
+          command: ["daalu", "beat"]
+          envFrom:
+            - secretRef:
+                name: daalu-automation-secrets
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: daalu-agents
+  namespace: daalu-automation
+spec:
+  # The agent host consumes the Redis stream via a consumer group, so
+  # replicas share the load — bump this when adding modules.
+  replicas: 2
+  selector:
+    matchLabels:
+      app: daalu-agents
+  template:
+    metadata:
+      labels:
+        app: daalu-agents
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: agents
+          image: ghcr.io/kiwueke1/daalu-automation:93b7ef50fb03c98d979f938333e28e67cf348103
+          command: ["daalu", "agents"]
+          envFrom:
+            - secretRef:
+                name: daalu-automation-secrets
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 1
+              memory: 768Mi

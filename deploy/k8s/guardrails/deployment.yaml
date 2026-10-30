@@ -1,0 +1,90 @@
+# NeMo Guardrails service — sits in front of the local vLLM and applies
+# the input/output flows defined in policies.co. App points
+# LLM_LOCAL_BASE_URL at this Service instead of vLLM directly.
+#
+# Image note: NVIDIA's pre-built `nvcr.io/nvidia/nemo-microservices/
+# guardrails` container is NVAIE-gated. The NeMo Guardrails *library*
+# itself is Apache 2.0 (https://github.com/NVIDIA/NeMo-Guardrails) and
+# `nemoguardrails server` runs cleanly from a vanilla Python base. The
+# image below is a placeholder for a self-built container produced from:
+#
+#   FROM python:3.11-slim
+#   RUN pip install --no-cache-dir 'nemoguardrails[all]'
+#   ENTRYPOINT ["nemoguardrails","server","--port","8000","--host","0.0.0.0"]
+#
+# Build and push to your own registry (ghcr.io/<org>/nemoguardrails:0.x.y),
+# then set `image:` below. Until then, this Deployment is documentation;
+# leaving it pointed at the gated NVAIE image will ImagePullBackOff and
+# the app falls back to calling vLLM directly (no guardrails enforcement).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm-guardrails
+  namespace: daalu
+  labels:
+    app: llm-guardrails
+    daalu.io/tier: local
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: llm-guardrails
+  template:
+    metadata:
+      labels:
+        app: llm-guardrails
+        daalu.io/tier: local
+    spec:
+      containers:
+        - name: guardrails
+          # TODO: replace with a self-built image (see comment at top of file)
+          image: ghcr.io/kiwueke1/nemoguardrails:placeholder
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+              name: http
+          env:
+            - name: NEMOGUARDRAILS_CONFIG_PATH
+              value: /etc/guardrails
+            - name: NEMOGUARDRAILS_LOG_LEVEL
+              value: INFO
+          volumeMounts:
+            - name: config
+              mountPath: /etc/guardrails
+          readinessProbe:
+            httpGet:
+              path: /v1/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /v1/health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 1
+              memory: 1Gi
+      volumes:
+        - name: config
+          configMap:
+            name: guardrails-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-guardrails
+  namespace: daalu
+spec:
+  type: ClusterIP
+  selector:
+    app: llm-guardrails
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000

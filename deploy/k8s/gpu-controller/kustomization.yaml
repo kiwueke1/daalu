@@ -1,0 +1,18 @@
+# gpu-controller — per-tenant local-GPU (vLLM) lifecycle manager.
+#
+# Lives in daalu-automation (alongside daalu-api). Deploys the existing
+# deploy/k8s/gpu vLLM stack into either the operator's cluster (default)
+# or a joined customer cluster (when the gpu_tenants row has
+# target_cluster_tunnel_id set), then daalu-api registers it as the
+# tenant's SOVEREIGN inference tier.
+#
+# Plan: docs/plans/2026-06-02-gpu-onboarding.md
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: daalu-automation
+
+resources:
+  - rbac.yaml
+  - deployment.yaml
+  - networkpolicy.yaml

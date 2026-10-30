@@ -1,0 +1,41 @@
+# Time-slicing — slices a single physical GPU into N logical
+# `nvidia.com/gpu` allocations. Compute is time-multiplexed; **VRAM is
+# shared, not isolated**. Safe for our own NIM workloads where we know
+# the model sizes (Llama-3.1-8B FP8 fits in ~9 GB) — *not* safe for
+# arbitrary tenant code. For external multi-tenancy use MIG (H100+).
+#
+# Each `gpu-class` label gets its own profile. The active profile per
+# node is selected by labelling the node `nvidia.com/device-plugin.config=<key>`.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: time-slicing-config
+  namespace: gpu-operator
+data:
+  ada-16: |
+    version: v1
+    sharing:
+      timeSlicing:
+        renameByDefault: false
+        failRequestsGreaterThanOne: true
+        resources:
+          - name: nvidia.com/gpu
+            replicas: 4              # 4 logical GPUs on the 16 GB Ada
+  ada-48: |
+    version: v1
+    sharing:
+      timeSlicing:
+        renameByDefault: false
+        failRequestsGreaterThanOne: true
+        resources:
+          - name: nvidia.com/gpu
+            replicas: 8              # 8-way on the 48 GB Ada (Phase 1)
+  blackwell-32: |
+    version: v1
+    sharing:
+      timeSlicing:
+        renameByDefault: false
+        failRequestsGreaterThanOne: true
+        resources:
+          - name: nvidia.com/gpu
+            replicas: 6              # RTX 5090 32 GB if you go consumer

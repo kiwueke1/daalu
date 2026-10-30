@@ -1,0 +1,34 @@
+# Ingress for the workspace-controller now that it lives in
+# daalu-automation (which is default-deny on Ingress). daalu-api and
+# daalu-worker reach the controller's REST API on :8081 to
+# create/get/destroy workspace rows. Mirrors gpu-controller-ingress.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: workspace-controller-ingress
+  namespace: daalu-automation
+  labels:
+    app: workspace-controller
+    app.kubernetes.io/part-of: daalu-automation
+spec:
+  podSelector:
+    matchLabels:
+      app: workspace-controller
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: daalu-api
+              app.kubernetes.io/part-of: daalu-automation
+        - podSelector:
+            matchLabels:
+              app: daalu-worker
+              app.kubernetes.io/part-of: daalu-automation
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 8081
+          protocol: TCP

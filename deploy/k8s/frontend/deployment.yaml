@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: daalu-frontend
+  namespace: daalu-automation
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: daalu-frontend
+  template:
+    metadata:
+      labels:
+        app: daalu-frontend
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: frontend
+          image: ghcr.io/kiwueke1/daalu-automation-frontend:93b7ef50fb03c98d979f938333e28e67cf348103
+          imagePullPolicy: IfNotPresent
+          env:
+            # In-cluster the frontend proxies /api/* to the API service.
+            - name: NEXT_PUBLIC_API_BASE_URL
+              value: "http://daalu-api.daalu-automation.svc.cluster.local"
+            - name: NODE_ENV
+              value: production
+          ports:
+            - containerPort: 3000
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: daalu-frontend
+  namespace: daalu-automation
+spec:
+  selector:
+    app: daalu-frontend
+  ports:
+    - port: 80
+      targetPort: 3000

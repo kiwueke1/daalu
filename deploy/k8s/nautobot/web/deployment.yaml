@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nautobot
+  namespace: nautobot
+spec:
+  # Stick to 1 web replica for now; the cluster is a single node and
+  # gunicorn defaults to 4 workers inside the container which gives us
+  # plenty of concurrency. Bump replicas if you outgrow that.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nautobot
+  template:
+    metadata:
+      labels:
+        app: nautobot
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        # The networktocode/nautobot image uses uid 999 / gid 999
+        # (NAUTOBOT_UID/GID build args). Matching here so file ownership
+        # under /opt/nautobot is correct without needing fsGroup to
+        # chown a huge volume.
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+      initContainers:
+        # `nautobot-server migrate` is idempotent and runs before the
+        # web process so multi-replica rollouts don't race the DB.
+        - name: migrate
+          image: networktocode/nautobot:2.2-py3.11
+          command: ["nautobot-server", "migrate"]
+          envFrom:
+            - configMapRef:
+                name: nautobot-env
+            - secretRef:
+                name: nautobot-secrets
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 1
+              memory: 1Gi
+      containers:
+        - name: nautobot
+          image: networktocode/nautobot:2.2-py3.11
+          # The upstream image's default CMD runs gunicorn against
+          # the WSGI app. We don't override it here — runserver is
+          # for the docker-compose dev path only.
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: nautobot-env
+            - secretRef:
+                name: nautobot-secrets
+          # Kubernetes HTTP probes default to `Host: <pod-ip>:<port>`,
+          # which Django rejects with DisallowedHost unless the pod IP
+          # is in ALLOWED_HOSTS. Override the Host header so Django sees
+          # a name that IS allowed.
+          readinessProbe:
+            httpGet:
+              path: /health/
+              port: 8080
+              httpHeaders:
+                - name: Host
+                  value: sot.daalu.io
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health/
+              port: 8080
+              httpHeaders:
+                - name: Host
+                  value: sot.daalu.io
+            initialDelaySeconds: 90
+            periodSeconds: 30
+            timeoutSeconds: 10
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 2
+              memory: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nautobot
+  namespace: nautobot
+spec:
+  selector:
+    app: nautobot
+  ports:
+    - port: 80
+      targetPort: 8080

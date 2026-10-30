@@ -1,0 +1,33 @@
+# Argo Application for the config-manager-controller.
+#
+# Independent of the daalu-automation app so a controller bug can't
+# wedge the hub API. The controller pod itself lives in
+# daalu-automation; its RBAC is cluster-scoped and chart-installer-shaped
+# (it helm-installs the NV-CM chart in host-cluster mode) — see
+# deploy/k8s/config-manager-controller/rbac.yaml for the blast-radius
+# details. Engineer chapter 64.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: config-manager-controller
+  namespace: argocd
+  finalizers: [resources-finalizer.argocd.argoproj.io]
+spec:
+  project: daalu
+  source:
+    repoURL: https://github.com/kiwueke1/daalu
+    targetRevision: main
+    path: deploy/k8s/config-manager-controller
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: daalu-automation
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: { duration: 30s, factor: 2, maxDuration: 5m }

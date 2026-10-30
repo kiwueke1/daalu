@@ -1,0 +1,115 @@
+{
+  "name": "daalu-assistant",
+  "displayName": "Daalu Coding Agent",
+  "description": "In-IDE coding agent powered by your own GPU (or Daalu-hosted). It reads/searches your workspace and proposes changes via native tool-calling — code prompts never leave your perimeter.",
+  "version": "0.3.1",
+  "publisher": "daalu",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kiwueke1/daalu"
+  },
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": ["Other", "Machine Learning"],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "daaluAssistant",
+          "title": "Daalu Coding Agent",
+          "icon": "resources/daalu.svg"
+        }
+      ]
+    },
+    "views": {
+      "daaluAssistant": [
+        {
+          "id": "daaluAssistant.chat",
+          "name": "Daalu Coding Agent",
+          "type": "webview"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "daalu.openChat",
+        "title": "Daalu Coding Agent: Open Chat"
+      },
+      {
+        "command": "daalu.moveToRight",
+        "title": "Daalu Coding Agent: Move Chat to Secondary Side Bar (right)"
+      },
+      {
+        "command": "daalu.reload",
+        "title": "Daalu Coding Agent: Reload Token"
+      }
+    ],
+    "configuration": {
+      "title": "Daalu Coding Agent",
+      "properties": {
+        "daalu.gatewayUrl": {
+          "type": "string",
+          "default": "",
+          "description": "URL of the Daalu inference-gateway. Empty = read from env DAALU_GATEWAY_URL."
+        },
+        "daalu.tokenFile": {
+          "type": "string",
+          "default": "/var/run/daalu/tokens/service.jwt",
+          "description": "Path to the service-token JWT minted by the token-minter sidecar."
+        },
+        "daalu.model": {
+          "type": "string",
+          "default": "",
+          "description": "Override the model requested from the gateway. Empty = use the DAALU_MODEL env the workspace pod injects (the model you picked when creating the workspace). Must match what vLLM advertises."
+        },
+        "daalu.maxTokens": {
+          "type": "number",
+          "default": 2048,
+          "description": "Max completion tokens per request."
+        },
+        "daalu.toolsEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Let the model drive read/search/write/run tools via OpenAI function-calling (requires a tool-calling model, e.g. Qwen2.5-Coder or Qwen3-Coder). When off, the agent is plain chat."
+        },
+        "daalu.maxToolIterations": {
+          "type": "number",
+          "default": 8,
+          "description": "Max read-only tool rounds before the agent is forced to give a final answer. Bounds runaway loops and token spend."
+        },
+        "daalu.maxReadBytes": {
+          "type": "number",
+          "default": 16000,
+          "description": "Byte cap per read_file tool call (the file is truncated past this). The 48 GB-card coders (Qwen2.5-Coder-32B / Qwen3-Coder-30B-A3B) carry long context, so this can be larger than the 14B default."
+        },
+        "daalu.maxSearchResults": {
+          "type": "number",
+          "default": 60,
+          "description": "Max matches returned by the search_files tool."
+        },
+        "daalu.autoOpenRight": {
+          "type": "boolean",
+          "default": true,
+          "description": "On startup, best-effort move the chat to the right (secondary side bar). If the VS Code build doesn't support the move it stays in the activity bar; you can also run 'Daalu Coding Agent: Move Chat to Secondary Side Bar' manually."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p .",
+    "package": "vsce package --no-dependencies -o daalu-assistant.vsix",
+    "vscode:prepublish": "npm run build"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.80.0",
+    "@vscode/vsce": "^3.0.0",
+    "typescript": "^5.4.0"
+  }
+}

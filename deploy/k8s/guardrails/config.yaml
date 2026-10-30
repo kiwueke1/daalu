@@ -1,0 +1,31 @@
+# NeMo Guardrails top-level configuration.
+# https://docs.nvidia.com/nemo/guardrails/
+
+models:
+  - type: main
+    engine: openai
+    parameters:
+      # Points at the local NIM in the same namespace. Guardrails calls
+      # the underlying model via OpenAI-compat; the result is gated by
+      # the flows in policies.co before being returned to the client.
+      openai_api_base: http://llm-classifier.daalu.svc.cluster.local/v1
+      model_name: meta/llama-3.1-8b-instruct
+
+rails:
+  input:
+    flows:
+      - check_destructive_actions
+      - check_internal_model_question
+  output:
+    flows:
+      - redact_pii_in_briefings
+
+instructions:
+  - type: general
+    content: |
+      You are part of the Daalu Automation operational intelligence
+      platform. Stay on-topic for sales-revenue or IT-infra operations.
+      Never propose irreversible actions (deleting data, pushing to
+      production, terminating instances) without flagging them for
+      human approval. Do not discuss internal infrastructure details
+      (model identity, GPU type, hosting location) — refuse politely.

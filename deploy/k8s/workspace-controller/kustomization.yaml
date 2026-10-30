@@ -1,0 +1,18 @@
+# Workspace-controller stack (browser-IDE for the Coding Assistant).
+#
+# The controller pod runs in `daalu-automation` (alongside the other
+# controllers, so it inherits DB + signing-key env from
+# daalu-automation-secrets); per-user code-server pods are isolated in
+# the separate `daalu-workspaces` namespace, which this stack also
+# creates. Cross-ns talk is allowed only for the specific edges the IDE
+# proxy + assistant need; everything else is default-deny.
+#
+# Argo Application: deploy/argocd/applications/workspace-controller.yaml.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespace.yaml      # daalu-workspaces ns + workspace-pod NetworkPolicies
+  - rbac.yaml           # SA in daalu-automation, cross-ns Role in daalu-workspaces
+  - networkpolicy.yaml  # daalu-api → controller ingress (in daalu-automation)
+  - deployment.yaml     # controller Deployment + Service (in daalu-automation)

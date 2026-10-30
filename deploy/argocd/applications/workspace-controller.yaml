@@ -1,0 +1,33 @@
+# Argo Application for the workspace-controller stack.
+#
+# Independent of the daalu-automation Application so a sync failure in
+# the IDE plumbing can't take down the hub API. Destination namespace
+# is daalu-workspaces, but the manifests cross into daalu-automation
+# for the secret-reader RoleBinding — ServerSideApply handles the
+# multi-namespace case cleanly.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: workspace-controller
+  namespace: argocd
+  finalizers: [resources-finalizer.argocd.argoproj.io]
+spec:
+  project: daalu
+  source:
+    repoURL: https://github.com/kiwueke1/daalu
+    targetRevision: main
+    # All values are in-source; add an overlay if you need overrides.
+    path: deploy/k8s/workspace-controller
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: daalu-workspaces
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: { duration: 30s, factor: 2, maxDuration: 5m }

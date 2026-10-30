@@ -1,0 +1,27 @@
+Daalu Automation has been deployed.
+
+Release   : {{ .Release.Name }}
+Namespace : {{ .Release.Namespace }}
+Backend   : {{ include "daalu.backendImage" . }}
+Frontend  : {{ include "daalu.frontendImage" . }}
+{{- if .Values.ingress.enabled }}
+URL       : https://{{ .Values.ingress.host }}
+{{- end }}
+
+Verify rollout:
+
+  kubectl -n {{ .Release.Namespace }} rollout status deploy/daalu-api
+  kubectl -n {{ .Release.Namespace }} rollout status deploy/daalu-frontend
+  kubectl -n {{ .Release.Namespace }} get pods
+
+Seed the default tenant once:
+
+  kubectl -n {{ .Release.Namespace }} exec deploy/daalu-api -- daalu seed
+
+Generate a synthetic wave so the UI has data on first load:
+
+  kubectl -n {{ .Release.Namespace }} exec deploy/daalu-api -- daalu seed-demo
+
+Tail agents:
+
+  kubectl -n {{ .Release.Namespace }} logs -f deploy/daalu-agents

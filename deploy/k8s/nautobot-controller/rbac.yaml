@@ -1,0 +1,68 @@
+# RBAC for the nautobot-controller.
+#
+# The controller's blast radius is intentionally wide *but* bounded:
+# it can create-or-delete namespaces and any namespaced resource
+# inside namespaces it owns. It does NOT have:
+#   * permission to mutate the host cluster's RBAC
+#   * any role outside daalu-automation (its own ns) and the
+#     nautobot-* namespaces it materialises
+#   * any cluster-wide read of secrets that don't belong to a tenant
+#     it owns
+#
+# The controller pod lives in `daalu-automation`. Cross-namespace
+# work into per-tenant `nautobot-<slug>` namespaces uses ClusterRole
+# binding scoped via the namespace selector at apply time — but
+# Kubernetes RBAC doesn't let us scope namespace creation, so the
+# controller has ClusterRole-level create on namespaces too.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: daalu-nautobot-controller
+  namespace: daalu-automation
+---
+# ClusterRole — narrow but cluster-scoped because materialising a
+# per-tenant namespace requires Namespace+CRUD across the cluster.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: daalu-nautobot-controller
+rules:
+  # Namespaces — create + delete + watch. The controller stamps one
+  # per tenant.
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch", "create", "patch", "delete"]
+  # The full set of resources inside a per-tenant namespace.
+  # ClusterRole+RoleBinding-per-namespace isn't an option here because
+  # we don't know the namespace names ahead of time — they're derived
+  # from tenant slugs at runtime. Risk-vs-cost trade: cluster-wide
+  # rights, but bounded to resource kinds the controller actually
+  # uses, and the controller pod has automountServiceAccountToken on
+  # its own image only (not on workspace pods).
+  - apiGroups: [""]
+    resources:
+      - secrets
+      - configmaps
+      - services
+      - persistentvolumeclaims
+      - pods
+    verbs: ["get", "list", "watch", "create", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "deployments/scale"]
+    verbs: ["get", "list", "watch", "create", "patch", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses", "networkpolicies"]
+    verbs: ["get", "list", "watch", "create", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: daalu-nautobot-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: daalu-nautobot-controller
+subjects:
+  - kind: ServiceAccount
+    name: daalu-nautobot-controller
+    namespace: daalu-automation

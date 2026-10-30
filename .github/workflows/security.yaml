@@ -1,0 +1,89 @@
+name: Security
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+  schedule:
+    # Weekly Monday 06:00 UTC — catches new CVEs in pinned base images.
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+# NOTE: SARIF upload to GitHub code scanning and the Dependency Review
+# action both require GitHub Advanced Security, which is not enabled on
+# this repository. Until it is, Trivy runs in report-only mode (findings
+# print to the job log) and Dependency Review is soft (continue-on-error).
+# Gitleaks runs via its CLI (no GHAS / API permissions needed) and DOES
+# fail the build on a real secret leak. Re-enable SARIF upload + a hard
+# Trivy gate once Advanced Security is turned on.
+
+jobs:
+  trivy-image:
+    name: Trivy — backend image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build backend image (no push)
+        run: docker build -t daalu-automation:ci .
+      - uses: aquasecurity/trivy-action@0.35.0
+        with:
+          image-ref: daalu-automation:ci
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "0"   # report-only (no GHAS code scanning to gate on)
+
+  trivy-fs:
+    name: Trivy — repo dependency scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aquasecurity/trivy-action@0.35.0
+        with:
+          scan-type: fs
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "0"
+
+  dependency-review:
+    name: GitHub — Dependency Review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Requires GitHub Advanced Security + Dependency graph. Soft-fail so
+      # it doesn't block PRs while GHAS is off; flips to a real gate the
+      # moment Advanced Security is enabled.
+      - uses: actions/dependency-review-action@v4
+        continue-on-error: true
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: false
+
+  gitleaks:
+    name: Gitleaks — secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Run gitleaks (CLI)
+        env:
+          GITLEAKS_VERSION: 8.30.1
+        run: |
+          set -euo pipefail
+          curl -sSfL \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz gitleaks
+          # Scan the working tree (current state). The repo's SOPS-encrypted
+          # secret files are allowlisted in .gitleaks.toml (values are
+          # ciphertext, not live secrets). Fails the build on a real leak.
+          ./gitleaks detect \
+            --source . \
+            --no-git \
+            --config .gitleaks.toml \
+            --redact \
+            --no-banner \
+            --exit-code 1

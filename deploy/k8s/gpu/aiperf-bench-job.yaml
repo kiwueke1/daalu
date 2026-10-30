@@ -1,0 +1,77 @@
+# AIPerf concurrency sweep — a one-shot client Job that load-tests an
+# OpenAI-compatible endpoint and reports TTFT / ITL / throughput vs
+# concurrency. See docs/plans/nvidia-ai-factory/04-aiperf.md.
+#
+# Tool:    ai-dynamo/aiperf (Apache-2.0, the Dynamo project's LLM load
+#          generator; successor to the deprecated GenAI-Perf). Mirrored to
+#          Harbor — no NGC entitlement (see [[foss_inference_pivot]]).
+# Target:  the in-cluster `llm-classifier` Service (today's vLLM) by
+#          default. To benchmark the *front door* instead (auth + quota +
+#          routing overhead), repoint --url at the inference-gateway and add
+#          an auth header — comparing the two isolates gateway latency.
+# Shape:   pure client. No CRD, no operator, no change to the serving plane —
+#          it opens connections to a Service that already exists.
+#
+# NOT auto-deployed: this is a *.yaml the gpu-workloads ArgoCD app's
+# include-glob deliberately skips (it is not `{01,03,05,07}-`). Run it by
+# hand (`kubectl apply -f`) off-peak, or via scripts/aiperf-bench.sh which
+# templates the same container for ad-hoc runs. Running a full-concurrency
+# sweep against the single shared prod card *is* load — keep it off-peak or
+# point it at a candidate node before the router is flipped to it.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: aiperf-llama-sweep
+  namespace: daalu
+  labels:
+    app: aiperf-bench
+    daalu.io/tier: bench
+spec:
+  backoffLimit: 0          # a load test is not idempotent; never auto-retry
+  # Clean the Job up an hour after it finishes so repeated runs don't pile up.
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: aiperf-bench
+        daalu.io/tier: bench
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: aiperf
+          # Pin a release and mirror it to Harbor before first use.
+          image: harbor.daalu.io/ai-dynamo/aiperf:latest
+          imagePullPolicy: IfNotPresent
+          args:
+            - profile
+            # served-model-name the vLLM Deployment advertises (keep in sync
+            # with 03-vllm-llama-classifier.yaml --served-model-name).
+            - --model=meta/llama-3.1-8b-instruct
+            - --url=http://llm-classifier.daalu.svc.cluster.local:80
+            - --endpoint-type=chat
+            - --streaming                        # measure TTFT + ITL, not just total latency
+            - --concurrency=1,2,4,8,16,32        # the saturation sweep
+            - --request-count=200
+            - --synthetic-input-tokens-mean=512
+            - --output-tokens-mean=256
+            # Drop a machine-readable report next to the human summary so a
+            # later step (pricing reconciliation / a regression check) can
+            # parse tokens/sec and p99 TTFT.
+            - --artifact-dir=/artifacts
+          volumeMounts:
+            - name: artifacts
+              mountPath: /artifacts
+          resources:
+            # The client is CPU/network-bound — it must NOT request a GPU
+            # (the GPU is the thing under test, on a different pod/node).
+            requests:
+              cpu: 1
+              memory: 1Gi
+            limits:
+              cpu: 2
+              memory: 2Gi
+      volumes:
+        # emptyDir is fine for an ad-hoc run; `kubectl cp` the report out of
+        # the pod before TTL deletes it, or swap for a PVC to persist it.
+        - name: artifacts
+          emptyDir: {}

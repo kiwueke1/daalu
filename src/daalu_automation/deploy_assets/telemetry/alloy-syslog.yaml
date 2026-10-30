@@ -1,0 +1,70 @@
+# Grafana Alloy syslog receiver — network-device logs → the cluster's Loki.
+#
+# hostNetwork so the clab devices (172.20.20.0/24, host-local bridge) can
+# reach it at the bridge gateway 172.20.20.1:5514 — ClusterIPs don't route
+# from the containerlab side. dnsPolicy ClusterFirstWithHostNet keeps the
+# in-cluster loki-gateway name resolvable despite hostNetwork.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: daalu-network-syslog
+  namespace: monitoring
+data:
+  config.alloy: |
+    loki.source.syslog "network" {
+      listener {
+        address       = "0.0.0.0:5514"
+        protocol      = "tcp"
+        syslog_format = "rfc5424"
+        labels        = { job = "network-syslog" }
+      }
+      relabel_rules = loki.relabel.syslog.rules
+      forward_to    = [loki.write.default.receiver]
+    }
+
+    loki.relabel "syslog" {
+      forward_to = []
+      rule {
+        source_labels = ["__syslog_message_hostname"]
+        target_label  = "device"
+      }
+    }
+
+    loki.write "default" {
+      endpoint {
+        url = "__LOKI_PUSH_URL__"
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: daalu-network-syslog
+  namespace: monitoring
+  labels: { app: daalu-network-syslog }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: daalu-network-syslog }
+  template:
+    metadata:
+      labels: { app: daalu-network-syslog }
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: alloy
+          image: grafana/alloy:v1.5.1
+          args: ["run", "/etc/alloy/config.alloy", "--server.http.listen-addr=127.0.0.1:12346"]
+          ports:
+            - containerPort: 5514
+              hostPort: 5514
+              protocol: TCP
+          resources:
+            requests: { cpu: 20m, memory: 64Mi }
+            limits: { memory: 256Mi }
+          volumeMounts:
+            - { name: config, mountPath: /etc/alloy }
+      volumes:
+        - name: config
+          configMap: { name: daalu-network-syslog }

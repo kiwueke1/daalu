@@ -1,0 +1,166 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: daalu-api
+  namespace: daalu-automation
+  labels:
+    app: daalu-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: daalu-api
+  template:
+    metadata:
+      labels:
+        app: daalu-api
+    spec:
+      # The WireGuard coordinator (core/wireguard.py) reads + patches
+      # the `daalu-wireguard-peers` Secret to manage WG peers as
+      # clusters are onboarded, and execs into the hub pod for
+      # liveness rollup. Both require the in-cluster SA token to be
+      # mounted. RBAC scoped to those two operations only — see
+      # deploy/k8s/wg-hub/rbac.yaml.
+      serviceAccountName: daalu-remediator
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      # Run `daalu migrate` before the API container boots so
+      # multi-replica rollouts converge cleanly. `daalu migrate`
+      # branches on whether `alembic_version` exists: fresh DB → run
+      # `Base.metadata.create_all` + `alembic stamp head`, existing DB
+      # → run `alembic upgrade head`. Either way the schema is at head
+      # before the API serves traffic. Idempotent on subsequent boots.
+      initContainers:
+        - name: db-migrate
+          image: ghcr.io/kiwueke1/daalu-automation:93b7ef50fb03c98d979f938333e28e67cf348103
+          imagePullPolicy: IfNotPresent
+          command: ["daalu", "migrate"]
+          envFrom:
+            - secretRef:
+                name: daalu-automation-secrets
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+      containers:
+        - name: api
+          image: ghcr.io/kiwueke1/daalu-automation:93b7ef50fb03c98d979f938333e28e67cf348103
+          imagePullPolicy: IfNotPresent
+          command: ["daalu", "server", "--host", "0.0.0.0", "--port", "8000"]
+          ports:
+            - containerPort: 8000
+          env:
+            # In-cluster URL of the workspace-controller (now in the hub
+            # namespace alongside the other controllers). Empty disables
+            # the /ide/* routes (they 503 instead of crashing).
+            - name: WORKSPACE_CONTROLLER_URL
+              value: http://workspace-controller.daalu-automation.svc.cluster.local
+            # In-cluster URL of the nautobot-controller. Empty falls
+            # back to the legacy shared-Nautobot path (or BYO if neither
+            # is wired). Engineer chapter 60.
+            - name: NAUTOBOT_CONTROLLER_URL
+              value: http://nautobot-controller.daalu-automation.svc.cluster.local
+            # In-cluster URL of the config-manager-controller. Empty makes
+            # the NV-CM provisioning wizard route return 503 by design
+            # (is_config_manager_controller_enabled() is false). Engineer
+            # chapter 64.
+            - name: CONFIG_MANAGER_CONTROLLER_URL
+              value: http://config-manager-controller.daalu-automation.svc.cluster.local
+            # In-cluster URL of the gpu-controller. Empty makes the local-GPU
+            # onboarding route return 503 by design
+            # (is_gpu_controller_enabled() is false). Set = the GPU onboarding
+            # card on Usage & Pricing can deploy vLLM onto a joined cluster.
+            # See docs/plans/2026-06-02-gpu-onboarding.md.
+            - name: GPU_CONTROLLER_URL
+              value: http://gpu-controller.daalu-automation.svc.cluster.local
+            # ── Hub SSO (human login via Keycloak OIDC) — book 10-security/59 ──
+            # "password" = local accounts (`daalu create-admin`, invites).
+            # Set "oidc" to send login to Keycloak (the realm the NV-CM tools
+            # trust) so one session covers the hub + Nautobot/etc.; that needs
+            # KEYCLOAK_HUB_CLIENT_SECRET + KEYCLOAK_ISSUER_URL in the secret.
+            # (The Helm chart's authMode value is NOT the prod deploy path;
+            # ArgoCD renders this kustomize tree. KEYCLOAK_HUB_CLIENT_SECRET +
+            # KEYCLOAK_ISSUER_URL ride the daalu-automation-secrets envFrom.)
+            - name: AUTH_MODE
+              value: "password"
+            # Allow native email+password LOGIN alongside Google SSO WITHOUT
+            # opening public self-signup (SELF_SIGNUP_ENABLED stays unset/false).
+            # Lets operator-provisioned accounts (daalu create-admin) and
+            # accepted invites sign in with a password. See book-engineer ch.73.
+            - name: NATIVE_PASSWORD_LOGIN_ENABLED
+              value: "true"
+            - name: KEYCLOAK_HUB_CLIENT_ID
+              value: daalu-hub-ui
+            - name: KEYCLOAK_HUB_REDIRECT_URL
+              value: https://daalu.example.com/api/v1/auth/oidc/callback
+            - name: KEYCLOAK_HUB_POST_LOGOUT_URL
+              value: https://daalu.example.com/login
+            - name: PUBLIC_BASE_URL
+              value: https://daalu.example.com
+          envFrom:
+            - secretRef:
+                name: daalu-automation-secrets
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: daalu-api
+  namespace: daalu-automation
+  labels:
+    app: daalu-api
+spec:
+  selector:
+    app: daalu-api
+  ports:
+    - name: http              # named for ServiceMonitor port reference
+      port: 80
+      targetPort: 8000

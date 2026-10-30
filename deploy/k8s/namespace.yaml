@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: daalu-automation
+  labels:
+    # `privileged` (not baseline/restricted) because the WireGuard hub
+    # needs hostNetwork + hostPort 51820 + NET_ADMIN/NET_RAW + hostPath
+    # (/lib/modules) to bring up wg0 in the pod's netns. Baseline rejects
+    # all four. Every other Deployment in this namespace still sets a
+    # restricted-compliant securityContext on its own (runAsNonRoot,
+    # RuntimeDefault seccomp, capabilities.drop=[ALL]) — privileged just
+    # raises the ceiling, it doesn't force other pods to drop their
+    # constraints.
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/warn: privileged

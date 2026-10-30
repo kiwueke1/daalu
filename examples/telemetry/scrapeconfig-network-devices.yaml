@@ -1,0 +1,52 @@
+# Prometheus scrape targets for the lab fabric's node_exporters.
+#
+# The kube-prometheus-stack Prometheus on the lab cluster has an open
+# scrapeConfigSelector ({}), so any ScrapeConfig in any namespace is picked
+# up. Pods reach the clab mgmt subnet (172.20.20.0/24) via the node's route
+# to the docker bridge — no tunnel or hostNetwork needed for scraping.
+#
+# One staticConfig per device so each carries its own `device` label
+# (mirrors the SoT device name → joins cleanly with topology + Loki).
+#
+# Matches lab/spectrum-x.clab.yml — 12 devices. Daalu's "Device logs & metrics"
+# wizard upserts this same ScrapeConfig from the SoT inventory (Flow 5.5); this
+# vendored copy is the manual equivalent for when you want it before onboarding.
+# The `fabric` label distinguishes the compute (rail) plane from storage.
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: daalu-network-devices
+  namespace: monitoring
+spec:
+  jobName: network-devices
+  scrapeInterval: 30s
+  staticConfigs:
+    # --- Spines (shared by both fabrics) ---
+    - targets: ["172.20.20.11:9100"]
+      labels: { device: spine1, tier: spine, fabric: shared }
+    - targets: ["172.20.20.12:9100"]
+      labels: { device: spine2, tier: spine, fabric: shared }
+    # --- Compute fabric: rail leaves 0-3 ---
+    - targets: ["172.20.20.21:9100"]
+      labels: { device: leaf1, tier: leaf, fabric: compute, rail: "0" }
+    - targets: ["172.20.20.22:9100"]
+      labels: { device: leaf2, tier: leaf, fabric: compute, rail: "1" }
+    - targets: ["172.20.20.23:9100"]
+      labels: { device: leaf3, tier: leaf, fabric: compute, rail: "2" }
+    - targets: ["172.20.20.24:9100"]
+      labels: { device: leaf4, tier: leaf, fabric: compute, rail: "3" }
+    # --- Storage fabric ---
+    - targets: ["172.20.20.25:9100"]
+      labels: { device: storleaf1, tier: leaf, fabric: storage }
+    # --- GPU servers ---
+    - targets: ["172.20.20.31:9100"]
+      labels: { device: gpu1, tier: server, fabric: compute }
+    - targets: ["172.20.20.32:9100"]
+      labels: { device: gpu2, tier: server, fabric: compute }
+    - targets: ["172.20.20.33:9100"]
+      labels: { device: gpu3, tier: server, fabric: compute }
+    - targets: ["172.20.20.34:9100"]
+      labels: { device: gpu4, tier: server, fabric: compute }
+    # --- Storage node ---
+    - targets: ["172.20.20.41:9100"]
+      labels: { device: stor1, tier: server, fabric: storage }

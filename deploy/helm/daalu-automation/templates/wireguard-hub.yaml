@@ -1,0 +1,136 @@
+{{- if .Values.wireguard.enabled }}
+# ── WireGuard tunnel hub ─────────────────────────────────────────────
+# Accepts WireGuard peers from customer-side daalu-edge containers.
+# The Secret below holds the wg0.conf the hub reads at boot; the
+# daalu-api coordinator patches that Secret to add/remove peers and
+# the hub's inotify loop runs `wg syncconf` to apply changes without
+# tearing down established handshakes.
+#
+# Disabled by default. Enable + set image.tag once the wg-hub image
+# is built and the hub keypair is seeded (either via wireguard.hubPrivateKey
+# at install time or by running `daalu init wg-hub` once afterwards).
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: daalu-wireguard-peers
+  labels: {{- include "daalu.labels" . | nindent 4 }}
+  annotations:
+    # Helm should not overwrite the Secret after the first install —
+    # the coordinator owns its contents at runtime.
+    helm.sh/resource-policy: keep
+type: Opaque
+{{- if .Values.wireguard.hubPrivateKey }}
+stringData:
+  wg0.conf: |
+    [Interface]
+    PrivateKey = {{ .Values.wireguard.hubPrivateKey }}
+    Address = {{ .Values.wireguard.hubAddress }}/16
+    ListenPort = {{ .Values.wireguard.listenPort }}
+    # Peers appended by the daalu-api coordinator at runtime.
+{{- end }}
+---
+# RBAC: let the daalu-api SA patch the peer Secret. The remediator SA
+# is already mounted by daalu-api (see templates/api.yaml), so we
+# bind to that one instead of creating a new SA.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: daalu-wireguard-coordinator
+  labels: {{- include "daalu.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["daalu-wireguard-peers"]
+    verbs: ["get", "patch", "update"]
+  # Beat task execs `wg show wg0 dump` in the hub pod every 30s to
+  # bucket each peer's latest-handshake age. The remediator
+  # ClusterRole already grants pod list/get cluster-wide; pods/exec is
+  # the missing piece. Scoped to this namespace because that's the
+  # only place the hub runs. Both verbs are needed: kubectl uses POST
+  # (create) but the python kubernetes-client's
+  # connect_get_namespaced_pod_exec uses GET (the API server upgrades
+  # the GET to a WebSocket).
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["get", "create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: daalu-wireguard-coordinator
+  labels: {{- include "daalu.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.remediator.serviceAccountName }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: daalu-wireguard-coordinator
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: daalu-wireguard-hub
+  labels:
+    {{- include "daalu.labels" . | nindent 4 }}
+    app: daalu-wireguard-hub
+spec:
+  # WireGuard hub is stateful on the kernel network stack; do not
+  # scale horizontally. Use Recreate so the old pod releases hostPort
+  # before the new one starts.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: daalu-wireguard-hub
+  template:
+    metadata:
+      labels:
+        app: daalu-wireguard-hub
+        {{- include "daalu.labels" . | nindent 8 }}
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      automountServiceAccountToken: false
+      {{- if .Values.wireguard.nodeSelector }}
+      nodeSelector:
+        {{- toYaml .Values.wireguard.nodeSelector | nindent 8 }}
+      {{- end }}
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecret }}
+      containers:
+        - name: hub
+          image: {{ .Values.wireguard.image }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            capabilities:
+              add: [NET_ADMIN, NET_RAW]
+            # wg-quick writes /run/wireguard at startup
+            readOnlyRootFilesystem: false
+          ports:
+            - name: wireguard
+              containerPort: {{ .Values.wireguard.listenPort }}
+              protocol: UDP
+              hostPort: {{ .Values.wireguard.listenPort }}
+          volumeMounts:
+            - name: peers
+              mountPath: /etc/wireguard
+            - name: modules
+              mountPath: /lib/modules
+              readOnly: true
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits:   { cpu: 500m, memory: 256Mi }
+      volumes:
+        - name: peers
+          secret:
+            secretName: daalu-wireguard-peers
+            defaultMode: 0600
+        - name: modules
+          hostPath:
+            path: /lib/modules
+            type: Directory
+{{- end }}

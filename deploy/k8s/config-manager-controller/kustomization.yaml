@@ -1,0 +1,22 @@
+# config-manager-controller — per-tenant NVIDIA Config Manager lifecycle.
+#
+# Lives in daalu-automation (alongside daalu-api). Reconciles
+# config_manager_tenants rows into per-tenant NV-CM Helm releases in
+# either the operator's host cluster (default) or the customer's
+# federated cluster (when the row has target_cluster_tunnel_id set).
+#
+# Unlike the nautobot-controller it runs `helm upgrade --install` of the
+# vendored pinned chart, so its image ships the `helm` binary and the
+# `deploy/charts/` tree (see repo-root Dockerfile).
+#
+# Engineer chapters: docs/book-engineer/08-deployment-and-cicd/
+# 64-config-manager-go-live.md and the NV-CM design doc.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: daalu-automation
+
+resources:
+  - rbac.yaml
+  - deployment.yaml
+  - networkpolicy.yaml

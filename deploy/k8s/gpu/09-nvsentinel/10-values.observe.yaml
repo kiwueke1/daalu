@@ -1,0 +1,55 @@
+# NVSentinel Helm values — OBSERVE / DRY-RUN mode (pilot).
+#
+# This deliberately runs NVSentinel as a *detector + recorder* only: it watches
+# the GPU Operator's DCGM/dcgm-exporter stream and node/pod conditions,
+# classifies faults, and EXPORTS what it WOULD do — without cordon/drain/reboot.
+# Destructive remediation stays off until the GSP-hang -> Rufio/BMC power-cycle
+# hook (doc 03 §1.1, P2) and the dcgmi-diag re-admission gate (doc 02 §4.1) are
+# validated on the RTX 2000 Ada dev node.
+#
+# Key names below follow the upstream NVSentinel chart's intent; reconcile
+# against the pinned chart's values.yaml at install time (the chart is young —
+# v1.8.0 — so some keys may shift). The INVARIANT to preserve regardless of key
+# names: remediation actions are dry-run, and metrics are exported + scraped.
+
+image:
+  # Mirror + pin before first use (no NGC entitlement — [[foss_inference_pivot]]).
+  registry: harbor.daalu.io/nvidia/nvsentinel
+  # pullPolicy: IfNotPresent
+  # tag: v1.8.0   # pin the exact release you mirrored
+
+# Telemetry source — point at the Operator's existing dcgm-exporter; do NOT
+# stand up a second DCGM (doc 03 §1.2).
+dcgm:
+  # Reuse the GPU Operator's exporter Service/endpoint.
+  useExistingExporter: true
+  # exporterEndpoint: "nvidia-dcgm-exporter.gpu-operator.svc:9400"
+
+# ── The safety switch: observe / dry-run, no destructive actions yet. ──
+remediation:
+  enabled: true
+  dryRun: true          # record intent, never execute
+  actions:
+    cordon: false
+    drain: false
+    reboot: false
+    powerCycle: false   # the Rufio/BMC escalation is wired in P2, not here
+  # Backoff + max-attempts so a flapping fault escalates to a human (the
+  # runbook) instead of looping (doc 03 §4 "remediation storms").
+  maxAttempts: 3
+  backoffSeconds: 300
+
+# Export NVSentinel's own action/health metrics so the hub can scrape them and
+# alert on "remediation failed" / "node stuck cordoned" (doc 03 §1.2).
+metrics:
+  enabled: true
+  service:
+    port: 9500
+
+# Scope: only the GPU nodes. Tolerate the GPU taints so the agent can run there.
+tolerations:
+  - key: nvidia.com/gpu
+    operator: Exists
+    effect: NoSchedule
+nodeSelector:
+  nvidia.com/gpu.present: "true"

@@ -1,0 +1,21 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: daalu-api
+  namespace: daalu-automation
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: daalu-api
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: daalu-worker
+  namespace: daalu-automation
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: daalu-worker

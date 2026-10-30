@@ -1,0 +1,81 @@
+# WireGuard hub Deployment.
+#
+# Accepts peer connections from customer-side daalu-edge containers on
+# UDP 51820 (hostPort). The hub reads its config from
+# `daalu-wireguard-peers` (Secret) at boot; the daalu-api coordinator
+# patches that Secret to append peers as new clusters are onboarded,
+# and the hub continuously reconciles the live interface (directory
+# inotify watch + periodic `wg syncconf` backstop) so new peers come up
+# without dropping live handshakes and without a manual restart.
+#
+# hostNetwork=true so the hub binds directly to the node's UDP 51820 —
+# matches how MetalLB / NodePort would not work for WireGuard
+# (kube-proxy doesn't load-balance UDP cleanly enough). The cluster
+# only has one node so single-replica + Recreate is fine.
+#
+# DNS resolves outside the cluster: wg.example.com must point at this
+# node's public IP.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: daalu-wireguard-hub
+  namespace: daalu-automation
+  labels:
+    app.kubernetes.io/part-of: daalu-automation
+    app: daalu-wireguard-hub
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: daalu-wireguard-hub
+  template:
+    metadata:
+      labels:
+        app: daalu-wireguard-hub
+        app.kubernetes.io/part-of: daalu-automation
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: ghcr
+      containers:
+        - name: hub
+          image: ghcr.io/kiwueke1/daalu-wg-hub:latest
+          # :latest is rebuilt in place by CI, so IfNotPresent would keep
+          # a stale cached image on redeploy. Always guarantees the pod
+          # picks up the current build when it's recreated.
+          imagePullPolicy: Always
+          securityContext:
+            capabilities:
+              add: [NET_ADMIN, NET_RAW]
+            readOnlyRootFilesystem: false
+          ports:
+            - name: wireguard
+              containerPort: 51820
+              protocol: UDP
+              hostPort: 51820
+          volumeMounts:
+            - name: peers
+              mountPath: /etc/wireguard
+            - name: modules
+              mountPath: /lib/modules
+              readOnly: true
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+      volumes:
+        - name: peers
+          secret:
+            secretName: daalu-wireguard-peers
+            defaultMode: 0600
+        - name: modules
+          hostPath:
+            path: /lib/modules
+            type: Directory

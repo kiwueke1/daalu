@@ -1,0 +1,27 @@
+{{- /*
+Wildcard cert for the per-tenant NV-CM tool-UI zone served through the hub.
+
+ONE cert (*.<baseDomain>) covers every tenant/tool forever — the hub
+terminates TLS here and reverse-proxies over the WireGuard tunnel (see
+api/tool_proxy.py). Issued via the cluster's DNS-01 issuer (Cloudflare),
+which is required for wildcards, so there is NO cert-manager annotation on
+the cmtools Ingress (that would trigger an HTTP-01 challenge that can't
+satisfy a wildcard). Gated on cmtools.enabled.
+*/ -}}
+{{- if and .Values.cmtools .Values.cmtools.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: cmtools-wildcard
+  labels:
+    app.kubernetes.io/part-of: daalu-automation
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  secretName: {{ .Values.cmtools.tlsSecretName | default "cmtools-wildcard-tls" }}
+  issuerRef:
+    kind: ClusterIssuer
+    name: {{ .Values.cmtools.clusterIssuer | default "letsencrypt-prod" }}
+  commonName: "*.{{ .Values.cmtools.baseDomain | default "cmtools.example.com" }}"
+  dnsNames:
+    - "*.{{ .Values.cmtools.baseDomain | default "cmtools.example.com" }}"
+{{- end }}

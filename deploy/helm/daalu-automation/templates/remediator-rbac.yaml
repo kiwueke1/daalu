@@ -1,0 +1,105 @@
+{{- if .Values.remediator.enabled }}
+---
+# ServiceAccount the daalu-api pod assumes when calling the Kubernetes
+# API on behalf of the operator (per-alert chat → tool calls). All
+# remediation actions run with this identity, so the cluster audit log
+# attributes them clearly.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Values.remediator.serviceAccountName }}
+  labels: {{- include "daalu.labels" . | nindent 4 }}
+---
+# Cluster-wide read perms — diagnostics (logs, describe, events, list).
+# Intentionally broad on resource types but limited to read verbs so a
+# compromised API pod cannot mutate cluster state without also being
+# bound to the write ClusterRole below.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Values.remediator.serviceAccountName }}-read
+  labels: {{- include "daalu.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources:
+      - pods
+      - pods/log
+      - events
+      - services
+      - configmaps
+      - namespaces
+      - nodes
+      - persistentvolumeclaims
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources:
+      - deployments
+      - statefulsets
+      - daemonsets
+      - replicasets
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["batch"]
+    resources:
+      - jobs
+      - cronjobs
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Values.remediator.serviceAccountName }}-read
+  labels: {{- include "daalu.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.remediator.serviceAccountName }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ .Values.remediator.serviceAccountName }}-read
+  apiGroup: rbac.authorization.k8s.io
+---
+# Narrow write perms — only the verbs/resources the allowlisted tools
+# need. `delete` on pods covers the restart-by-deletion path; `patch`
+# on the apps + core kinds below covers rollout undo, scale, rolling
+# restart, and the generic `patch_resource` tool (NET_ADMIN add,
+# configmap edits, service tweaks, etc.).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Values.remediator.serviceAccountName }}-write
+  labels: {{- include "daalu.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["delete", "patch", "update"]
+  - apiGroups: [""]
+    # Surface for `patch_resource` on namespaced core/v1 kinds. Read
+    # verbs are already granted by the -read ClusterRole; the patch
+    # verb here lets the agent flip a ConfigMap key, retarget a Service
+    # selector, or rotate a Secret value under operator approval.
+    resources: ["configmaps", "services", "secrets"]
+    verbs: ["patch", "update"]
+  - apiGroups: ["apps"]
+    resources:
+      - deployments
+      - deployments/scale
+      - statefulsets
+      - statefulsets/scale
+      - daemonsets
+      - replicasets
+    verbs: ["patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Values.remediator.serviceAccountName }}-write
+  labels: {{- include "daalu.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.remediator.serviceAccountName }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ .Values.remediator.serviceAccountName }}-write
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

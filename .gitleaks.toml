@@ -1,0 +1,33 @@
+# Gitleaks config for daalu-automation (used by .github/workflows/security.yaml).
+#
+# Start from gitleaks' built-in ruleset, then allowlist paths that hold
+# ciphertext, local-only files, build artifacts, or documentation examples
+# — none of which are live secrets. A real secret in any other tracked
+# file still fails the build.
+title = "daalu gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "ciphertext / local-only / build-artifact / docs-example paths"
+paths = [
+  # SOPS-encrypted secrets — values are ciphertext (see .sops.yaml).
+  '''.*secrets\.enc\.yaml$''',
+  # Local-only, gitignored files (never committed; absent from CI checkout,
+  # listed here so local `gitleaks` runs are clean too).
+  '''^\.env$''',
+  '''^\.claude/''',
+  # Next.js build artifacts (gitignored).
+  '''(^|/)\.next/''',
+]
+regexes = [
+  # Alembic revision identifiers (``NNNN_slug``) — column names, not secrets.
+  # A *merge* migration names two revisions on one line, which trips the
+  # generic-api-key entropy rule (e.g. 0028's down_revision tuple).
+  '''^\d{4}_[a-z0-9_]+$''',
+  # The stand-in credential in tests/test_config_manager_keycloak_creds.py.
+  # Allowlisted by exact value rather than by path: allowlisting `tests/`
+  # wholesale would stop the scanner catching a real secret pasted into a test.
+  '''^not-a-real-secret-test-only$''',
+]

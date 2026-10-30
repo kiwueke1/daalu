@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: daalu-api
+  labels:
+    {{- include "daalu.labels" . | nindent 4 }}
+    app: daalu-api
+spec:
+  replicas: {{ .Values.api.replicas }}
+  selector:
+    matchLabels:
+      app: daalu-api
+  template:
+    metadata:
+      labels:
+        app: daalu-api
+        {{- include "daalu.labels" . | nindent 8 }}
+    spec:
+      {{- if .Values.remediator.enabled }}
+      # Mount the daalu-remediator SA token so core.kube_tools can talk
+      # to the API server via in-cluster config. RBAC is defined in
+      # templates/remediator-rbac.yaml; the token only carries the perms
+      # granted by the daalu-remediator-read + -write ClusterRoles.
+      serviceAccountName: {{ .Values.remediator.serviceAccountName }}
+      automountServiceAccountToken: true
+      {{- else }}
+      automountServiceAccountToken: false
+      {{- end }}
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecret }}
+      securityContext:
+        {{- include "daalu.podSecurityContext" . | nindent 8 }}
+      {{- if .Values.api.runAlembicInitContainer }}
+      initContainers:
+        - name: alembic-upgrade
+          image: {{ include "daalu.backendImage" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["alembic", "upgrade", "head"]
+          envFrom:
+            {{- include "daalu.envFrom" . | nindent 12 }}
+          env:
+            {{- include "daalu.commonEnv" . | nindent 12 }}
+          securityContext:
+            {{- include "daalu.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits:   { cpu: 200m, memory: 256Mi }
+      {{- end }}
+      containers:
+        - name: api
+          image: {{ include "daalu.backendImage" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["daalu", "server", "--host", "0.0.0.0", "--port", "8000"]
+          ports:
+            - containerPort: 8000
+          envFrom:
+            {{- include "daalu.envFrom" . | nindent 12 }}
+          env:
+            {{- include "daalu.commonEnv" . | nindent 12 }}
+          securityContext:
+            {{- include "daalu.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}
+      volumes:
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: daalu-api
+  labels:
+    {{- include "daalu.labels" . | nindent 4 }}
+    app: daalu-api
+spec:
+  selector:
+    app: daalu-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000

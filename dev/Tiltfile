@@ -1,0 +1,42 @@
+# Inner-loop dev with Tilt — file change → rebuild → kubectl apply
+# in a tight loop. Run `tilt up` from the repo root after `bash
+# dev/bootstrap.sh` (Tilt assumes the Kind cluster + monitoring stack
+# already exist).
+#
+# Tilt is optional. For "I just want to run it once," bootstrap.sh
+# alone is enough. Tilt earns its keep when you're iterating on
+# Python or React.
+
+# Backend — rebuild image on src/ change.
+docker_build(
+    "daalu-automation",
+    context=".",
+    dockerfile="Dockerfile",
+    only=["src/", "pyproject.toml", "alembic.ini", "migrations/"],
+    live_update=[
+        sync("./src/", "/app/src/"),
+        run("pip install -e .", trigger=["./pyproject.toml"]),
+        restart_container(),
+    ],
+)
+
+# Frontend — Next.js dev server with hot reload.
+docker_build(
+    "daalu-automation-frontend",
+    context="./frontend",
+    dockerfile="./frontend/Dockerfile",
+    only=["frontend/"],
+    live_update=[
+        sync("./frontend/app", "/app/app"),
+        sync("./frontend/components", "/app/components"),
+        sync("./frontend/lib", "/app/lib"),
+    ],
+)
+
+# Apply the same manifests bootstrap.sh used (sed'd to point at the
+# locally-built images).
+k8s_yaml(kustomize("deploy/k8s"))
+
+# Port-forwards so the inner-loop URLs match bootstrap.sh.
+k8s_resource("daalu-api",       port_forwards=["8000:8000"])
+k8s_resource("daalu-frontend",  port_forwards=["3001:3000"])
