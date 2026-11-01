@@ -30,6 +30,16 @@ IFACE=wg0
 # How often the fallback reconcile runs. Fast enough that onboarding
 # never waits long even if the inotify path misbehaves.
 RECONCILE_INTERVAL="${WG_RECONCILE_INTERVAL:-15}"
+# Docker Compose (file-backed hub): there is no pod for the API to exec
+# `wg show` in, so the hub writes the dump to this path every tick and the
+# health task reads it. Unset under Kubernetes (the mount is read-only).
+DUMP_PATH="${WG_DUMP_PATH:-}"
+
+write_dump() {
+  [[ -n "$DUMP_PATH" ]] || return 0
+  wg show "$IFACE" dump > "$DUMP_PATH.tmp" 2>/dev/null \
+    && mv -f "$DUMP_PATH.tmp" "$DUMP_PATH" || true
+}
 
 if [[ ! -s "$CONFIG" ]]; then
   echo "[wg-hub] $CONFIG missing or empty — waiting for coordinator to seed it"
@@ -42,8 +52,13 @@ fi
 # interface up. If the coordinator rotates the hub key the file changes
 # wholesale; a syncconf can't swap the interface's own private key, so
 # that (rare) case still relies on a pod restart.
+# A crash (no TERM, so no wg-quick down) leaves wg0 behind in a network
+# namespace that outlives the container (the host under hostNetwork, the
+# shared netns under Compose). Clear it so wg-quick up doesn't fail.
+ip link del "$IFACE" 2>/dev/null || true
 wg-quick up "$IFACE"
 echo "[wg-hub] interface $IFACE up"
+write_dump
 
 cleanup() {
   echo "[wg-hub] shutdown signal — bringing $IFACE down"
@@ -66,7 +81,9 @@ reconcile() {
   else
     echo "[wg-hub] WARNING: syncconf failed — leaving running peers intact"
   fi
+  write_dump
 }
+
 
 # (a) Event-driven: watch the directory so we catch the `..data` symlink
 # swap (create/moved_to) that a file-path watch misses. The directory

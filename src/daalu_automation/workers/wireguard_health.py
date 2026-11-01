@@ -28,6 +28,7 @@ Each tick:
 from __future__ import annotations
 
 import asyncio
+import os
 from datetime import datetime, timezone
 
 import structlog
@@ -38,6 +39,7 @@ from daalu_automation.core.wireguard import (
     HubSecretUnavailable,
     _load_in_cluster_core_v1,
     _resolve_namespace,
+    hub_config_file,
     sync_hub_secret,
 )
 from daalu_automation.database import AsyncSessionLocal, engine
@@ -115,23 +117,39 @@ async def _poll_once() -> dict[str, int]:
     (mostly useful for ``celery events`` debugging).
     """
     settings = get_settings()
-    try:
-        ns = _resolve_namespace()
-        core_v1, kube_client = _load_in_cluster_core_v1()
-    except HubSecretUnavailable as e:
-        logger.warning("wireguard.health.no_cluster", error=str(e))
-        return {"observed": 0, "updated": 0, "reason": "no_cluster"}
+    conf_path = hub_config_file()
+    if conf_path:
+        # File-backed hub (Docker Compose): the hub writes its dump next to
+        # the config every reconcile tick; there is no pod to exec into.
+        dump_path = settings.wireguard_hub_dump_path or os.path.join(
+            os.path.dirname(conf_path), "wg0.dump"
+        )
 
-    def _dump_blocking() -> tuple[str | None, str]:
-        pod_name = _find_hub_pod(core_v1, ns)
-        if pod_name is None:
-            return None, ""
+        def _dump_blocking() -> tuple[str | None, str]:
+            try:
+                with open(dump_path, encoding="utf-8") as fh:
+                    return "wg-hub", fh.read()
+            except FileNotFoundError:
+                return None, ""
+
+    else:
         try:
-            text = _exec_wg_show(core_v1, kube_client, ns, pod_name)
-        except Exception as e:  # noqa: BLE001
-            logger.warning("wireguard.health.exec_failed", error=str(e))
-            return pod_name, ""
-        return pod_name, text
+            ns = _resolve_namespace()
+            core_v1, kube_client = _load_in_cluster_core_v1()
+        except HubSecretUnavailable as e:
+            logger.warning("wireguard.health.no_cluster", error=str(e))
+            return {"observed": 0, "updated": 0, "reason": "no_cluster"}
+
+        def _dump_blocking() -> tuple[str | None, str]:
+            pod_name = _find_hub_pod(core_v1, ns)
+            if pod_name is None:
+                return None, ""
+            try:
+                text = _exec_wg_show(core_v1, kube_client, ns, pod_name)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("wireguard.health.exec_failed", error=str(e))
+                return pod_name, ""
+            return pod_name, text
 
     pod_name, dump = await asyncio.to_thread(_dump_blocking)
     if pod_name is None:

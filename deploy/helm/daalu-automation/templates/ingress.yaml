@@ -5,18 +5,22 @@ metadata:
   name: daalu-ingress
   labels: {{- include "daalu.labels" . | nindent 4 }}
   annotations:
+    {{- if .Values.ingress.tlsEnabled }}
     cert-manager.io/cluster-issuer: {{ .Values.ingress.clusterIssuer }}
+    {{- end }}
     {{- with .Values.ingress.annotations }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
 spec:
   ingressClassName: {{ .Values.ingress.className }}
+  {{- if .Values.ingress.tlsEnabled }}
   tls:
     - hosts: [{{ .Values.ingress.host }}]
       secretName: {{ .Values.ingress.tlsSecretName }}
+  {{- end }}
   rules:
-    - host: {{ .Values.ingress.host }}
-      http:
+    # An empty host matches any hostname (handy for a local kind install).
+    - http:
         paths:
           # /api routes hit the backend FastAPI — REST + the SSE feed.
           - path: /api
@@ -42,4 +46,7 @@ spec:
                 name: daalu-frontend
                 port:
                   number: 80
+      {{- with .Values.ingress.host }}
+      host: {{ . }}
+      {{- end }}
 {{- end }}

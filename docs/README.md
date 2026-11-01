@@ -7,8 +7,9 @@ Start here:
 2. **[system-walkthrough.md](system-walkthrough.md)** — low-level
    design with code references for every subsystem, plus end-to-end
    trace examples. Read this with the codebase open.
-3. **[getting-started.md](getting-started.md)** — run the full stack
-   locally in 10 minutes.
+3. **[getting-started.md](getting-started.md)** — install from scratch with
+   Docker Compose (quick start) or Kubernetes (Helm), then give Daalu a
+   cluster to manage.
 4. **[extending.md](extending.md)** — add a new domain module (Support,
    Finance, HR, …) without touching platform code.
 5. **[Helm chart](book-engineer/08-deployment-and-cicd/44-helm-chart.md)**

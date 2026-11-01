@@ -27,6 +27,7 @@ so the Secret is always derivable from the DB.
 from __future__ import annotations
 
 import base64
+import contextlib
 import ipaddress
 import secrets
 from collections.abc import Iterable
@@ -268,6 +269,61 @@ def _resolve_namespace() -> str:
         raise HubSecretUnavailable("not running in-cluster (no SA mount)") from e
 
 
+def hub_config_file() -> str | None:
+    """Path of the file-backed hub config, or None in Secret mode."""
+    from daalu_automation.config import get_settings
+
+    return get_settings().wireguard_hub_config_path or None
+
+
+def _ensure_hub_config_file(path: str, *, listen_port: int, hub_address: str) -> str:
+    """Return the hub config at ``path``, seeding a fresh keypair if absent.
+
+    File mode has no install-time step to seed the hub key (the Helm path
+    uses wireguard.hubPrivateKey), so the first caller generates one and
+    writes a peerless config — the hub container waits for this file.
+    """
+    try:
+        with open(path, encoding="utf-8") as fh:
+            existing = fh.read()
+        if existing.strip():
+            return existing
+    except FileNotFoundError:
+        pass
+    seeded = render_hub_config(
+        hub_privkey=generate_keypair().privkey_plaintext,
+        listen_port=listen_port,
+        hub_address=hub_address,
+        peers=[],
+    )
+    _write_hub_config_file(path, seeded)
+    logger.info("wireguard.hub_config_seeded", path=path)
+    return seeded
+
+
+def _write_hub_config_file(path: str, text: str) -> None:
+    """Atomically replace ``path`` (tmp + rename in the same directory).
+
+    The rename lands as a ``moved_to`` event on the hub's directory watch,
+    so the hub runs ``wg syncconf`` straight away.
+    """
+    import os
+    import tempfile
+
+    directory = os.path.dirname(path) or "."
+    os.makedirs(directory, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=directory, prefix=".wg0.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, path)
+    except Exception:
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(tmp)
+        raise
+
+
 async def sync_hub_secret(
     db: AsyncSession,
     *,
@@ -294,6 +350,40 @@ async def sync_hub_secret(
     import re
 
     peers = await collect_live_peers(db)
+
+    conf_path = hub_config_file()
+    if conf_path:
+        try:
+            existing_file = await asyncio.to_thread(
+                _ensure_hub_config_file,
+                conf_path,
+                listen_port=listen_port,
+                hub_address=hub_address,
+            )
+        except OSError as e:
+            raise HubSecretUnavailable(f"hub config {conf_path}: {e}") from e
+        m = re.search(r"^PrivateKey\s*=\s*(\S+)", existing_file, flags=re.MULTILINE)
+        if hub_privkey_ciphertext is not None:
+            file_privkey = decrypt_secret(hub_privkey_ciphertext)
+        elif m:
+            file_privkey = m.group(1)
+        else:
+            raise HubSecretUnavailable(f"hub config {conf_path} has no PrivateKey")
+        rendered = render_hub_config(
+            hub_privkey=file_privkey,
+            listen_port=listen_port,
+            hub_address=hub_address,
+            peers=peers,
+        )
+        if rendered != existing_file:
+            try:
+                await asyncio.to_thread(_write_hub_config_file, conf_path, rendered)
+            except OSError as e:
+                raise HubSecretUnavailable(f"write {conf_path} failed: {e}") from e
+        written = sum(1 for p in peers if p.customer_pubkey)
+        logger.info("wireguard.sync_hub_config_file", peer_count=written)
+        return written
+
     ns = _resolve_namespace()
     core_v1, _kclient = _load_in_cluster_core_v1()
 
@@ -407,9 +497,15 @@ def render_edge_install_snippet(
     """
     import os
 
-    tag = edge_image_tag or os.environ.get("BUILD_SHA", "") or "latest"
+    from daalu_automation.config import get_settings
+
+    settings = get_settings()
+    build_sha = os.environ.get("BUILD_SHA", "")
+    if build_sha == "unknown":
+        build_sha = ""
+    tag = edge_image_tag or settings.edge_image_tag or build_sha or "latest"
     return (
-        "helm install daalu-edge oci://ghcr.io/kiwueke1/charts/daalu-edge \\\n"
+        f"helm install daalu-edge {settings.edge_chart_ref} \\\n"
         f"  --set image.tag={tag} \\\n"
         f"  --set cluster.slug={cluster_slug} \\\n"
         f"  --set cluster.tunnelIp={tunnel_ip} \\\n"

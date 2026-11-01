@@ -63,8 +63,10 @@ helm upgrade daalu-automation deploy/helm/daalu-automation \
   --set image.frontend.tag=$(git rev-parse HEAD)
 ```
 
-The API deployment runs `alembic upgrade head` in an init container at
-startup, so schema migrations roll out automatically with the image.
+The API deployment runs `daalu migrate` in an init container at startup:
+on an empty database it creates the schema and stamps it at head, and on an
+existing one it runs `alembic upgrade head`. Schema migrations roll out
+automatically with the image.
 
 ## Uninstall
 

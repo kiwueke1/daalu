@@ -1,34 +1,37 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  Daalu demo lab (hosted) — a monitored test cluster wired to daalu.example.com.
+#  Daalu demo lab — a monitored kind cluster for Daalu to manage.
 # -----------------------------------------------------------------------------
-#  Stands up a throwaway kind cluster on THIS machine (e.g. a lab box), installs a
-#  monitoring stack + a breakable dummy app, then connects it to your hosted
-#  Daalu at daalu.example.com over the WireGuard edge tunnel and registers the
-#  Prometheus / Loki / Kubernetes integrations — all in one command.
+#  Stands up a throwaway kind cluster on THIS machine, installs a monitoring
+#  stack (Prometheus, Alertmanager, Grafana, Loki) and two breakable apps, then
+#  connects it to your Daalu over the WireGuard edge tunnel and registers the
+#  Prometheus / Loki / Kubernetes integrations.
 #
-#  Unlike the self-hosted demo (which co-locates Daalu on the kind network),
-#  the hosted Daalu reaches this cluster through the daalu-edge tunnel:
-#    • kubectl  → the edge's apiserver-proxy on  <tunnelIp>:6443
-#    • Prom/Loki → the edge's HTTP proxy on       <tunnelIp>:8888  (in-cluster URLs)
+#  Daalu reaches this cluster through the daalu-edge tunnel, exactly as it
+#  reaches a cluster in another network:
+#    • kubectl   → the edge's apiserver-proxy on  <tunnelIp>:6443
+#    • Prom/Loki → the edge's HTTP proxy on       <tunnelIp>:8888 (in-cluster URLs)
 #
-#  Prereqs on this machine: docker, kind, kubectl, helm, curl, python3, and
-#  outbound UDP to wg.example.com:51820 (the tunnel). The kind cluster must be
-#  able to pull ghcr.io/kiwueke1/daalu-edge (public, or add a pull secret).
+#  Prereqs: docker, kind, kubectl, helm, curl, python3 (+ PyYAML), and outbound
+#  UDP to the Daalu hub (port 51820).
 #
 #  Required env:
-#    DAALU_TOKEN   a `dpat_` personal access token from
-#                  daalu.example.com → Settings → API tokens (tenant-admin).
+#    DAALU_TOKEN   a `dpat_` personal access token (Daalu → Settings → API tokens)
 #  Optional env:
-#    DAALU_API     default https://daalu.example.com
-#    CLUSTER_SLUG  default daalu-demo  (the cluster's tunnel slug on the hub)
+#    DAALU_API     Daalu's URL. Default http://localhost:8000 (Docker Compose);
+#                  use http://localhost:8080 for the kind/Helm install.
+#    CLUSTER_SLUG  default daalu-demo  (the cluster's name in Daalu)
+#    SKIP_ONBOARD  1 = build the cluster + monitoring + apps only, and add the
+#                  cluster yourself from the UI (Managed infrastructure → Add
+#                  cluster). DAALU_TOKEN isn't needed in this mode.
 #
 #  Usage:    DAALU_TOKEN=dpat_... ./demo/up.sh
+#            SKIP_ONBOARD=1 ./demo/up.sh
 #  Teardown: DAALU_TOKEN=dpat_... ./demo/down.sh
 # =============================================================================
 set -euo pipefail
 
-DAALU_API="${DAALU_API:-https://daalu.example.com}"; DAALU_API="${DAALU_API%/}"
+DAALU_API="${DAALU_API:-http://localhost:8000}"; DAALU_API="${DAALU_API%/}"
 CLUSTER_SLUG="${CLUSTER_SLUG:-daalu-demo}"
 CLUSTER="daalu-demo"                       # local kind cluster name
 BIND_ADDR="${DEMO_BIND_ADDR:-0.0.0.0}"     # where the monitoring NodePorts publish (browser only)
@@ -41,7 +44,8 @@ ok(){ printf "%s\n" "${GRN}✔${RST} $*"; }
 warn(){ printf "%s\n" "${YLW}!${RST} $*"; }
 die(){ printf "%s\n" "${RED}✘ $*${RST}" >&2; exit 1; }
 
-: "${DAALU_TOKEN:?set DAALU_TOKEN to a dpat_ PAT — daalu.example.com → Settings → API tokens}"
+SKIP_ONBOARD="${SKIP_ONBOARD:-0}"
+[ "$SKIP_ONBOARD" = "1" ] || : "${DAALU_TOKEN:?set DAALU_TOKEN to a dpat_ PAT (Daalu → Settings → API tokens), or SKIP_ONBOARD=1}"
 
 # Find kind/kubectl/helm in PATH or the demo's bin dir.
 export PATH="$PATH:${DAALU_DEMO_BINDIR:-$HOME/.daalu/bin}"
@@ -60,12 +64,20 @@ api(){ # api METHOD PATH [JSON-body]
     curl -fsS -X "$m" "${DAALU_API}${p}" -H "Authorization: Bearer ${DAALU_TOKEN}"
   fi
 }
-jget(){ python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get(sys.argv[1],""))' "$1"; }
+jget(){ python3 -c '
+import sys, json
+try:
+    print(json.load(sys.stdin).get(sys.argv[1], ""))
+except Exception:
+    print("")
+' "$1"; }
 
-say "Checking the hosted API at ${DAALU_API}"
-api GET /api/v1/clusters >/dev/null 2>&1 \
-  || die "couldn't reach ${DAALU_API} with this token. Check the URL and that DAALU_TOKEN is a valid tenant-admin dpat_ token."
-ok "authenticated to ${DAALU_API}"
+if [ "$SKIP_ONBOARD" != "1" ]; then
+  say "Checking the Daalu API at ${DAALU_API}"
+  api GET /api/v1/clusters >/dev/null 2>&1 \
+    || die "couldn't reach ${DAALU_API} with this token. Check the URL and that DAALU_TOKEN is a valid tenant-admin dpat_ token."
+  ok "authenticated to ${DAALU_API}"
+fi
 
 # ── 1. kind cluster ──────────────────────────────────────────────────────────
 if kind get clusters 2>/dev/null | grep -qx "$CLUSTER"; then
@@ -110,6 +122,24 @@ kubectl -n daalu-demo rollout status deploy/dummy-app  --timeout=3m
 kubectl -n daalu-demo rollout status deploy/metrics-app --timeout=3m
 ok "dummy-app + metrics-app running"
 
+if [ "$SKIP_ONBOARD" = "1" ]; then
+  cat <<EOF
+
+${GRN}✔ Demo cluster is up (not yet connected to Daalu).${RST}
+
+  Grafana:       http://${BROWSE_HOST}:3001   (admin / admin)
+  Prometheus:    http://${BROWSE_HOST}:9090
+  Alertmanager:  http://${BROWSE_HOST}:9093
+
+  Next, in Daalu: Managed infrastructure → Add cluster. Run the helm command
+  it prints against this cluster (kubectl context: kind-${CLUSTER}).
+  Then add the integrations (Prometheus / Loki bound to the cluster), using:
+     http://prometheus-operated.monitoring.svc.cluster.local:9090
+     http://loki.monitoring.svc.cluster.local:3100
+EOF
+  exit 0
+fi
+
 # ── 3. Onboard the cluster onto the hub (WireGuard edge tunnel) ───────────────
 say "Onboarding the cluster '${CLUSTER_SLUG}' to ${DAALU_API}"
 ONBOARD="$(api POST /api/v1/clusters "{\"slug\":\"${CLUSTER_SLUG}\",\"name\":\"Daalu demo lab\"}" 2>/dev/null || true)"
@@ -131,7 +161,7 @@ else
   printf '%s' "$ONBOARD" | python3 -c 'import sys,json; print(json.load(sys.stdin)["install_snippet"])' > "${HERE}/.edge-install.sh"
   ok "cluster row created — tunnel IP ${TUNNEL_IP}, id ${TUNNEL_ID}"
 
-  say "Installing daalu-edge into the kind cluster (dials wg.example.com)"
+  say "Installing daalu-edge into the kind cluster (dials the Daalu hub)"
   # The snippet targets the current kubeconfig context (kind-${CLUSTER}).
   bash "${HERE}/.edge-install.sh" || die "helm install daalu-edge failed (image pullable? see README on a ghcr pull secret)."
   rm -f "${HERE}/.edge-install.sh"
@@ -194,7 +224,7 @@ ${GRN}✔ Demo lab is up and connected to ${DAALU_API}.${RST}
      Alertmanager:  http://${BROWSE_HOST}:9093
 
   In Daalu (${DAALU_API}):
-     • Managed infra → Kubernetes/Observability show this cluster connected.
+     • Managed infra → Clusters & observability shows this cluster connected.
      • Run the demo:
          ${BOLD}./demo/break.sh${RST}      # break the app (default: a bad image)
        …then open Daalu → Alerts. Within ~2–3 min the DummyAppDown alert appears;

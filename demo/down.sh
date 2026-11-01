@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  Tear down the hosted Daalu demo lab.
+#  Tear down the Daalu demo lab.
 # -----------------------------------------------------------------------------
-#  Deletes the kind cluster and detaches it from the hosted Daalu at
+#  Deletes the kind cluster and detaches it from Daalu at
 #  ${DAALU_API}: removes the prometheus/loki/kubernetes integration rows and the
 #  cluster (tunnel) row. Detaching the cluster also frees its tunnel IP and lets
 #  a fresh ./demo/up.sh mint a new one-shot invite token.
 #
 #  Required env (for the detach step): DAALU_TOKEN  (the same dpat_ PAT).
-#  Optional env: DAALU_API (default https://daalu.example.com), CLUSTER_SLUG.
+#  Optional env: DAALU_API (default http://localhost:8000), CLUSTER_SLUG.
 #
 #  Usage:  DAALU_TOKEN=dpat_... ./demo/down.sh
 # =============================================================================
 set -euo pipefail
 export PATH="$PATH:${DAALU_DEMO_BINDIR:-$HOME/.daalu/bin}"
 
-DAALU_API="${DAALU_API:-https://daalu.example.com}"; DAALU_API="${DAALU_API%/}"
+DAALU_API="${DAALU_API:-http://localhost:8000}"; DAALU_API="${DAALU_API%/}"
 CLUSTER_SLUG="${CLUSTER_SLUG:-daalu-demo}"
 CLUSTER="daalu-demo"
 

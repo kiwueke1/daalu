@@ -35,7 +35,10 @@ spec:
         - name: alembic-upgrade
           image: {{ include "daalu.backendImage" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["alembic", "upgrade", "head"]
+          # `daalu migrate`, not raw alembic: on an empty database it creates
+          # the schema and stamps head (the first migration alters tables
+          # that only exist after that); otherwise it runs upgrade head.
+          command: ["daalu", "migrate"]
           envFrom:
             {{- include "daalu.envFrom" . | nindent 12 }}
           env:

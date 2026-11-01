@@ -1,0 +1,213 @@
+# Daalu on one machine with Docker Compose: the quick-start install.
+#
+#   cp .env.example .env        # then set ADMIN_EMAIL / ADMIN_PASSWORD,
+#                               # DAALU_HOST_IP and an LLM key (see the guide)
+#   docker compose up -d --build
+#   open http://localhost:3000
+#
+# Full walkthrough: docs/getting-started.md (Method 1).
+#
+# Networking: the WireGuard hub, API, worker, agent host and executor share
+# one network namespace, owned by the tiny `net` container (the same pattern
+# as a Kubernetes pod's pause container). That gives them a route to the
+# 10.200.0.0/16 tunnel mesh, so clusters you add from the UI
+# (Managed infra → Onboard cluster) are reachable exactly as they are under
+# Kubernetes, and restarting any one of them leaves the others' networking
+# intact. The API's published port (8000) and its in-network name (`api`)
+# therefore live on the `net` service.
+
+x-backend: &backend
+  image: daalu-automation:local
+  build:
+    context: .
+  env_file:
+    - path: .env
+      required: false
+  restart: unless-stopped
+  healthcheck:
+    disable: true
+  depends_on: &backend-deps
+    migrate:
+      condition: service_completed_successfully
+
+x-backend-env: &backend-env
+  # Container-network addresses override the localhost values in .env, so
+  # the same .env works for both Compose and running from source.
+  DATABASE_URL: postgresql+asyncpg://daalu:daalu_password@postgres:5432/daalu_automation
+  DATABASE_SYNC_URL: postgresql://daalu:daalu_password@postgres:5432/daalu_automation
+  REDIS_URL: redis://redis:6379/0
+  CELERY_BROKER_URL: redis://redis:6379/0
+  CELERY_RESULT_BACKEND: redis://redis:6379/1
+  AUTH_COOKIE_SECURE: "false"
+  CORS_ORIGINS: '["http://localhost:3000","http://${DAALU_HOST_IP:-localhost}:3000"]'
+  # File-backed WireGuard hub (shared volume with the wg-hub service).
+  WIREGUARD_HUB_CONFIG_PATH: /etc/wireguard/wg0.conf
+  WIREGUARD_HUB_DUMP_PATH: /etc/wireguard/wg0.dump
+  # What a managed cluster's daalu-edge dials. Empty DAALU_HOST_IP leaves
+  # cluster onboarding disabled (the UI explains what to set).
+  WIREGUARD_PUBLIC_ENDPOINT: ${DAALU_HOST_IP:-}
+  OPERATOR_API_PUBLIC_URL: ${DAALU_HOST_IP:+http://${DAALU_HOST_IP}:8000}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: daalu_automation
+      POSTGRES_USER: daalu
+      POSTGRES_PASSWORD: daalu_password
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U daalu -d daalu_automation"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # One-shot: schema (create on first run, upgrade after), default tenant,
+  # admin login. Safe to re-run; `docker compose up` runs it every time.
+  migrate:
+    image: daalu-automation:local
+    build:
+      context: .
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      <<: *backend-env
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
+    command:
+      - sh
+      - -c
+      - >-
+        daalu migrate &&
+        daalu seed &&
+        daalu create-admin --email "$$ADMIN_EMAIL" --password "$$ADMIN_PASSWORD"
+    healthcheck:
+      disable: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Owns the shared network namespace (see the header). Never restarts on
+  # its own, so the services that join it keep their networking.
+  net:
+    image: registry.k8s.io/pause:3.10
+    restart: unless-stopped
+    ports:
+      - "8000:8000"         # daalu-api
+      # WireGuard, dialled by managed clusters. Bound to DAALU_HOST_IP so
+      # replies leave from the address the edge dialled: with a wildcard
+      # bind, Docker's UDP proxy answers a kind cluster on this host from
+      # the bridge gateway instead, and the kind node's NAT drops it.
+      - "${DAALU_HOST_IP:-0.0.0.0}:51820:51820/udp"
+    networks:
+      default:
+        aliases: [api]
+
+  # WireGuard hub for managed clusters.
+  wg-hub:
+    image: daalu-wg-hub:local
+    build:
+      context: deploy/wg-hub
+    restart: unless-stopped
+    cap_add: [NET_ADMIN, NET_RAW]
+    environment:
+      WG_DUMP_PATH: /etc/wireguard/wg0.dump
+    # The API (uid 1000) writes wg0.conf into the shared volume.
+    entrypoint:
+      - sh
+      - -c
+      - chown 1000:1000 /etc/wireguard && exec /entrypoint.sh
+    network_mode: service:net
+    volumes:
+      - wireguard:/etc/wireguard
+    depends_on:
+      net:
+        condition: service_started
+
+  api:
+    <<: *backend
+    command: ["daalu", "server", "--host", "0.0.0.0", "--port", "8000"]
+    network_mode: service:net
+    environment: *backend-env
+    volumes:
+      - wireguard:/etc/wireguard
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    depends_on:
+      <<: *backend-deps
+      net:
+        condition: service_started
+
+  worker:
+    <<: *backend
+    command: ["daalu", "worker", "--concurrency", "4"]
+    network_mode: service:net
+    environment: *backend-env
+    volumes:
+      - wireguard:/etc/wireguard
+    depends_on:
+      <<: *backend-deps
+      net:
+        condition: service_started
+
+  beat:
+    <<: *backend
+    command: ["daalu", "beat"]
+    environment: *backend-env
+
+  agents:
+    <<: *backend
+    command: ["daalu", "agents"]
+    network_mode: service:net
+    environment: *backend-env
+    depends_on:
+      <<: *backend-deps
+      net:
+        condition: service_started
+
+  executor:
+    <<: *backend
+    command: ["daalu", "executor", "--concurrency", "2"]
+    network_mode: service:net
+    environment:
+      <<: *backend-env
+      EXECUTOR_JWT_SCOPE: executor
+    depends_on:
+      <<: *backend-deps
+      net:
+        condition: service_started
+
+  frontend:
+    image: daalu-automation-frontend:local
+    build:
+      context: frontend
+      args:
+        NEXT_PUBLIC_API_BASE_URL: http://api:8000
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  wireguard:

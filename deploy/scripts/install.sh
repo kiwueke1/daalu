@@ -166,6 +166,12 @@ if [[ -n "$REGISTRY" ]]; then
 else
   IMAGE_ARGS=(--set "image.pullSecret=$GHCR_SECRET_NAME")
 fi
+# First install: seed the WireGuard hub keypair. Without it the hub Secret has
+# no wg0.conf and cluster onboarding fails. The coordinator owns it afterwards.
+if ! kubectl -n "$NAMESPACE" get secret daalu-wireguard-peers \
+     -o jsonpath='{.data.wg0\.conf}' 2>/dev/null | grep -q .; then
+  IMAGE_ARGS+=(--set "wireguard.hubPrivateKey=$(python3 -c 'import base64,os;print(base64.b64encode(os.urandom(32)).decode())')")
+fi
 helm upgrade --install "$RELEASE" "$CHART_DIR" \
   --namespace "$NAMESPACE" \
   --set "ingress.host=$HOST" \
@@ -198,6 +204,7 @@ Daalu Automation is up.
 Next:
   1. Point an A/AAAA record for $HOST at the cluster's ingress IP.
      (Cloudflare → proxied is fine; cert-manager uses HTTP-01.)
-  2. Seed the default tenant once:
+  2. Seed the default tenant and create your login once:
      kubectl -n $NAMESPACE exec deploy/daalu-api -- daalu seed
+     kubectl -n $NAMESPACE exec -it deploy/daalu-api -- daalu create-admin
 EOF

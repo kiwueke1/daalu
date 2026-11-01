@@ -28,25 +28,36 @@ hosted API. The platform runs the same way with either.
 
 ---
 
-## Quick start: on one machine (about 10 minutes)
+## Quick start: Docker Compose (about 10 minutes)
 
-You need `docker`, `kind`, `kubectl` and `helm`.
+You need Docker with the Compose plugin, on Linux.
 
 ```bash
 git clone https://github.com/kiwueke1/daalu.git
 cd daalu
-cp .env.example .env          # optional: set LLM_API_KEY / ANTHROPIC_API_KEY,
-                              # or point LLM_LOCAL_BASE_URL at your own vLLM
-make bootstrap-dev            # kind cluster + ingress + monitoring + Daalu
+cp .env.example .env
+# edit .env: ADMIN_EMAIL, ADMIN_PASSWORD, DAALU_HOST_IP (`hostname -I`),
+# and a model: LLM_LOCAL_BASE_URL (your own vLLM/Ollama), LLM_API_KEY or ANTHROPIC_API_KEY
+docker compose up -d --build
 ```
 
-Then open **http://localhost:8080** and sign in with the admin email and
-password the script prints at the end. Set `ADMIN_EMAIL` / `ADMIN_PASSWORD` to
-choose them. The script also prints port-forward commands for Grafana and
-Prometheus. `make bootstrap-dev` builds the images locally and loads them into
-kind, so you don't need a registry.
+Then open **http://localhost:3000** and sign in with `ADMIN_EMAIL` /
+`ADMIN_PASSWORD`. The API is on http://localhost:8000.
 
-For a breakable test workload that fires real alerts, see [`demo/`](demo/README.md).
+**Give it a cluster to manage.** [`demo/`](demo/README.md) builds a separate,
+monitored kind cluster with apps you can break, and connects it to Daalu over
+the WireGuard tunnel:
+
+```bash
+export DAALU_TOKEN=dpat_...     # Daalu → Settings → API tokens
+./demo/up.sh                    # or SKIP_ONBOARD=1 ./demo/up.sh, then onboard it from the UI
+./demo/break.sh                 # then watch Daalu → Alerts
+```
+
+**Prefer Kubernetes?** `make bootstrap-dev` installs Daalu with the Helm chart on
+a local kind cluster (UI on http://localhost:8080), the same topology as a
+production install. Both methods, step by step:
+[docs/getting-started.md](docs/getting-started.md).
 
 ### Running from source (for development)
 
@@ -60,7 +71,7 @@ docker run -d --name daalu-postgres -e POSTGRES_DB=daalu_automation \
   -p 5432:5432 postgres:16-alpine
 docker run -d --name daalu-redis -p 6379:6379 redis:7-alpine
 
-alembic upgrade head
+daalu migrate                 # creates the schema on a fresh DB, upgrades after
 daalu seed                    # default tenant
 daalu create-admin            # your login (prompts for email + password)
 daalu server --reload         # API on :8000
@@ -103,7 +114,7 @@ one node `daalu.io/wireguard-hub=true` and open UDP 51820 to it. If you prefer G
 together. Point the ArgoCD apps at your fork and your own overlay.
 
 To connect another cluster, install the edge chart there. The hub UI
-(**Managed infrastructure → Add cluster**) prints the exact command:
+(**Managed infra → Clusters & observability → Onboard cluster**) prints the exact command:
 
 ```bash
 helm install daalu-edge deploy/helm/daalu-edge -n daalu-edge --create-namespace \
@@ -150,7 +161,7 @@ helm install daalu-edge deploy/helm/daalu-edge -n daalu-edge --create-namespace 
 
 - [docs/architecture.md](docs/architecture.md): how the pieces fit together
 - [docs/system-walkthrough.md](docs/system-walkthrough.md): low-level design with code references
-- [docs/getting-started.md](docs/getting-started.md): running the stack locally
+- [docs/getting-started.md](docs/getting-started.md): installing with Docker Compose or Kubernetes, and adding a cluster to manage
 - [docs/extending.md](docs/extending.md): adding a domain module
 - [docs/cluster-tunnel-feature.md](docs/cluster-tunnel-feature.md): the WireGuard federation design
 - [docs/sot-device-management/](docs/sot-device-management/): Nautobot source of truth and device onboarding

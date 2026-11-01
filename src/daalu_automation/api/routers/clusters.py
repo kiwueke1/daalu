@@ -193,11 +193,26 @@ async def _load_hub_pubkey() -> str | None:
     from daalu_automation.core.wireguard import (
         HUB_SECRET_KEY,
         HUB_SECRET_NAME,
+        _ensure_hub_config_file,
         _load_in_cluster_core_v1,
         _resolve_namespace,
+        hub_config_file,
     )
 
-    def _read() -> str | None:
+    def _read_conf() -> str | None:
+        conf_path = hub_config_file()
+        if conf_path:
+            # File-backed hub (Docker Compose): seed the keypair on first
+            # onboard so the snippet carries a real public key.
+            settings = get_settings()
+            try:
+                return _ensure_hub_config_file(
+                    conf_path,
+                    listen_port=settings.wireguard_listen_port,
+                    hub_address=settings.wireguard_hub_address,
+                )
+            except OSError:
+                return None
         try:
             ns = _resolve_namespace()
             core_v1, _ = _load_in_cluster_core_v1()
@@ -209,7 +224,12 @@ async def _load_hub_pubkey() -> str | None:
         data = (sec.data or {}).get(HUB_SECRET_KEY)
         if not data:
             return None
-        conf = base64.b64decode(data).decode("utf-8")
+        return base64.b64decode(data).decode("utf-8")
+
+    def _read() -> str | None:
+        conf = _read_conf()
+        if not conf:
+            return None
         # The Secret holds the hub's PRIVATE key; we derive the public
         # half here so the operator never copy-pastes the private key
         # into a customer-bound install snippet.

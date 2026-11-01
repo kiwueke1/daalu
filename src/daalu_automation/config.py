@@ -575,6 +575,20 @@ class Settings(BaseSettings):
     # last_handshake_at age to ClusterTunnelStatus.
     wireguard_connected_window_s: int = 180
     wireguard_degraded_window_s: int = 600
+    # File-backed hub (Docker Compose installs). When set, the coordinator
+    # reads/writes wg0.conf at this path on a volume shared with the
+    # wg-hub container instead of patching the in-cluster Secret, and the
+    # health task reads `wg show wg0 dump` from wireguard_hub_dump_path
+    # (written by the hub every reconcile tick) instead of exec'ing into
+    # the hub pod. A hub keypair is generated on first use. Empty (the
+    # default) keeps the Kubernetes Secret behaviour.
+    wireguard_hub_config_path: str = ""
+    wireguard_hub_dump_path: str = ""
+    # Edge install snippet: chart reference and image tag. The tag defaults
+    # to the hub's BUILD_SHA so edges track the hub version; locally built
+    # hubs (BUILD_SHA=unknown) fall back to `latest`.
+    edge_chart_ref: str = "oci://ghcr.io/kiwueke1/charts/daalu-edge"
+    edge_image_tag: str = ""
 
     # ── Source of Truth / reconciler ─────────────────────────────────────────
     # Cadence (seconds) for the Celery-beat drift detector that compares
