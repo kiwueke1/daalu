@@ -82,6 +82,21 @@ folders.
 45. [Frequently asked questions](08-support/45-faq.md)
 46. [Glossary](08-support/46-glossary.md)
 
+## Part IX — AI Operations Maturity
+
+How your team works with the AI SRE, measured — and how to move up the
+AI-Ops Maturity Model. Start with the
+[section overview](09-ai-operations-maturity/README.md).
+
+51. [Where is your team?](09-ai-operations-maturity/51-where-is-your-team.md)
+52. [Setting your autonomy policy](09-ai-operations-maturity/52-setting-your-autonomy-policy.md)
+53. [Investigations and verdicts](09-ai-operations-maturity/53-investigations-and-verdicts.md)
+54. [Runbooks](09-ai-operations-maturity/54-runbooks.md)
+55. [The metrics dashboard](09-ai-operations-maturity/55-metrics-dashboard.md)
+56. [The audit log](09-ai-operations-maturity/56-audit-log.md)
+57. [Running evals](09-ai-operations-maturity/57-running-evals.md)
+58. [Connect your agent with MCP](09-ai-operations-maturity/58-connect-your-agent-with-mcp.md)
+
 ---
 
 **Conventions used in this book**
@@ -98,3 +113,5 @@ single book. Chapters added after the original outline was finalised
 (47–50) slot into the section they thematically belong to rather than
 the numeric end of the book — which is why Part IV's numbering jumps
 from 27 to 47.
+Chapters 51–58 are Part IX, the AI-Ops maturity part, which was added as
+a whole section and so continues the numbering at the end.

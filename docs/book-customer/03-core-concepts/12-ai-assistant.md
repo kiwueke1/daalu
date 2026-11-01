@@ -130,6 +130,55 @@ month of use, and after a while you'll trust it enough to be
 
 ---
 
+## Two approval paths: change proposals and alert actions
+
+The section above describes **change proposals**, which is how Daalu
+gates changes to your *network and servers*: device configuration,
+drift fixes, and server provisioning or power operations. Fixes the
+AI proposes while it investigates an **alert** on a Kubernetes cluster
+use a different, lighter gate. It's easy to mix the two up, so here
+is how they differ.
+
+| | Change proposal | Alert action |
+|---|---|---|
+| What it changes | A device's configuration, or a server's lifecycle | A Kubernetes workload in the alert's cluster: roll back, scale, restart, delete a pod, patch a resource |
+| Where you approve it | *Operations → Proposals* | The **Approve / Reject** card inside the alert's chat |
+| Who runs it | Daalu's executor, a separate service with its own identity | Daalu itself, using the cluster connection you registered |
+| After it runs | Marked executed or failed | Daalu **checks the result**: it waits for the rollout, looks at the pods, and records whether the workload recovered. If it didn't, the AI investigates again; anything new it suggests needs approval again |
+| Governed by your autonomy policy | No | Yes |
+
+**Alert actions follow your autonomy policy.** When the AI wants to
+change a workload during an alert investigation, Daalu checks the
+policy your team has set before anything is queued. Depending on the
+rule that matches, the action is:
+
+- **denied** — no card appears; the AI is told the action isn't
+  allowed and suggests something else, or tells you the manual steps;
+- **sent for approval** — the Approve / Reject card appears, showing
+  which rule decided this and a preview of what the change would
+  touch. A rule can require more than one approver; the card shows how
+  many approvals are still needed, and the same person can't approve
+  twice;
+- **run automatically** — only where your policy explicitly allows it.
+  Daalu still runs the same result check afterwards, and if your
+  policy has a circuit breaker, a rule whose automatic action fails
+  its check is switched back to "needs approval" for a cool-down
+  period.
+
+Actions proposed by an outside AI agent connected over MCP always need
+approval unless your policy's rule specifically allows otherwise.
+
+With no policy configured, every alert action waits for approval, the
+behaviour this chapter describes. To set one up, see
+[Chapter 52 — Setting your autonomy policy](../09-ai-operations-maturity/52-setting-your-autonomy-policy.md).
+
+The AI can also *draft a change proposal* from inside an alert
+investigation, for example when the fix is a switch configuration
+change. That one is still a change proposal: it appears under
+*Operations → Proposals*, not as a card in the chat.
+
+---
+
 ## Examples of useful prompts
 
 Things Daalu's Assistant is genuinely good at, drawn from real

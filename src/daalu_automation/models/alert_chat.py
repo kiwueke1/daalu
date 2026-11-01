@@ -21,7 +21,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -121,3 +121,20 @@ class AlertAction(UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin, Base):
     )
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     executed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # ── AI-Ops maturity (docs/design/ai-ops-maturity.md §3) ──────────────
+    # The autonomy-policy decision that gated this write. ``policy_mode`` is
+    # the *effective* mode (approve | auto); denied writes never get a row.
+    policy_mode: Mapped[str] = mapped_column(String(16), default="", nullable=False)
+    policy_rule: Mapped[str] = mapped_column(String(128), default="", nullable=False)
+    policy_reason: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    approvals_required: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    # [{"user_id": "...", "email": "...", "at": "ISO"}]
+    approvals: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    # Dry-run / blast-radius preview: {"summary", "blast_radius", "details"}.
+    preview: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    auto_executed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Did post-execution verification show the workload recovered?
+    verified_resolved: Mapped[bool | None] = mapped_column(Boolean)
+    # Who proposed it: "agent" or "mcp:<email>".
+    actor: Mapped[str] = mapped_column(String(255), default="agent", nullable=False)

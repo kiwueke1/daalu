@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/kiwueke1/daalu/spec/audit-event.schema.json",
+  "title": "AOMM audit event v0.1",
+  "x-aomm-version": "0.1",
+  "additionalProperties": false,
+  "description": "One link of a tenant's append-only, hash-chained audit log.\n\n``hash = sha256_hex(prev_hash + canonical_json({seq, kind, actor, subject,\ndata, created_at}))`` where canonical JSON has sorted keys, no\nwhitespace (``\",\"`` and ``\":\"`` separators) and ``created_at`` is\nISO-8601 in UTC. The first event has ``seq = 1`` and ``prev_hash = \"\"``.",
+  "properties": {
+    "seq": {
+      "minimum": 1,
+      "title": "Seq",
+      "type": "integer"
+    },
+    "kind": {
+      "description": "A core kind, or an implementation-specific kind prefixed `x-`.",
+      "pattern": "^(tool\\.read|action\\.proposed|action\\.denied|action\\.approved|action\\.approval_recorded|action\\.rejected|action\\.executed|action\\.auto_executed|action\\.verified|policy\\.updated|policy\\.kill_switch|policy\\.breaker_tripped|investigation\\.verdict|runbook\\.published|runbook\\.drafted|mcp\\.call|eval\\.recorded|x-[a-z0-9][a-z0-9._-]*)$",
+      "title": "Kind",
+      "type": "string"
+    },
+    "actor": {
+      "default": "",
+      "description": "Who acted: an email, `agent`, `mcp:<email>`, `verifier`.",
+      "maxLength": 255,
+      "title": "Actor",
+      "type": "string"
+    },
+    "subject": {
+      "default": "",
+      "description": "Usually the alert id.",
+      "maxLength": 255,
+      "title": "Subject",
+      "type": "string"
+    },
+    "data": {
+      "additionalProperties": true,
+      "title": "Data",
+      "type": "object"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "prev_hash": {
+      "default": "",
+      "pattern": "^([0-9a-f]{64})?$",
+      "title": "Prev Hash",
+      "type": "string"
+    },
+    "hash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Hash",
+      "type": "string"
+    }
+  },
+  "required": [
+    "seq",
+    "kind",
+    "created_at",
+    "hash"
+  ],
+  "type": "object"
+}

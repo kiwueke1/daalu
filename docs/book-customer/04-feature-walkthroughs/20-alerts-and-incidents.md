@@ -93,6 +93,47 @@ Click any to jump.
 
 ---
 
+## The AI investigation and approve cards
+
+When the AI investigates an alert, the alert page shows its tabs —
+**Root cause**, **Background**, **Remediation workflow**, **Evidence** —
+and a **Re-triage** button to run a fresh pass.
+
+**Investigation record.** Under the **Root cause** tab, a panel shows the
+learning-loop record for this alert: a resolution chip ("Open",
+"Auto-resolved", "Resolved (approved fix)", "Resolved manually",
+"Unresolved"), **Fix verified** or **Fix did not verify**, time to diagnosis
+and time to resolve, the counts of fixes proposed / approved / rejected /
+auto, and how many runbooks the AI used. Once the AI has named a root cause
+you can grade it here — **Correct**, **Partly right** or **Wrong**, with an
+optional note. **All investigations** opens the same record on the
+Investigations page. See
+[Chapter 53](../09-ai-operations-maturity/53-investigations-and-verdicts.md).
+
+**Approve cards.** Every fix the AI proposes (on the **Remediation workflow**
+tab and in the alert chat) now shows what your autonomy policy decided:
+
+- A policy chip with the mode, and either "rule *name*" or "policy defaults".
+- "Why:" — the policy's reason in plain English.
+- "*n* / *N* approvals" when a fix needs more than one approver. While more
+  than one approval is still needed the button reads **Add my approval**;
+  after you click it you see "Your approval is recorded, waiting for *N*
+  more." The fix runs only when enough different people have approved.
+- A blue **Preview:** line saying what the fix will do ("Roll back
+  deployment … from revision 7 to 6: image … → …. All 2 pod(s) are
+  replaced.") and its blast radius in pods and deployments.
+- **Auto-executed by policy** *rule* when the policy let the fix run on its
+  own — no approval was needed.
+- An **mcp:***email* chip when an external agent proposed the fix over MCP.
+- After the fix runs: **Verified: workload recovered** or **Verification
+  failed**, from the check Daalu runs once the change has settled.
+
+Fixes the policy denies never get a card: the AI is told to propose
+something else. How to write the policy is
+[Chapter 52](../09-ai-operations-maturity/52-setting-your-autonomy-policy.md).
+
+---
+
 ## Promote to incident
 
 Some alerts deserve a full incident — multiple alerts firing

@@ -57,6 +57,10 @@ resolve.
 22. [The Tinkerbell server plane](04-source-of-truth/22-tinkerbell-server-plane.md)
 23. [NV-CM internals & the controller (operator) integration](04-source-of-truth/23-nvcm-internals-and-operator.md)
 79. [Live fabric topology & the in-browser device terminal](04-source-of-truth/79-network-topology-and-device-terminal.md)
+96. [Config rendering, the template tree, and the render_enabled gate](04-source-of-truth/96-config-rendering-and-render-gate.md)
+97. [Config backups, the backup scheduler, and version diffs](04-source-of-truth/97-config-backups-and-diffs.md)
+98. [Cable validation and zero-touch provisioning (ZTP)](04-source-of-truth/98-cable-validation-and-ztp.md)
+99. [NV-CM's MCP server and its workflow allow-list (not `daalu mcp` — see 90)](04-source-of-truth/99-nvcm-mcp-server-and-workflow-allow-list.md)
 
 ## Part V — Cluster Federation
 
@@ -76,6 +80,9 @@ resolve.
 33. [The classifier and routing decisions](06-gpu-and-llm-serving/33-classifier.md)
 34. [The inference-gateway service](06-gpu-and-llm-serving/34-inference-gateway.md)
 80. [Zero-touch GPU onboarding & the AI-factory data plane](06-gpu-and-llm-serving/80-zero-touch-gpu-onboarding.md)
+93. [AIPerf load testing — the benchmark runner behind AI Factory](06-gpu-and-llm-serving/93-aiperf-load-testing.md)
+94. [GPU sharing — time-slicing, MPS, and the per-tenant memory fraction](06-gpu-and-llm-serving/94-gpu-sharing-time-slicing-and-mps.md)
+95. [GPU health — the `dcgmi diag` runner, the Reliability panel, and NVSentinel in observe mode](06-gpu-and-llm-serving/95-gpu-health-dcgmi-diag-and-nvsentinel.md)
 
 The coding-assistant chapters (35, 36, 73) moved to their own section —
 see **Part XIV — The Coding Agent & Workspace IDE** below.
@@ -87,6 +94,7 @@ see **Part XIV — The Coding Agent & Workspace IDE** below.
 39. [Service and Pod monitors](07-observability/39-service-monitors.md)
 40. [Dashboards and alerts (incl. the native Grafana-backed dashboards plane)](07-observability/40-dashboards-and-alerts.md)
 41. [Onboarding observability stacks into Daalu (UI + API)](07-observability/41-onboarding-stacks-into-daalu.md)
+92. [The one-click observability installer (OpenSearch, Fluent Bit, Grafana)](07-observability/92-one-click-observability-installer.md)
 
 ## Part VIII — Deployment and CI/CD
 
@@ -95,6 +103,7 @@ see **Part XIV — The Coding Agent & Workspace IDE** below.
 44. [The Helm chart](08-deployment-and-cicd/44-helm-chart.md)
 45. [install.sh and rollout mechanics](08-deployment-and-cicd/45-install-sh.md)
 47. [Secrets and SOPS](08-deployment-and-cicd/47-secrets-and-sops.md)
+91. [The Docker Compose install (open-source distribution)](08-deployment-and-cicd/91-docker-compose-install.md)
 
 ## Part IX — Operations Runbooks
 
@@ -152,6 +161,24 @@ inside it, and the laptop `daalu` CLI. Start with the
 76. [Private-repo authentication](14-coding-agent-and-ide/76-private-repo-authentication.md)
 77. [The Daalu CLI — bringing the agent to the laptop](14-coding-agent-and-ide/77-daalu-cli.md)
 
+## Part XV — The AI-Ops Maturity Model
+
+The AI-Ops Maturity Model (AOMM): autonomy policy as code, guardrails and
+automatic execution, investigations and verdicts, runbooks as code, the
+audit chain, metrics, evals and the MCP server. Start with the
+[section overview](15-ai-ops-maturity/README.md).
+
+81. [The maturity model](15-ai-ops-maturity/81-the-maturity-model.md)
+82. [Autonomy policy as code](15-ai-ops-maturity/82-autonomy-policy.md)
+83. [Guardrails and automatic execution](15-ai-ops-maturity/83-guardrails-and-auto-execution.md)
+84. [Investigations and verdicts](15-ai-ops-maturity/84-investigations-and-verdicts.md)
+85. [Runbooks as code](15-ai-ops-maturity/85-runbooks-as-code.md)
+86. [Change context and previews](15-ai-ops-maturity/86-change-context-and-previews.md)
+87. [The audit log](15-ai-ops-maturity/87-audit-log.md)
+88. [Metrics and maturity scoring](15-ai-ops-maturity/88-metrics-and-maturity-scoring.md)
+89. [The eval harness](15-ai-ops-maturity/89-eval-harness.md)
+90. [The MCP server and open specs](15-ai-ops-maturity/90-mcp-server-and-open-specs.md)
+
 ---
 
 **Conventions used in this manual**
@@ -174,4 +201,8 @@ coding chapter) — always disambiguate by folder when cross-referencing.
 New chapters added after the original outline slot into the part they
 thematically belong to and take the next free number at the end of the
 manual: **78** (managed-infra console), **79** (fabric topology & device
-terminal), **80** (zero-touch GPU onboarding).
+terminal), **80** (zero-touch GPU onboarding). Chapters **81–90** are the
+AI-Ops Maturity Model and live together in Part XV. Chapters **91–99** fill
+gaps for features that predate them (Compose install, observability
+installer, AIPerf, GPU sharing, GPU health, NV-CM rendering, backups, cable
+validation/ZTP, NV-CM's MCP server) and sit in Parts IV, VI, VII and VIII.

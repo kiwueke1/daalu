@@ -5,17 +5,23 @@ import { usePathname } from "next/navigation";
 import {
   AlertTriangle,
   Bot,
+  BookMarked,
   Boxes,
   Code2,
   Factory,
   FileText,
+  FlaskConical,
+  Gauge,
   HelpCircle,
   Home,
   LayoutDashboard,
   LayoutGrid,
   ListChecks,
   Receipt,
+  ScrollText,
+  SearchCheck,
   Settings,
+  SlidersHorizontal,
   Workflow,
   X,
 } from "lucide-react";
@@ -51,6 +57,17 @@ const NAV = [
   // tabs inside /managed-infra (their standalone routes still resolve).
   { href: "/managed-infra", label: "Managed infra", icon: Boxes },
   { href: "/billing", label: "Usage & Pricing", icon: Receipt },
+];
+
+// AI-Ops Maturity Model (docs/design/ai-ops-maturity.md §12): how the team
+// works with the AI SRE — level, policy, learning loop, audit.
+const AI_OPS = [
+  { href: "/maturity", label: "Maturity", icon: Gauge },
+  { href: "/autonomy", label: "Autonomy policy", icon: SlidersHorizontal },
+  { href: "/investigations", label: "Investigations", icon: SearchCheck },
+  { href: "/runbooks", label: "Runbooks", icon: BookMarked },
+  { href: "/evals", label: "Evals", icon: FlaskConical },
+  { href: "/audit", label: "Audit log", icon: ScrollText },
 ];
 
 const BOTTOM = [
@@ -167,57 +184,41 @@ export function Sidebar({
          *  The chip's backdrop-filter blurs the bit of pattern under
          *  the button while leaving the gaps between buttons untouched
          *  — the user keeps the wallpaper, the labels stay legible. */}
-        <nav className="px-3 py-1 space-y-1">
-          {NAV.map(({ href, label, icon: Icon }) => {
-            const active =
-              pathname === href || (href !== "/" && pathname.startsWith(href));
-            return (
-              <Link
-                key={label}
-                href={href}
+        {/* The nav lists scroll on short screens; the bottom block stays
+         *  pinned. */}
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <nav className="px-3 py-1 space-y-1">
+            {NAV.map((item) => (
+              <NavItem
+                key={item.label}
+                {...item}
+                pathname={pathname}
                 onClick={onMobileClose}
-                className={cn(
-                  "group relative flex items-center gap-3 px-3 py-2.5 md:py-2 rounded-lg text-[13px] transition-all duration-[220ms] sidebar-nav-chip",
-                  active
-                    ? "text-[color:var(--text)] sidebar-nav-active"
-                    : "text-[color:var(--text)] opacity-90 hover:opacity-100"
-                )}
-              >
-                {!active && (
-                  <span
-                    aria-hidden
-                    className="absolute inset-0 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-[220ms] sidebar-nav-hover"
-                  />
-                )}
-                <Icon
-                  className={cn(
-                    "relative h-4 w-4 transition-transform duration-[220ms]",
-                    active && "scale-105"
-                  )}
-                  style={active ? { color: "var(--accent)" } : undefined}
+              />
+            ))}
+          </nav>
+          <div className="px-3 pt-4 pb-2">
+            <div className="px-3 pb-1.5 text-[10px] uppercase tracking-wider font-semibold text-[color:var(--text)] opacity-60">
+              AI Ops
+            </div>
+            <nav aria-label="AI Ops" className="space-y-1">
+              {AI_OPS.map((item) => (
+                <NavItem
+                  key={item.label}
+                  {...item}
+                  pathname={pathname}
+                  onClick={onMobileClose}
                 />
-                <span className="relative flex-1 font-medium">{label}</span>
-                {active && (
-                  <span
-                    aria-hidden
-                    className="relative h-1.5 w-1.5 rounded-full"
-                    style={{
-                      background: "var(--accent)",
-                      boxShadow:
-                        "0 0 8px var(--accent-bloom), 0 0 16px var(--accent-glow)",
-                    }}
-                  />
-                )}
-              </Link>
-            );
-          })}
-        </nav>
+              ))}
+            </nav>
+          </div>
+        </div>
 
         {/* Bottom nav — separated by light, not by a hard rule. Same
          *  chip treatment so the bottom block reads at the same weight
          *  as the primary nav (currently quieter on purpose — these
          *  are secondary destinations). */}
-        <div className="mt-auto px-3 pb-5 pt-5 space-y-1 relative">
+        <div className="shrink-0 px-3 pb-5 pt-5 space-y-1 relative">
           <div
             aria-hidden
             className="absolute inset-x-3 top-0 h-px pointer-events-none sidebar-divider"
@@ -241,6 +242,59 @@ export function Sidebar({
       </div>
       </aside>
     </>
+  );
+}
+
+function NavItem({
+  href,
+  label,
+  icon: Icon,
+  pathname,
+  onClick,
+}: {
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
+  pathname: string;
+  onClick?: () => void;
+}) {
+  const active = pathname === href || (href !== "/" && pathname.startsWith(href));
+  return (
+    <Link
+      href={href}
+      onClick={onClick}
+      className={cn(
+        "group relative flex items-center gap-3 px-3 py-2.5 md:py-2 rounded-lg text-[13px] transition-all duration-[220ms] sidebar-nav-chip",
+        active
+          ? "text-[color:var(--text)] sidebar-nav-active"
+          : "text-[color:var(--text)] opacity-90 hover:opacity-100"
+      )}
+    >
+      {!active && (
+        <span
+          aria-hidden
+          className="absolute inset-0 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-[220ms] sidebar-nav-hover"
+        />
+      )}
+      <Icon
+        className={cn(
+          "relative h-4 w-4 transition-transform duration-[220ms]",
+          active && "scale-105"
+        )}
+        style={active ? { color: "var(--accent)" } : undefined}
+      />
+      <span className="relative flex-1 font-medium">{label}</span>
+      {active && (
+        <span
+          aria-hidden
+          className="relative h-1.5 w-1.5 rounded-full"
+          style={{
+            background: "var(--accent)",
+            boxShadow: "0 0 8px var(--accent-bloom), 0 0 16px var(--accent-glow)",
+          }}
+        />
+      )}
+    </Link>
   );
 }
 

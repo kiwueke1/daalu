@@ -118,6 +118,17 @@ async def resolve_alert(
     alert = await _get_tenant_alert(db, alert_id, tenant_id)
     alert.status = AlertStatus.resolved
     alert.resolved_at = datetime.now(tz=timezone.utc)
+    try:
+        # AOMM: resolved by a human with the investigation still open → manual.
+        from daalu_automation.core.aiops import investigations as inv_mod
+
+        async with db.begin_nested():
+            inv = await inv_mod.get_for_alert(db, alert.id)
+            if inv is not None and inv.resolution == "open":
+                inv.resolution = "manual"
+                inv.resolved_at = alert.resolved_at
+    except Exception:  # noqa: BLE001 — the AOMM record must never block a resolve
+        pass
     await db.commit()
     await db.refresh(alert)
     return alert

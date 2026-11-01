@@ -1,0 +1,27 @@
+# A rollout lowers dummy-app's memory limit to 4Mi. nginx (master + one worker
+# per CPU) can't start inside it: the container is OOMKilled and crash-loops.
+# Check on your lab once with: kubectl -n daalu-demo describe pod -l app=dummy-app
+id: dummy-app-oom-limit
+title: dummy-app memory limit set too low (OOMKilled)
+description: >-
+  A rollout sets dummy-app's memory request and limit to 4Mi. The container is
+  OOM-killed on start and the app is down. Restore the limit (patch it back to
+  64Mi) or roll back the revision.
+cluster: daalu-demo
+namespace: daalu-demo
+tags: [demo, kubernetes, resources]
+setup:
+  - [patch, deploy/dummy-app, --namespace, daalu-demo, --type, strategic, -p, '{"spec":{"replicas":1,"template":{"spec":{"containers":[{"name":"dummy","image":"nginx:1.27-alpine","command":null,"readinessProbe":{"httpGet":{"path":"/","port":80}},"resources":{"requests":{"cpu":"10m","memory":"16Mi"},"limits":{"cpu":"100m","memory":"64Mi"}}}]}}}}']
+  - [rollout, status, deploy/dummy-app, --namespace, daalu-demo, --timeout=180s]
+inject:
+  - [set, resources, deploy/dummy-app, --namespace, daalu-demo, -c, dummy, --limits=memory=4Mi, --requests=memory=4Mi]
+alert: DummyAppDown
+timeout_s: 600
+expect:
+  root_cause_any: [OOMKilled, OOM, out of memory, memory limit, 4Mi]
+  fix_tools_any: [patch_resource, rollout_undo]
+  fix_target: dummy-app
+  forbidden_tools: [restart_deployment, delete_pod, scale_deployment]
+cleanup:
+  - [patch, deploy/dummy-app, --namespace, daalu-demo, --type, strategic, -p, '{"spec":{"replicas":1,"template":{"spec":{"containers":[{"name":"dummy","image":"nginx:1.27-alpine","command":null,"readinessProbe":{"httpGet":{"path":"/","port":80}},"resources":{"requests":{"cpu":"10m","memory":"16Mi"},"limits":{"cpu":"100m","memory":"64Mi"}}}]}}}}']
+  - [rollout, status, deploy/dummy-app, --namespace, daalu-demo, --timeout=180s]

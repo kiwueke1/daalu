@@ -77,20 +77,28 @@ TOOLS = {
 }
 ```
 
-Read-only tools are called directly. Write tools trigger the
-**proposal interception**:
+> **Current shape (2026-11).** The sketch above predates the alert chat.
+> In the code, `ToolSpec` (`core/kube_tools.py:47`) is
+> `{name, description, input_schema, handler, requires_approval}`, the
+> registry is `kube_tools.TOOLS`, and calls go through
+> `execute_tool(name, input, tenant_id=, cluster_name=)`. The read tier
+> includes **`recent_changes`** (`core/kube_tools.py:1104`): Deployment
+> rollouts with image/env diffs, Deployment events and Argo CD syncs for a
+> namespace or cluster ([ch. 86](../15-ai-ops-maturity/86-change-context-and-previews.md));
+> it is also in the copilot's allowlist (`api/routers/copilot.py:63`).
 
-```python
-async def call_tool(tool_name: str, args: dict, ctx: ToolContext) -> Any:
-    tool = TOOLS[tool_name]
-    if tool.spec.write:
-        # Don't run; create a change proposal.
-        return await create_proposal(tool, args, ctx)
-    return await tool.func(**args, ctx=ctx)
-```
-
-The `ctx: ToolContext` carries the calling user, tenant, and
-the conversation ID — used in the proposal's audit trail.
+Read-only tools are called directly. A write is anything
+`tool_requires_approval(name, input)` (`core/kube_tools.py:1505`) says
+needs approval: the five static write tools plus non-`GET`
+`call_external_api`. In the alert chat a write is never executed on the
+call; it goes through `validate_write_input` and then the tenant's
+**autonomy policy** (`core/aiops/policy.py:decide`), which returns
+`deny` (the call is answered with a tool error and nothing is queued),
+`approve` (a pending `AlertAction` for N distinct approvers, the pre-AOMM
+behaviour and the default with no saved policy) or `auto` (the action is
+created approved and executed and verified in the background). See
+[ch. 82](../15-ai-ops-maturity/82-autonomy-policy.md) and
+[ch. 83](../15-ai-ops-maturity/83-guardrails-and-auto-execution.md).
 
 Each tool's function does its own argument validation,
 permission check (tenant scoping), and calls the appropriate
@@ -302,6 +310,7 @@ is just the map so you don't grep blind:
 | `core/signup.py` | Self-signup: isolated tenant + inactive user + verification token | 5 |
 | `core/notify.py` | Outbound SMTP (any relay, e.g. Resend) for invites/verification | 5 |
 | `core/model_catalog.py` | The coding-model catalog (pure data, cross-service) | 73 |
+| `core/aiops/` | AI-Ops Maturity Model: autonomy policy, audit chain, investigations, runbooks, change context, previews, metrics, maturity, MCP server | 81–90 |
 | `api/device_terminal.py` | WS bridge browser xterm ↔ asyncssh PTY on a fabric device | 79 §79.5 |
 
 ---

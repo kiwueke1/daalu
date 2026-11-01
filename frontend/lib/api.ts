@@ -24,6 +24,32 @@ export class UnauthorizedError extends Error {
   }
 }
 
+/**
+ * A non-2xx response. `message` keeps the historical
+ * "<status> <statusText>: <body>" format; `status` and `detail` (FastAPI's
+ * `detail` string when the body is JSON) let a caller show a 403 / 422 nicely.
+ */
+export class ApiError extends Error {
+  status: number;
+  body: string;
+  detail: string;
+  constructor(status: number, body: string, message: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.body = body;
+    let detail = body;
+    try {
+      const parsed = JSON.parse(body) as { detail?: unknown };
+      if (typeof parsed?.detail === "string") detail = parsed.detail;
+      else if (parsed?.detail !== undefined) detail = JSON.stringify(parsed.detail);
+    } catch {
+      /* not JSON */
+    }
+    this.detail = detail;
+  }
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   // Multipart uploads: let the browser set the Content-Type (with boundary)
   // by *not* injecting our JSON default.
@@ -55,7 +81,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`${res.status} ${res.statusText}: ${body || path}`);
+    throw new ApiError(res.status, body, `${res.status} ${res.statusText}: ${body || path}`);
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
@@ -1114,7 +1140,344 @@ export const api = {
         body: JSON.stringify({ sku_slug }),
       }),
   },
+  // AI-Ops Maturity Model — docs/design/ai-ops-maturity.md §11 / §13.
+  aiops: {
+    policy: {
+      get: (opts: { schema?: boolean } = {}) =>
+        request<AutonomyPolicy>(`/aiops/policy${opts.schema ? "?schema=true" : ""}`),
+      save: (yaml: string, note = "") =>
+        request<AutonomyPolicy>("/aiops/policy", {
+          method: "PUT",
+          body: JSON.stringify({ yaml, note }),
+        }),
+      history: () => request<PolicyVersion[]>("/aiops/policy/history"),
+      simulate: (body: PolicySimulateIn) =>
+        request<PolicyDecision>("/aiops/policy/simulate", {
+          method: "POST",
+          body: JSON.stringify(body),
+        }),
+      killSwitch: (enabled: boolean) =>
+        request<AutonomyPolicy>("/aiops/policy/kill-switch", {
+          method: "POST",
+          body: JSON.stringify({ enabled }),
+        }),
+      resetBreaker: (ruleId = "") =>
+        request<AutonomyPolicy>(
+          `/aiops/policy/breaker/reset${aiopsQuery({ rule_id: ruleId })}`,
+          { method: "POST" }
+        ),
+    },
+    trust: () => request<TrustRow[]>("/aiops/trust"),
+    investigations: {
+      list: (params: { days?: number; resolution?: string; needs_verdict?: boolean; limit?: number } = {}) =>
+        request<Investigation[]>(`/aiops/investigations${aiopsQuery(params)}`),
+      get: (id: string) => request<InvestigationDetail>(`/aiops/investigations/${id}`),
+      /** 404 (ApiError.status) = no investigation for this alert yet. */
+      byAlert: (alertId: string) =>
+        request<InvestigationDetail>(`/aiops/investigations/by-alert/${alertId}`),
+      verdict: (id: string, verdict: Verdict, note = "") =>
+        request<Investigation>(`/aiops/investigations/${id}/verdict`, {
+          method: "POST",
+          body: JSON.stringify({ verdict, note }),
+        }),
+    },
+    audit: {
+      list: (params: { kind?: string; actor?: string; subject?: string; before_seq?: number; limit?: number } = {}) =>
+        request<AuditEvent[]>(`/aiops/audit${aiopsQuery(params)}`),
+      verify: () => request<AuditVerifyResult>("/aiops/audit/verify"),
+      kinds: () => request<string[]>("/aiops/audit/kinds"),
+    },
+    runbooks: {
+      list: (status?: RunbookStatus) =>
+        request<Runbook[]>(`/aiops/runbooks${aiopsQuery({ status })}`),
+      get: (id: string) => request<Runbook>(`/aiops/runbooks/${id}`),
+      create: (body: RunbookIn) =>
+        request<Runbook>("/aiops/runbooks", { method: "POST", body: JSON.stringify(body) }),
+      update: (id: string, body: RunbookIn) =>
+        request<Runbook>(`/aiops/runbooks/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+      publish: (id: string) =>
+        request<Runbook>(`/aiops/runbooks/${id}/publish`, { method: "POST" }),
+      remove: (id: string) =>
+        request<void>(`/aiops/runbooks/${id}`, { method: "DELETE" }),
+      matchForAlert: (alertId: string) =>
+        request<Runbook[]>(`/aiops/runbooks/match${aiopsQuery({ alert_id: alertId })}`),
+    },
+    metrics: (days = 30) => request<AiopsMetrics>(`/aiops/metrics?days=${days}`),
+    maturity: {
+      get: (days = 30) => request<Maturity>(`/aiops/maturity?days=${days}`),
+      assess: (answers: Record<string, boolean>) =>
+        request<MaturityAssessment>("/aiops/maturity/assessment", {
+          method: "POST",
+          body: JSON.stringify({ answers }),
+        }),
+    },
+    evals: {
+      scenarios: () => request<EvalScenario[]>("/aiops/evals/scenarios"),
+      runs: (params: { scenario_id?: string; label?: string } = {}) =>
+        request<EvalRun[]>(`/aiops/evals/runs${aiopsQuery(params)}`),
+      leaderboard: () => request<EvalLeaderboardRow[]>("/aiops/evals/leaderboard"),
+    },
+  },
 };
+
+/** `?a=1&b=2` from the defined, non-empty, non-false params ("" when none). */
+function aiopsQuery(params: Record<string, string | number | boolean | undefined | null>): string {
+  const qs = new URLSearchParams(
+    Object.entries(params)
+      .filter(([, v]) => v !== undefined && v !== null && v !== "" && v !== false)
+      .map(([k, v]) => [k, String(v)])
+  ).toString();
+  return qs ? `?${qs}` : "";
+}
+
+// ── AI-Ops Maturity Model types ─────────────────────────────────────────
+
+/** Rates are 0..1 floats, or null when the denominator is 0. */
+export type Rate = number | null;
+export type PolicyMode = "deny" | "approve" | "auto" | "auto_after_trust";
+export type Verdict = "correct" | "partial" | "wrong";
+export type Resolution = "open" | "auto" | "approved" | "manual" | "unresolved";
+export type RunbookStatus = "draft" | "published";
+
+export interface AutonomyPolicy {
+  yaml: string;
+  /** 0 = the built-in default (never saved). */
+  version: number;
+  updated_at: string | null;
+  note: string;
+  parsed: Record<string, unknown>;
+  kill_switch: boolean;
+  kill_switch_by: string;
+  kill_switch_at: string | null;
+  /** rule_id ("__defaults__" for the defaults) → tripped-until ISO time. */
+  breaker: Record<string, string>;
+  json_schema?: Record<string, unknown> | null;
+}
+
+export interface PolicyVersion {
+  version: number;
+  yaml: string;
+  note: string;
+  updated_by: string;
+  updated_at: string;
+}
+
+export interface PolicySimulateIn {
+  tool: string;
+  input?: Record<string, unknown>;
+  cluster?: string;
+  severity?: string;
+  external?: boolean;
+  /** Simulate against this draft instead of the saved policy. */
+  yaml?: string | null;
+}
+
+export interface PolicyDecision {
+  mode: "deny" | "approve" | "auto";
+  rule_id: string;
+  reason: string;
+  approvers: number;
+  configured_mode: PolicyMode;
+  context?: {
+    kill_switch: boolean;
+    auto_actions_last_hour: number;
+    trust: Record<string, { successes: number; failures: number; failure_rate: number }>;
+  };
+}
+
+export interface TrustRow {
+  rule_id: string;
+  mode: PolicyMode;
+  tools: string[];
+  successes: number;
+  failures: number;
+  failure_rate: number;
+  min_successes: number | null;
+  max_failure_rate: number | null;
+  earned: boolean;
+  breaker_until: string | null;
+}
+
+export interface Investigation {
+  id: string;
+  alert_id: string;
+  alert_title: string;
+  alert_severity: string;
+  alert_status: string;
+  alert_created_at: string;
+  started_at: string;
+  diagnosed_at: string | null;
+  time_to_diagnosis_s: number | null;
+  root_cause: string;
+  actions_proposed: number;
+  actions_approved: number;
+  actions_rejected: number;
+  actions_auto: number;
+  resolution: Resolution | string;
+  resolved_at: string | null;
+  time_to_resolve_s: number | null;
+  verified: boolean | null;
+  runbook_ids: string[];
+  verdict: Verdict | null;
+  verdict_by: string;
+  verdict_at: string | null;
+  verdict_note: string;
+  model: string;
+}
+
+export interface InvestigationAction {
+  id: string;
+  tool: string;
+  input: Record<string, unknown>;
+  status: string;
+  policy_mode: string;
+  policy_rule: string;
+  auto_executed: boolean;
+  verified_resolved: boolean | null;
+  approvals: ActionApproval[];
+  actor: string;
+}
+
+export interface InvestigationDetail extends Investigation {
+  actions: InvestigationAction[];
+}
+
+export interface AuditEvent {
+  id: string;
+  seq: number;
+  kind: string;
+  actor: string;
+  subject: string;
+  data: Record<string, unknown>;
+  prev_hash: string;
+  hash: string;
+  created_at: string;
+}
+
+export interface AuditVerifyResult {
+  ok: boolean;
+  checked: number;
+  broken_at: number | null;
+  reason: string;
+}
+
+export interface RunbookMatch {
+  alertname?: string[];
+  labels?: Record<string, string>;
+}
+
+export interface Runbook {
+  id: string;
+  slug: string;
+  title: string;
+  body: string;
+  match: RunbookMatch;
+  allowed_actions: string[];
+  status: RunbookStatus | string;
+  source: "manual" | "generated" | "imported" | string;
+  version: number;
+  from_investigation_id: string | null;
+  published_by: string | null;
+  published_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Either the structured fields or a whole runbook file (`markdown`). */
+export type RunbookIn =
+  | {
+      title: string;
+      body: string;
+      match: RunbookMatch;
+      allowed_actions: string[];
+      slug?: string;
+      status?: RunbookStatus;
+    }
+  | { markdown: string };
+
+export interface AiopsMetrics {
+  days: number;
+  alerts_total: number;
+  investigations_total: number;
+  ai_triage_rate: Rate;
+  median_time_to_diagnosis_s: number | null;
+  rca_agreement_rate: Rate;
+  verdict_coverage: Rate;
+  verdicts: { correct: number; partial: number; wrong: number };
+  proposal_approval_rate: Rate;
+  actions: {
+    proposed: number;
+    approved: number;
+    rejected: number;
+    auto: number;
+    executed: number;
+    failed_verification: number;
+  };
+  ai_change_failure_rate: Rate;
+  auto_resolution_rate: Rate;
+  resolutions: { auto: number; approved: number; manual: number; unresolved: number; open: number };
+  median_time_to_resolve_s: number | null;
+  runbooks_published: number;
+  runbooks_generated: number;
+  eval_runs: number;
+  eval_mean_score: number | null;
+  audit_chain_ok: boolean;
+  daily: { date: string; alerts: number; investigations: number; auto_resolved: number; approved_resolved: number }[];
+}
+
+export interface MaturityAssessment {
+  level: number;
+  answers: Record<string, boolean>;
+  created_at: string;
+  created_by: string;
+}
+
+export interface Maturity {
+  level: number;
+  name: string;
+  levels: { level: number; name: string; description: string; met: boolean }[];
+  criteria: {
+    level: number;
+    id: string;
+    label: string;
+    met: boolean;
+    value: unknown;
+    target: unknown;
+  }[];
+  next_steps: string[];
+  metrics: AiopsMetrics;
+  assessment: MaturityAssessment | null;
+  questions: { id: string; level: number; text: string }[];
+}
+
+export interface EvalScenario {
+  id: string;
+  title: string;
+  description: string;
+  namespace: string;
+  alert: string;
+  expect: Record<string, unknown>;
+}
+
+export interface EvalRun {
+  id: string;
+  scenario_id: string;
+  label: string;
+  alert_id: string | null;
+  started_at: string;
+  finished_at: string | null;
+  score: number;
+  passed: boolean;
+  details: Record<string, unknown>;
+}
+
+export interface EvalLeaderboardRow {
+  label: string;
+  runs: number;
+  mean_score: number;
+  pass_rate: number;
+  scenarios: number;
+}
 
 // ── AI Factory (GPU observability + diagnostics) ─────────────────────
 //
@@ -1481,6 +1844,29 @@ export interface AlertAction {
   approved_at: string | null;
   executed_at: string | null;
   created_at: string;
+  // AI-Ops maturity (docs/design/ai-ops-maturity.md §2/§3). Optional so an
+  // older backend without these fields still type-checks at runtime.
+  policy_mode?: string; // "approve" | "auto" | "deny" | ""
+  policy_rule?: string;
+  policy_reason?: string;
+  approvals_required?: number;
+  approvals?: ActionApproval[];
+  preview?: ActionPreview;
+  auto_executed?: boolean;
+  verified_resolved?: boolean | null;
+  actor?: string; // "agent" | "mcp:<email>"
+}
+
+export interface ActionApproval {
+  user_id: string;
+  email: string;
+  at: string;
+}
+
+export interface ActionPreview {
+  summary?: string;
+  blast_radius?: { pods?: number; deployments?: number };
+  details?: unknown;
 }
 
 export interface AlertChatMessage {
@@ -1556,7 +1942,9 @@ export interface WorkflowRun {
 
 export interface ApproveActionResult {
   messages: AlertChatMessage[];
+  /** "" when the policy needs more approvers and this one only recorded a vote. */
   workflow_run_id: string;
+  approvals_remaining?: number;
 }
 
 export type ClusterStatus =

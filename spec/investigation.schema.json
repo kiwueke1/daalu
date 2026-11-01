@@ -1,0 +1,172 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/kiwueke1/daalu/spec/investigation.schema.json",
+  "title": "AOMM investigation record v0.1",
+  "x-aomm-version": "0.1",
+  "additionalProperties": false,
+  "description": "The learning-loop record of one AI investigation of one alert.",
+  "properties": {
+    "id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Id"
+    },
+    "alert_id": {
+      "format": "uuid",
+      "title": "Alert Id",
+      "type": "string"
+    },
+    "started_at": {
+      "format": "date-time",
+      "title": "Started At",
+      "type": "string"
+    },
+    "diagnosed_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "First answer that named a root cause.",
+      "title": "Diagnosed At"
+    },
+    "root_cause": {
+      "default": "",
+      "title": "Root Cause",
+      "type": "string"
+    },
+    "actions_proposed": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Actions Proposed",
+      "type": "integer"
+    },
+    "actions_approved": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Actions Approved",
+      "type": "integer"
+    },
+    "actions_rejected": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Actions Rejected",
+      "type": "integer"
+    },
+    "actions_auto": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Actions Auto",
+      "type": "integer"
+    },
+    "resolution": {
+      "default": "open",
+      "enum": [
+        "open",
+        "auto",
+        "approved",
+        "manual",
+        "unresolved"
+      ],
+      "title": "Resolution",
+      "type": "string"
+    },
+    "resolved_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Resolved At"
+    },
+    "verified": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Verified"
+    },
+    "runbook_ids": {
+      "description": "Runbooks injected into the investigation.",
+      "items": {
+        "type": "string"
+      },
+      "title": "Runbook Ids",
+      "type": "array"
+    },
+    "verdict": {
+      "anyOf": [
+        {
+          "enum": [
+            "correct",
+            "partial",
+            "wrong"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Verdict"
+    },
+    "verdict_by": {
+      "default": "",
+      "title": "Verdict By",
+      "type": "string"
+    },
+    "verdict_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Verdict At"
+    },
+    "verdict_note": {
+      "default": "",
+      "title": "Verdict Note",
+      "type": "string"
+    },
+    "model": {
+      "default": "",
+      "description": "Model that ran the investigation.",
+      "title": "Model",
+      "type": "string"
+    }
+  },
+  "required": [
+    "alert_id",
+    "started_at"
+  ],
+  "type": "object"
+}

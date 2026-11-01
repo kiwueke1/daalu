@@ -7,6 +7,7 @@ Subcommands:
     daalu status            (alias: whoami)
     daalu models
     daalu chat              (also the default when no subcommand is given)
+    daalu mcp [--url URL] [--token TOKEN]   (serve Daalu to an MCP client over stdio)
     daalu --version
 
 Running bare ``daalu`` in a project directory starts the agent.
@@ -92,6 +93,28 @@ def _cmd_chat(args: argparse.Namespace) -> int:
     return agent.run(root=Path(args.directory or "."), client=client, model=model)
 
 
+def _cmd_mcp(args: argparse.Namespace) -> int:
+    """Bridge an MCP client (Claude Code, Cursor, …) on stdio to the Daalu
+    instance's MCP endpoint, authenticated as the logged-in user unless
+    --url/--token (or DAALU_URL/DAALU_TOKEN) are given."""
+    import os
+
+    url = args.url or os.environ.get("DAALU_URL")
+    token = args.token or os.environ.get("DAALU_TOKEN")
+    if not (url and token):
+        creds = load_credentials()
+        if creds is None:
+            print("Not logged in. Run `daalu login` first, or pass --url and --token.",
+                  file=sys.stderr)
+            return 1
+        url = url or creds.host_clean
+        token = token or creds.token
+    from daalu_cli.mcp_bridge import run_stdio
+
+    run_stdio(url, token)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="daalu",
@@ -124,6 +147,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     chat.add_argument("--model", help="override the coding model (served name)")
     chat.set_defaults(func=_cmd_chat)
+
+    mcp = sub.add_parser(
+        "mcp", help="serve Daalu to an MCP client (Claude Code, Cursor) over stdio"
+    )
+    mcp.add_argument("--url", help="Daalu URL (default: the logged-in host)")
+    mcp.add_argument("--token", help="personal access token (default: your login)")
+    mcp.set_defaults(func=_cmd_mcp)
     return p
 
 

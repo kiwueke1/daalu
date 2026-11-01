@@ -35,6 +35,12 @@ def _build_info() -> dict[str, str]:
 import daalu_automation.modules  # noqa: F401
 from daalu_automation.api.routers import (
     agents,
+    aiops_audit,
+    aiops_evals,
+    aiops_investigations,
+    aiops_metrics,
+    aiops_policy,
+    aiops_runbooks,
     alert_chat,
     alerts,
     auth,
@@ -63,6 +69,9 @@ from daalu_automation.api.routers import (
     tenants,
     topology,
     workflows,
+)
+from daalu_automation.api.routers import (
+    mcp as mcp_router,
 )
 from daalu_automation.api.routers import (
     workspace as workspace_router,
@@ -305,6 +314,14 @@ def create_app(*, mode: str | None = None) -> FastAPI:
         cli_auth.router,
         coding.router,
         internal_agents.router,
+        # AI-Ops Maturity Model (docs/design/ai-ops-maturity.md)
+        aiops_policy.router,
+        aiops_investigations.router,
+        aiops_audit.router,
+        aiops_runbooks.router,
+        aiops_metrics.router,
+        aiops_evals.router,
+        mcp_router.router,
     ):
         app.include_router(r, prefix=prefix)
 

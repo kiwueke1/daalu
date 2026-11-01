@@ -39,6 +39,9 @@ from daalu_automation.api.schemas import (
     AlertChatPostRequest,
 )
 from daalu_automation.core import kube_tools, llm
+from daalu_automation.core.aiops import audit
+from daalu_automation.core.aiops import investigations as inv_mod
+from daalu_automation.core.aiops import policy as policy_mod
 from daalu_automation.core.llm import LLMUnavailable
 from daalu_automation.database import AsyncSessionLocal, get_db
 from daalu_automation.models import (
@@ -70,8 +73,9 @@ Operating rules:
   describe-pod, and the owning Deployment's status / rollout history
   when the alert references a workload. Pull Prometheus metrics when
   the alert is about latency / saturation / errors.
+- Check recent_changes early: most incidents follow a change.
 - Read tools (get_pod_logs, describe_pod, get_pod_events, list_pods,
-  get_deployment, rollout_history, query_prometheus, query_loki,
+  get_deployment, rollout_history, recent_changes, query_prometheus, query_loki,
   GET-method call_external_api, plus the cloud read tools listed
   below) run automatically — call as many as you need.
 
@@ -92,8 +96,11 @@ Operating rules:
   the tenant hasn't connected that provider — say so in Root cause
   and skip that tool, don't keep retrying.
 - Write tools (rollout_undo, scale_deployment, restart_deployment,
-  delete_pod, patch_resource, non-GET call_external_api) DO NOT run
-  automatically — the operator must click Approve. Every write tool
+  delete_pod, patch_resource, non-GET call_external_api) are gated by
+  the tenant's autonomy policy: by default the operator must click
+  Approve; a write may instead be denied (you get an error — do not
+  retry it) or, where the policy allows, run automatically and then be
+  verified exactly like an approved one. Every write tool
   call MUST include a `reason` argument: ONE short sentence saying why
   the action is needed (cite the evidence) and what will happen once it
   runs, e.g. "Roll back to revision 3, which set GPU_MEM_UTIL=0.10, so
@@ -478,12 +485,32 @@ async def _wait_for_deployment(
         await asyncio.sleep(interval_s)
 
 
+async def _preview_write(
+    tool: str, tool_input: dict[str, Any], *, tenant_id, cluster: str | None,
+) -> dict[str, Any]:
+    """Dry-run / blast-radius preview for the approve card. Best effort: a
+    preview failure never blocks the proposal."""
+    try:
+        from daalu_automation.core.aiops.preview import preview_write
+
+        return await preview_write(
+            tool, tool_input or {}, tenant_id=tenant_id, cluster=cluster,
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning("alert_chat.preview_failed", tool=tool, error=str(e))
+        return {}
+
+
 class ApproveActionOut(BaseModel):
     """Approve & run response: the updated transcript plus the id of the
-    workflow run the operator can open to watch the plan execute."""
+    workflow run the operator can open to watch the plan execute.
+
+    With a multi-approver policy the first approvals only record a vote:
+    ``workflow_run_id`` is then ``""`` and ``approvals_remaining`` > 0."""
 
     messages: list[AlertChatMessageOut]
     workflow_run_id: str
+    approvals_remaining: int = 0
 
 
 async def _load_chat(
@@ -664,6 +691,7 @@ async def _ask_model(
     *, alert: Alert, transcript: list[AlertChatMessage], tenant_id,
     force_tool_use: bool = False,
     nudge: str | None = None,
+    runbook_context: str = "",
 ) -> dict[str, Any]:
     """One model turn for the investigation, served by the LLM router's
     tool-capable path (``llm.chat_with_tools``).
@@ -678,6 +706,9 @@ async def _ask_model(
     downstream changes.
     """
     system = f"{SYSTEM_PROMPT}\n\n{_alert_context(alert)}"
+    if runbook_context:
+        # Published team runbooks matching this alert (AOMM §5).
+        system = f"{system}\n\n{runbook_context}"
     openai_messages = _messages_for_openai(transcript)
     if nudge:
         # Transient instruction (NOT persisted) appended only for this call —
@@ -776,11 +807,92 @@ def _proposes_system_step(text: str) -> bool:
     return "[system]" in (text or "").lower()
 
 
+# Automatic (policy ``auto``) remediations run as background tasks after the
+# turn that proposed them is committed. Strong refs so they aren't GC'd.
+_AUTO_TASKS: set[asyncio.Task] = set()
+
+
+async def drain_auto_tasks() -> None:
+    """Await every in-flight automatic remediation (tests, graceful shutdown)."""
+    while _AUTO_TASKS:
+        await asyncio.gather(*list(_AUTO_TASKS), return_exceptions=True)
+
+
+async def _start_auto_actions(*, db: AsyncSession, tenant_id, alert: Alert,
+                              action_ids: list[uuid.UUID]) -> None:
+    """Open a workflow run for each policy-approved (``auto``) action and run
+    it through the same execute-then-verify path a human approval uses."""
+    for action_id in action_ids:
+        action = await db.get(AlertAction, action_id)
+        if action is None:
+            continue
+        run = WorkflowRun(
+            tenant_id=tenant_id,
+            workflow_name=f"Auto-remediate: {alert.title}",
+            module="remediation",
+            status=WorkflowRunStatus.running,
+            started_at=datetime.now(tz=timezone.utc),
+            alert_id=alert.id,
+            input_payload={
+                "tool": action.tool_name,
+                "input": action.tool_input or {},
+                "policy_rule": action.policy_rule,
+                "auto": True,
+            },
+            steps=[],
+        )
+        db.add(run)
+        await db.commit()
+        task = asyncio.create_task(
+            _run_approved_action(
+                tenant_id=tenant_id, alert_id=alert.id,
+                action_id=action.id, run_id=run.id,
+            )
+        )
+        _AUTO_TASKS.add(task)
+        task.add_done_callback(_AUTO_TASKS.discard)
+
+
+async def _runbook_context(db: AsyncSession, *, tenant_id, alert: Alert, investigation) -> str:
+    """Prompt block for the published runbooks matching this alert, and their
+    ids recorded on the investigation. Failures never break triage."""
+    try:
+        from daalu_automation.core.aiops import runbooks as runbooks_mod
+
+        async with db.begin_nested():
+            matched = await runbooks_mod.match_for_alert(db, tenant_id, alert)
+        if not matched:
+            return ""
+        ids = [str(rb.id) for rb in matched]
+        known = list(investigation.runbook_ids or [])
+        if any(i not in known for i in ids):
+            investigation.runbook_ids = known + [i for i in ids if i not in known]
+        return runbooks_mod.render_for_prompt(matched)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("alert_chat.runbook_match_failed", error=str(e))
+        return ""
+
+
 async def _record_assistant_turn(
     *,
     db: AsyncSession,
     tenant_id,
     alert: Alert,
+) -> None:
+    """Run the agent loop (:func:`_assistant_turn_loop`), then start any
+    writes the autonomy policy allowed to run automatically."""
+    auto_ids: list[uuid.UUID] = []
+    await _assistant_turn_loop(db=db, tenant_id=tenant_id, alert=alert, auto_ids=auto_ids)
+    if auto_ids:
+        await _start_auto_actions(db=db, tenant_id=tenant_id, alert=alert, action_ids=auto_ids)
+
+
+async def _assistant_turn_loop(
+    *,
+    db: AsyncSession,
+    tenant_id,
+    alert: Alert,
+    auto_ids: list[uuid.UUID],
 ) -> None:
     """Loop: ask the model, persist assistant blocks, auto-run read tools,
     persist tool results, ask again. Stops when the model returns
@@ -797,6 +909,12 @@ async def _record_assistant_turn(
     summary_seen = False       # a three-section final answer was posted
     summary_nudge: str | None = None  # set when asking for that answer
     force_next = False      # force a tool call on the next iteration
+    investigation = await inv_mod.ensure(db, tenant_id=tenant_id, alert_id=alert.id)
+    runbook_context = await _runbook_context(
+        db, tenant_id=tenant_id, alert=alert, investigation=investigation,
+    )
+    cluster = _cluster_for_alert(alert)
+    severity = alert.severity.value if alert.severity is not None else ""
     for _ in range(12):  # hard cap to avoid runaway loops
         # Re-read the transcript fresh each iteration so any tool
         # results we just persisted are included.
@@ -812,7 +930,7 @@ async def _record_assistant_turn(
         summary_nudge = None
         reply = await _ask_model(
             alert=alert, transcript=msgs, tenant_id=tenant_id,
-            force_tool_use=force, nudge=nudge,
+            force_tool_use=force, nudge=nudge, runbook_context=runbook_context,
         )
 
         text_parts: list[str] = []
@@ -841,6 +959,8 @@ async def _record_assistant_turn(
         # (queuing a lone delete_pod without its patch would be a worse plan).
         write_errors: dict[str, str] = {}
         write_ids: set[str] = set()
+        decisions: dict[str, policy_mod.Decision] = {}
+        auto_this_turn = 0  # auto decisions not yet inserted (hourly cap)
         for tc in tool_uses:
             if kube_tools.tool_requires_approval(tc["name"], tc["input"] or {}):
                 write_ids.add(tc["id"])
@@ -849,6 +969,30 @@ async def _record_assistant_turn(
                 )
                 if err:
                     write_errors[tc["id"]] = err
+                    continue
+                # Autonomy policy (AOMM L3/L5): deny / approve / auto.
+                decision = await policy_mod.decide_for_tenant(
+                    db, tenant_id,
+                    policy_mod.write_request_for(
+                        tc["name"], tc["input"], cluster=cluster, severity=severity,
+                    ),
+                    pending_auto=auto_this_turn,
+                )
+                decisions[tc["id"]] = decision
+                if decision.mode == "auto":
+                    auto_this_turn += 1
+                if decision.mode == "deny":
+                    write_errors[tc["id"]] = (
+                        f"denied by the autonomy policy ({decision.reason}). Do not "
+                        "retry this action: propose a different remediation, or "
+                        "tell the operator which manual steps to run."
+                    )
+                    await audit.record(
+                        db, tenant_id, "action.denied", actor="agent",
+                        subject=str(alert.id),
+                        data={"tool": tc["name"], "input": tc["input"],
+                              "decision": decision.as_dict()},
+                    )
         bounce_writes = (
             bool(write_errors) and invalid_write_retries < _MAX_INVALID_WRITE_RETRIES
         )
@@ -863,6 +1007,7 @@ async def _record_assistant_turn(
 
         narration = "\n".join(p for p in text_parts if p).strip()
         summary_seen = summary_seen or bool(_REMEDIATION_HEADING_RE.search(narration))
+        inv_mod.note_answer(investigation, narration, model=str(reply.get("model") or ""))
         assistant_msg = AlertChatMessage(
             tenant_id=tenant_id,
             alert_id=alert.id,
@@ -918,10 +1063,39 @@ async def _record_assistant_turn(
                 requires_approval=requires_approval,
                 status=ActionStatus.pending,
             )
+            if requires_approval:
+                decision = decisions.get(tc["id"])
+                if decision is not None:
+                    action.policy_mode = decision.mode
+                    action.policy_rule = decision.rule_id
+                    action.policy_reason = decision.reason
+                    action.approvals_required = decision.approvers
+                action.approvals = []
+                action.preview = await _preview_write(
+                    tc["name"], tc["input"], tenant_id=tenant_id, cluster=cluster,
+                )
+                if decision is not None and decision.mode == "auto":
+                    action.status = ActionStatus.approved
+                    action.auto_executed = True
+                    action.approved_at = datetime.now(tz=timezone.utc)
+                    inv_mod.bump(investigation, "actions_auto")
+                inv_mod.bump(investigation, "actions_proposed")
             db.add(action)
             await db.flush()
 
             if requires_approval:
+                await audit.record(
+                    db, tenant_id, "action.proposed", actor="agent",
+                    subject=str(alert.id),
+                    data={
+                        "action_id": str(action.id), "tool": action.tool_name,
+                        "input": action.tool_input, "policy_mode": action.policy_mode,
+                        "policy_rule": action.policy_rule,
+                        "approvals_required": action.approvals_required,
+                    },
+                )
+                if action.auto_executed:
+                    auto_ids.append(action.id)
                 any_pending_write = True
                 continue
 
@@ -933,6 +1107,11 @@ async def _record_assistant_turn(
             action.status = ActionStatus.executed
             action.executed_at = datetime.now(tz=timezone.utc)
             action.result_output = output
+            await audit.record(
+                db, tenant_id, "tool.read", actor="agent", subject=str(alert.id),
+                data={"tool": tc["name"], "input": tc["input"],
+                      "error": output.startswith("error:")},
+            )
             tool_msg = AlertChatMessage(
                 tenant_id=tenant_id,
                 alert_id=alert.id,
@@ -1047,6 +1226,42 @@ async def trigger_triage(
     return _serialize(msgs, actions_by_msg)
 
 
+async def auto_investigate(tenant_id, alert_id) -> None:
+    """Start a triage pass without HTTP — what ``trigger_triage`` does, for
+    the agent host when the autonomy policy sets
+    ``investigate_automatically: true``. Idempotent: a no-op when the alert
+    already has an assistant message. Never raises."""
+    try:
+        tid = tenant_id if isinstance(tenant_id, uuid.UUID) else uuid.UUID(str(tenant_id))
+        async with AsyncSessionLocal() as db:
+            alert = await _get_alert(db, str(alert_id), tid)
+            existing = (
+                await db.execute(
+                    select(AlertChatMessage.id)
+                    .where(
+                        AlertChatMessage.tenant_id == tid,
+                        AlertChatMessage.alert_id == alert.id,
+                        AlertChatMessage.role == ChatRole.assistant,
+                    )
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            if existing is not None:
+                return
+            db.add(
+                AlertChatMessage(
+                    tenant_id=tid,
+                    alert_id=alert.id,
+                    role=ChatRole.user,
+                    content=TRIAGE_KICKOFF,
+                )
+            )
+            await db.commit()
+            await _record_assistant_turn(db=db, tenant_id=tid, alert=alert)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("alert_chat.auto_investigate_failed", alert_id=str(alert_id), error=str(e))
+
+
 @router.post(
     "/{alert_id}/actions/{action_id}/approve",
     response_model=ApproveActionOut,
@@ -1069,21 +1284,61 @@ async def approve_action(
     alert = await _get_alert(db, alert_id, tenant_id)
     action = (
         await db.execute(
-            select(AlertAction).where(
+            select(AlertAction)
+            .where(
                 AlertAction.id == action_id,
                 AlertAction.alert_id == alert.id,
                 AlertAction.tenant_id == tenant_id,
             )
+            # Row lock: two people approving at once must not lose a vote or
+            # start the action twice.
+            .with_for_update()
         )
     ).scalar_one_or_none()
     if action is None:
         raise HTTPException(404, "action not found")
     if action.status is not ActionStatus.pending:
         raise HTTPException(409, f"action is {action.status.value}, not pending")
+    if action.actor == f"mcp:{user.email}":
+        raise HTTPException(
+            403, "you proposed this action through MCP; someone else must approve it"
+        )
+
+    # Multi-approver policy: record this user's vote; run only once enough
+    # distinct people have approved.
+    approvals = list(action.approvals or [])
+    if any(a.get("user_id") == str(user.id) for a in approvals):
+        raise HTTPException(409, "you have already approved this action")
+    now = datetime.now(tz=timezone.utc)
+    approvals.append({"user_id": str(user.id), "email": user.email, "at": now.isoformat()})
+    action.approvals = approvals
+    required = max(1, int(action.approvals_required or 1))
+    if len(approvals) < required:
+        await audit.record(
+            db, tenant_id, "action.approval_recorded", actor=user.email,
+            subject=str(alert.id),
+            data={"action_id": str(action.id), "tool": action.tool_name,
+                  "approvals": len(approvals), "required": required},
+        )
+        await db.commit()
+        msgs, actions_by_msg = await _load_chat(db, tenant_id, alert.id)
+        return ApproveActionOut(
+            messages=_serialize(msgs, actions_by_msg),
+            workflow_run_id="",
+            approvals_remaining=required - len(approvals),
+        )
 
     action.status = ActionStatus.approved
     action.approved_by = user.id
-    action.approved_at = datetime.now(tz=timezone.utc)
+    action.approved_at = now
+    investigation = await inv_mod.ensure(db, tenant_id=tenant_id, alert_id=alert.id)
+    inv_mod.bump(investigation, "actions_approved")
+    await audit.record(
+        db, tenant_id, "action.approved", actor=user.email, subject=str(alert.id),
+        data={"action_id": str(action.id), "tool": action.tool_name,
+              "input": action.tool_input,
+              "approvers": [a.get("email") for a in approvals]},
+    )
 
     # Record this remediation as a Workflow run so the operator can open it and
     # watch the plan execute step by step, and so it shows on the Workflows
@@ -1116,6 +1371,50 @@ async def approve_action(
         messages=_serialize(msgs, actions_by_msg),
         workflow_run_id=str(run.id),
     )
+
+
+async def _record_outcome(
+    db: AsyncSession, *, tenant_id, alert: Alert, action: AlertAction,
+    output: str, is_error: bool, resolved: bool,
+) -> None:
+    """Learning loop (AOMM L4) + guardrails (L5) after a write is verified:
+    store the outcome on the action and investigation, write the audit trail,
+    trip the circuit breaker when an automatic action didn't fix things, and
+    draft a runbook from a verified fix."""
+    action.verified_resolved = resolved
+    investigation = await inv_mod.ensure(db, tenant_id=tenant_id, alert_id=alert.id)
+    inv_mod.note_outcome(investigation, resolved=resolved, auto=action.auto_executed)
+    await audit.record(
+        db, tenant_id,
+        "action.auto_executed" if action.auto_executed else "action.executed",
+        actor=f"policy:{action.policy_rule or 'defaults'}" if action.auto_executed else "executor",
+        subject=str(alert.id),
+        data={"action_id": str(action.id), "tool": action.tool_name,
+              "input": action.tool_input, "error": is_error,
+              "output": (output or "")[:2000]},
+    )
+    await audit.record(
+        db, tenant_id, "action.verified", actor="verifier", subject=str(alert.id),
+        data={"action_id": str(action.id), "resolved": resolved},
+    )
+    if action.auto_executed and not resolved:
+        until = await policy_mod.trip_breaker(db, tenant_id, action.policy_rule)
+        if until is not None:
+            await audit.record(
+                db, tenant_id, "policy.breaker_tripped", actor="verifier",
+                subject=action.policy_rule or "defaults",
+                data={"action_id": str(action.id), "until": until.isoformat()},
+            )
+    await db.commit()
+    if resolved:
+        try:
+            from daalu_automation.core.aiops import runbooks as runbooks_mod
+
+            await runbooks_mod.maybe_draft_from_investigation(
+                db, tenant_id=tenant_id, alert=alert, investigation=investigation,
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.warning("alert_chat.runbook_draft_failed", error=str(e))
 
 
 async def _run_approved_action(
@@ -1201,6 +1500,8 @@ async def _run_approved_action(
             # The approved action ran exactly as approved (binding); now judge from the
             # verification whether it actually fixed the problem.
             resolved = _remediation_resolved(is_error, steps)
+            await _record_outcome(db, tenant_id=tenant_id, alert=alert, action=action,
+                                  output=output, is_error=is_error, resolved=resolved)
             run.steps = steps
             run.status = (
                 WorkflowRunStatus.succeeded if resolved else WorkflowRunStatus.failed
@@ -1231,8 +1532,8 @@ async def _run_approved_action(
                         content=(
                             "The approved remediation executed but verification shows "
                             "the issue is NOT resolved. Investigate what's still wrong, "
-                            "then either propose another remediation action (it will "
-                            "require my approval before it runs) or, if it can't be "
+                            "then either propose another remediation action (it goes "
+                            "through the autonomy policy, so it may need my approval) or, if it can't be "
                             "done with your tools, tell me exactly which manual steps "
                             "to run."
                         ),
@@ -1254,6 +1555,18 @@ async def _run_approved_action(
                 action.status = ActionStatus.failed
                 action.result_error = f"error: {type(e).__name__}: {e}"
             await db.commit()
+            # A crash is a failed outcome: it must count against trust and trip
+            # the breaker like any other failed automatic fix.
+            if action is not None and action.verified_resolved is None:
+                try:
+                    alert = await db.get(Alert, alert_id)
+                    if alert is not None:
+                        await _record_outcome(
+                            db, tenant_id=tenant_id, alert=alert, action=action,
+                            output=action.result_error, is_error=True, resolved=False,
+                        )
+                except Exception:  # noqa: BLE001
+                    logger.exception("alert_chat.crash_outcome_failed", run_id=str(run_id))
 
 
 @router.post(
@@ -1285,6 +1598,13 @@ async def reject_action(
     action.status = ActionStatus.rejected
     action.approved_by = user.id
     action.approved_at = datetime.now(tz=timezone.utc)
+    investigation = await inv_mod.ensure(db, tenant_id=tenant_id, alert_id=alert.id)
+    inv_mod.bump(investigation, "actions_rejected")
+    await audit.record(
+        db, tenant_id, "action.rejected", actor=user.email, subject=str(alert.id),
+        data={"action_id": str(action.id), "tool": action.tool_name,
+              "input": action.tool_input},
+    )
     rejection_note = (
         f"rejected by {user.email}: tool {action.tool_name} not executed"
     )

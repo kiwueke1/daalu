@@ -1,0 +1,298 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/kiwueke1/daalu/spec/autonomy-policy.schema.json",
+  "title": "AOMM autonomy policy v0.1",
+  "x-aomm-version": "0.1",
+  "$defs": {
+    "CircuitBreaker": {
+      "additionalProperties": false,
+      "properties": {
+        "cooldown_minutes": {
+          "default": 60,
+          "minimum": 1,
+          "title": "Cooldown Minutes",
+          "type": "integer"
+        }
+      },
+      "title": "CircuitBreaker",
+      "type": "object"
+    },
+    "Defaults": {
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "default": "approve",
+          "enum": [
+            "deny",
+            "approve",
+            "auto",
+            "auto_after_trust"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "approvers": {
+          "default": 1,
+          "maximum": 5,
+          "minimum": 1,
+          "title": "Approvers",
+          "type": "integer"
+        }
+      },
+      "title": "Defaults",
+      "type": "object"
+    },
+    "FreezeWindow": {
+      "additionalProperties": false,
+      "properties": {
+        "days": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Days",
+          "type": "array"
+        },
+        "start": {
+          "default": "00:00",
+          "title": "Start",
+          "type": "string"
+        },
+        "end": {
+          "default": "23:59",
+          "title": "End",
+          "type": "string"
+        },
+        "tz": {
+          "default": "UTC",
+          "title": "Tz",
+          "type": "string"
+        }
+      },
+      "title": "FreezeWindow",
+      "type": "object"
+    },
+    "Guardrails": {
+      "additionalProperties": false,
+      "properties": {
+        "max_auto_actions_per_hour": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Auto Actions Per Hour"
+        },
+        "circuit_breaker": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CircuitBreaker"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "freeze_windows": {
+          "items": {
+            "$ref": "#/$defs/FreezeWindow"
+          },
+          "title": "Freeze Windows",
+          "type": "array"
+        }
+      },
+      "title": "Guardrails",
+      "type": "object"
+    },
+    "Match": {
+      "additionalProperties": false,
+      "description": "Which writes a rule covers. Omitted keys match everything. Values are\n``fnmatch`` globs.",
+      "properties": {
+        "tools": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tools"
+        },
+        "clusters": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Clusters"
+        },
+        "namespaces": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Namespaces"
+        },
+        "severities": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Alert severities (info, warning, critical).",
+          "title": "Severities"
+        }
+      },
+      "title": "Match",
+      "type": "object"
+    },
+    "Rule": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "match": {
+          "$ref": "#/$defs/Match"
+        },
+        "mode": {
+          "enum": [
+            "deny",
+            "approve",
+            "auto",
+            "auto_after_trust"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "approvers": {
+          "default": 1,
+          "maximum": 5,
+          "minimum": 1,
+          "title": "Approvers",
+          "type": "integer"
+        },
+        "trust": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Trust"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "allow_external_auto": {
+          "default": false,
+          "description": "Let writes proposed by external agents over MCP run automatically under this rule. Off by default: MCP proposals are downgraded to approve.",
+          "title": "Allow External Auto",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "mode"
+      ],
+      "title": "Rule",
+      "type": "object"
+    },
+    "Trust": {
+      "additionalProperties": false,
+      "properties": {
+        "min_successes": {
+          "default": 10,
+          "minimum": 1,
+          "title": "Min Successes",
+          "type": "integer"
+        },
+        "max_failure_rate": {
+          "default": 0.05,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Max Failure Rate",
+          "type": "number"
+        },
+        "window_days": {
+          "default": 30,
+          "maximum": 365,
+          "minimum": 1,
+          "title": "Window Days",
+          "type": "integer"
+        }
+      },
+      "title": "Trust",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "An autonomy policy (AOMM spec v0.1).",
+  "properties": {
+    "version": {
+      "const": 1,
+      "default": 1,
+      "title": "Version",
+      "type": "integer"
+    },
+    "investigate_automatically": {
+      "default": false,
+      "description": "Start an AI investigation on every new alert without waiting for someone to open it.",
+      "title": "Investigate Automatically",
+      "type": "boolean"
+    },
+    "defaults": {
+      "$ref": "#/$defs/Defaults"
+    },
+    "guardrails": {
+      "$ref": "#/$defs/Guardrails"
+    },
+    "rules": {
+      "items": {
+        "$ref": "#/$defs/Rule"
+      },
+      "title": "Rules",
+      "type": "array"
+    }
+  },
+  "type": "object"
+}

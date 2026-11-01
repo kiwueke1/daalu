@@ -495,3 +495,27 @@ def mock_nautobot_transport(monkeypatch):
         )
 
     return _install
+
+
+# ---------------------------------------------------------------------------
+# AI-Ops maturity: keep the agent loop hermetic
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def no_aiops_side_calls(monkeypatch):
+    """No real LLM or cluster from the AOMM side paths: the runbook drafter
+    (runs after a verified fix) and the write preview would otherwise use the
+    developer's .env key and ~/.kube/config. Tests that exercise those paths
+    themselves don't use this fixture."""
+    from daalu_automation.core import llm
+    from daalu_automation.core.aiops import preview
+
+    async def no_llm(**_):
+        raise llm.LLMUnavailable("disabled in tests")
+
+    async def no_preview(*_, **__):
+        return {}
+
+    monkeypatch.setattr(llm, "complete_json", no_llm)
+    monkeypatch.setattr(preview, "preview_write", no_preview)

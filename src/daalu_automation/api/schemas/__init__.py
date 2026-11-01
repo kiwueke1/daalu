@@ -261,6 +261,16 @@ class AlertActionOut(_ORM):
     approved_at: datetime | None
     executed_at: datetime | None
     created_at: datetime
+    # AI-Ops maturity: autonomy-policy decision, approvals, preview, outcome.
+    policy_mode: str = ""
+    policy_rule: str = ""
+    policy_reason: str = ""
+    approvals_required: int = 1
+    approvals: list[dict[str, Any]] = []
+    preview: dict[str, Any] = {}
+    auto_executed: bool = False
+    verified_resolved: bool | None = None
+    actor: str = "agent"
 
 
 class AlertChatMessageOut(_ORM):

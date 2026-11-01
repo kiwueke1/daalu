@@ -50,6 +50,12 @@ RUN pip install --no-cache-dir --no-deps -e .
 COPY alembic.ini ./
 COPY migrations/ migrations/
 
+# AI-Ops Maturity: eval scenarios (GET /aiops/evals/scenarios resolves
+# <repo>/evals/scenarios next to src/, i.e. /app/evals/scenarios) and the
+# example runbooks (`daalu runbooks import /app/runbooks`).
+COPY evals/ evals/
+COPY runbooks/ runbooks/
+
 # Vendored, pinned NV-CM Helm charts. The config-manager-controller's
 # `config_manager_chart_dir` setting defaults to `deploy/charts`, resolved
 # against this WORKDIR (/app). Only the controller reads these; harmless

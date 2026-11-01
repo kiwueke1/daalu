@@ -17,6 +17,8 @@ from sqlalchemy import select
 
 from daalu_automation.core import kube_tools
 
+pytestmark = pytest.mark.usefixtures("no_aiops_side_calls")
+
 REASON = "Roll back to revision 3 (GPU_MEM_UTIL=0.10) so vLLM fits and the pod goes Ready."
 EMPTY_PATCH = {
     "namespace": "llm-serving",

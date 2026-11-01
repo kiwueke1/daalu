@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from datetime import datetime, timezone
@@ -27,6 +28,47 @@ from daalu_automation.models import (
     IncidentStatus,
 )
 from daalu_automation.modules.infra.prompts import INCIDENT_TRIAGE_SYSTEM
+
+# Strong refs to in-flight auto-investigations so they aren't GC'd mid-run.
+_AUTO_INVESTIGATIONS: set[asyncio.Task] = set()
+
+
+async def _maybe_auto_investigate(tenant_id: uuid.UUID, alert_id: uuid.UUID) -> None:
+    """AOMM Level 1: when the tenant's autonomy policy sets
+    ``investigate_automatically: true``, start the alert-chat triage on a new
+    alert in the background. Never raises."""
+    try:
+        from daalu_automation.core.aiops import policy as policy_mod
+
+        async with AsyncSessionLocal() as db:
+            pol = await policy_mod.load_policy(db, tenant_id)
+        if not getattr(pol, "investigate_automatically", False):
+            return
+        from daalu_automation.api.routers import alert_chat  # lazy: avoids a cycle
+
+        task = asyncio.create_task(alert_chat.auto_investigate(tenant_id, alert_id))
+        _AUTO_INVESTIGATIONS.add(task)
+        task.add_done_callback(_AUTO_INVESTIGATIONS.discard)
+    except Exception as e:  # noqa: BLE001
+        import structlog
+
+        structlog.get_logger(__name__).warning(
+            "infra.auto_investigate_failed", alert_id=str(alert_id), error=str(e)
+        )
+
+
+async def mark_manual_resolution(db, alert_ids) -> None:
+    """An alert closed with its investigation still ``open`` (no executed,
+    verified action) was resolved by a human or by itself: ``manual``.
+    Caller commits."""
+    from daalu_automation.core.aiops import investigations as inv_mod
+
+    now = datetime.now(tz=timezone.utc)
+    for alert_id in alert_ids:
+        inv = await inv_mod.get_for_alert(db, alert_id)
+        if inv is not None and inv.resolution == "open":
+            inv.resolution = "manual"
+            inv.resolved_at = now
 
 
 class InfraAgent(Agent):
@@ -141,7 +183,7 @@ class InfraAgent(Agent):
             await db.commit()
             await db.refresh(incident)
 
-        await emit_alert(
+        alert_id = await emit_alert(
             module="infra",
             severity=alert_severity,
             title=event.summary,
@@ -154,6 +196,7 @@ class InfraAgent(Agent):
             metadata={"incident_id": str(incident.id), **event.payload},
             tenant_id=uuid.UUID(event.tenant_id),
         )
+        await _maybe_auto_investigate(tenant_uuid, alert_id)
         if incident_severity == IncidentSeverity.sev1:
             await emit_recommendation(
                 module="infra",
@@ -204,6 +247,11 @@ class InfraAgent(Agent):
                         incident.status = IncidentStatus.resolved
                         incident.resolved_at = now
             if alerts:
+                try:
+                    async with db.begin_nested():
+                        await mark_manual_resolution(db, [a.id for a in alerts])
+                except Exception as e:  # noqa: BLE001 — never block the resolve
+                    self.log.warning("infra.investigation_manual_failed", error=str(e))
                 await db.commit()
         self.log.info(
             "infra.alert.auto_resolved",

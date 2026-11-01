@@ -1,0 +1,27 @@
+# Someone scaled dummy-app to 0. Nothing is broken in the pod spec: rolling back
+# would change the template (to whatever the previous revision was) and leave
+# replicas at 0, so rollout_undo is the wrong fix here.
+id: dummy-app-scaled-to-zero
+title: dummy-app scaled to zero replicas
+description: >-
+  dummy-app's replica count is set to 0. No pods exist, so available replicas
+  are 0 and DummyAppDown fires. There's no bad revision; the fix is to scale it
+  back up.
+cluster: daalu-demo
+namespace: daalu-demo
+tags: [demo, kubernetes, capacity]
+setup:
+  - [patch, deploy/dummy-app, --namespace, daalu-demo, --type, strategic, -p, '{"spec":{"replicas":1,"template":{"spec":{"containers":[{"name":"dummy","image":"nginx:1.27-alpine","command":null,"readinessProbe":{"httpGet":{"path":"/","port":80}},"resources":{"requests":{"cpu":"10m","memory":"16Mi"},"limits":{"cpu":"100m","memory":"64Mi"}}}]}}}}']
+  - [rollout, status, deploy/dummy-app, --namespace, daalu-demo, --timeout=180s]
+inject:
+  - [scale, deploy/dummy-app, --namespace, daalu-demo, --replicas=0]
+alert: DummyAppDown
+timeout_s: 600
+expect:
+  root_cause_any: [scaled to 0, scaled to zero, scaled down, "replicas: 0", replicas=0, "0 desired", desired replicas, scaled]
+  fix_tools_any: [scale_deployment]
+  fix_target: dummy-app
+  forbidden_tools: [rollout_undo, delete_pod]
+cleanup:
+  - [patch, deploy/dummy-app, --namespace, daalu-demo, --type, strategic, -p, '{"spec":{"replicas":1,"template":{"spec":{"containers":[{"name":"dummy","image":"nginx:1.27-alpine","command":null,"readinessProbe":{"httpGet":{"path":"/","port":80}},"resources":{"requests":{"cpu":"10m","memory":"16Mi"},"limits":{"cpu":"100m","memory":"64Mi"}}}]}}}}']
+  - [rollout, status, deploy/dummy-app, --namespace, daalu-demo, --timeout=180s]

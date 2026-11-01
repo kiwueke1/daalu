@@ -59,6 +59,8 @@ _COPILOT_TOOLS = frozenset(
         "get_pod_events",
         "get_pod_logs",
         "get_deployment",
+        # "What changed?" — rollouts, image diffs, Argo CD history (read-only).
+        "recent_changes",
         # Observability reads.
         "query_prometheus",
         "query_loki",
@@ -70,6 +72,7 @@ _COPILOT_TOOLS = frozenset(
 # data. Source-of-truth tools are fabric-wide and take none.
 _CLUSTER_TOOLS = frozenset(
     {
+        "recent_changes",
         "list_pods",
         "describe_pod",
         "get_pod_events",

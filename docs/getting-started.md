@@ -134,13 +134,14 @@ The API is on **http://localhost:8000** (interactive docs at `/docs`).
 | `agents` | Agent host: listens to the event stream and runs alert triage |
 | `executor` | Runs approved change proposals |
 | `wg-hub` | WireGuard hub on UDP :51820 that managed clusters dial |
+| `net` | Holds the shared network namespace (like a pod's pause container); the API's port 8000 is published here |
 | `postgres`, `redis` | State and queues (data persists in the `pgdata` volume) |
 | `migrate` | One-shot: schema, default tenant, admin login. Runs on every `up` |
 
-The API, worker, agent host and executor share the WireGuard hub's network
-namespace, so they reach managed clusters on their tunnel addresses
-(`10.200.0.0/16`) directly. That's also why the API's port is published on the
-`wg-hub` service.
+The WireGuard hub, API, worker, agent host and executor share one network
+namespace, owned by the small `net` container, so they reach managed clusters
+on their tunnel addresses (`10.200.0.0/16`) directly. That's also why the
+API's port is published on the `net` service.
 
 ### Day-2 commands
 
@@ -151,8 +152,8 @@ docker compose down                           # stop (keeps the database)
 docker compose down -v                        # stop and delete all data
 ```
 
-If you restart `wg-hub` on its own, restart the services that share its
-network too: `docker compose restart wg-hub api worker agents executor`.
+Restarting any one service, including `wg-hub`, leaves the others' networking
+intact: the shared namespace belongs to `net`, not to the hub.
 
 Next: [add a cluster for Daalu to manage](#3-add-a-cluster-for-daalu-to-manage).
 

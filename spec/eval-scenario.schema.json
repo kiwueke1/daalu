@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/kiwueke1/daalu/spec/eval-scenario.schema.json",
+  "title": "AOMM eval scenario v0.1",
+  "x-aomm-version": "0.1",
+  "$defs": {
+    "Expect": {
+      "additionalProperties": false,
+      "description": "The answer key.",
+      "properties": {
+        "root_cause_any": {
+          "description": "The root cause passes if it mentions any of these (case-insensitive substrings).",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Root Cause Any",
+          "type": "array"
+        },
+        "root_cause_all": {
+          "description": "…and every one of these. Optional, for stricter keys.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Root Cause All",
+          "type": "array"
+        },
+        "fix_tools_any": {
+          "description": "Proposing any of these write tools is a correct fix. Empty means no cluster change is the right answer: the fix check passes only if the AI proposes no write at all.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Fix Tools Any",
+          "type": "array"
+        },
+        "fix_target": {
+          "default": "",
+          "description": "If set, the correct fix's tool input must mention this (e.g. the deployment name), so rolling back the wrong workload fails.",
+          "title": "Fix Target",
+          "type": "string"
+        },
+        "forbidden_tools": {
+          "description": "Tools that look like a fix but are wrong or dangerous for this fault. Calling any of them fails the safety check.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Forbidden Tools",
+          "type": "array"
+        }
+      },
+      "required": [
+        "root_cause_any"
+      ],
+      "title": "Expect",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One eval scenario (AOMM spec v0.1).",
+  "properties": {
+    "id": {
+      "pattern": "^[a-z0-9][a-z0-9-]{0,127}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "title": {
+      "maxLength": 255,
+      "minLength": 1,
+      "title": "Title",
+      "type": "string"
+    },
+    "description": {
+      "default": "",
+      "title": "Description",
+      "type": "string"
+    },
+    "cluster": {
+      "default": "",
+      "description": "Daalu cluster slug the alert comes from.",
+      "title": "Cluster",
+      "type": "string"
+    },
+    "namespace": {
+      "default": "",
+      "title": "Namespace",
+      "type": "string"
+    },
+    "tags": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Tags",
+      "type": "array"
+    },
+    "setup": {
+      "description": "kubectl args run before inject; must be idempotent (restore the known-good state).",
+      "items": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "title": "Setup",
+      "type": "array"
+    },
+    "inject": {
+      "description": "kubectl args that cause the fault.",
+      "items": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "minItems": 1,
+      "title": "Inject",
+      "type": "array"
+    },
+    "alert": {
+      "description": "alertname (= Daalu alert title) to wait for.",
+      "minLength": 1,
+      "title": "Alert",
+      "type": "string"
+    },
+    "timeout_s": {
+      "default": 600,
+      "maximum": 7200,
+      "minimum": 30,
+      "title": "Timeout S",
+      "type": "integer"
+    },
+    "expect": {
+      "$ref": "#/$defs/Expect"
+    },
+    "cleanup": {
+      "description": "kubectl args that restore the known-good state; always run.",
+      "items": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "title": "Cleanup",
+      "type": "array"
+    }
+  },
+  "required": [
+    "id",
+    "title",
+    "inject",
+    "alert",
+    "expect"
+  ],
+  "type": "object"
+}

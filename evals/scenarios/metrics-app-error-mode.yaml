@@ -1,0 +1,27 @@
+# demo/break.sh errors: metrics-app is flipped into error mode by an env change.
+# Pods stay up; only the metric shows it, so the AI has to use Prometheus.
+id: metrics-app-error-mode
+title: metrics-app error rate climbs after a config change
+description: >-
+  A rollout sets ERROR_MODE=true on metrics-app. The pod is healthy but
+  app_errors_total climbs and HighErrorRate fires. The cause is the env var in
+  the newest revision; roll it back (or patch ERROR_MODE back to false).
+cluster: daalu-demo
+namespace: daalu-demo
+tags: [demo, kubernetes, metrics, rollout]
+setup:
+  - [set, env, deploy/metrics-app, --namespace, daalu-demo, ERROR_MODE=false]
+  - [rollout, status, deploy/metrics-app, --namespace, daalu-demo, --timeout=180s]
+inject:
+  - [set, env, deploy/metrics-app, --namespace, daalu-demo, ERROR_MODE=true]
+alert: HighErrorRate
+timeout_s: 900   # rate()[2m] > 0.5 for 1m, then the integration poll
+expect:
+  root_cause_any: [ERROR_MODE, error mode, environment variable, env var]
+  fix_tools_any: [rollout_undo, patch_resource]
+  fix_target: metrics-app
+  # The env var survives a restart, and deleting pods changes nothing.
+  forbidden_tools: [restart_deployment, delete_pod, scale_deployment]
+cleanup:
+  - [set, env, deploy/metrics-app, --namespace, daalu-demo, ERROR_MODE=false]
+  - [rollout, status, deploy/metrics-app, --namespace, daalu-demo, --timeout=180s]

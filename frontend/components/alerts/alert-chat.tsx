@@ -7,6 +7,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Check, Send, ShieldAlert, Sparkles, Terminal, X } from "lucide-react";
 import { api, type AlertAction, type AlertChatMessage } from "@/lib/api";
+import { ActionPolicyInfo } from "@/components/aiops/action-policy";
 
 interface AlertChatProps {
   alertId: string;
@@ -68,10 +69,19 @@ export function AlertChat({ alertId }: AlertChatProps) {
     },
   });
 
+  // A multi-approver policy may only record this approval
+  // (workflow_run_id === ""); then stay here and say how many are left.
+  const [waitingFor, setWaitingFor] = useState<number | null>(null);
   const approve = useMutation({
     mutationFn: (actionId: string) => api.alerts.chat.approve(alertId, actionId),
     onSuccess: (data) => {
       qc.setQueryData(["alert-chat", alertId], data.messages);
+      qc.invalidateQueries({ queryKey: ["aiops-investigation-by-alert", alertId] });
+      if (!data.workflow_run_id) {
+        setWaitingFor(data.approvals_remaining ?? 1);
+        return;
+      }
+      setWaitingFor(null);
       router.push(`/workflows/${data.workflow_run_id}`);
     },
   });
@@ -134,6 +144,18 @@ export function AlertChat({ alertId }: AlertChatProps) {
         ))}
         {send.isPending && (
           <div className="text-xs text-muted italic">Thinking…</div>
+        )}
+        {waitingFor !== null && (
+          <div
+            role="status"
+            className="rounded-lg px-3 py-2 text-[12px]"
+            style={{
+              background: "color-mix(in srgb, var(--warning) 10%, var(--bg-base))",
+              border: "1px solid color-mix(in srgb, var(--warning) 40%, var(--line))",
+            }}
+          >
+            Your approval is recorded, waiting for {waitingFor} more.
+          </div>
         )}
       </div>
 
@@ -327,6 +349,12 @@ function ActionCard({ action, onApprove, onReject, busy }: ActionCardProps) {
           {action.status}
         </span>
       </div>
+
+      {isWrite && (
+        <div className="px-3 pb-2">
+          <ActionPolicyInfo action={action} compact={!isPending} />
+        </div>
+      )}
 
       {action.status === "executed" && action.result_output && (
         <pre

@@ -3,7 +3,8 @@
 Two tiers:
 
 * **Read tools** (``get_pod_logs``, ``describe_pod``, ``get_pod_events``,
-  ``list_pods``, ``get_deployment``, ``rollout_history``) — auto-execute
+  ``list_pods``, ``get_deployment``, ``rollout_history``,
+  ``recent_changes``) — auto-execute
   whenever the LLM calls them. They cannot mutate cluster state.
 * **Write tools** (``rollout_undo``, ``scale_deployment``,
   ``restart_deployment``, ``delete_pod``, ``patch_resource``) — the call
@@ -525,6 +526,24 @@ def _template_settings(template: Any) -> dict[str, str]:
         if c.command:
             out[f"{c.name} command"] = " ".join(c.command)
     return out
+
+
+async def _recent_changes(
+    *,
+    namespace: str | None = None,
+    hours: int = 24,
+    _tenant_id: uuid.UUID | None = None,
+) -> str:
+    """Deployment rollouts, Deployment events and Argo CD syncs in the last
+    ``hours`` (see ``core/aiops/change_context.py``)."""
+    from daalu_automation.core.aiops import change_context
+
+    return await change_context.recent_changes(
+        tenant_id=_tenant_id,
+        cluster=_target_cluster.get(),
+        namespace=namespace,
+        hours=hours,
+    )
 
 
 # ── Write tools (require approval) ───────────────────────────────────────
@@ -1081,6 +1100,30 @@ TOOLS: dict[str, ToolSpec] = {
             "required": ["namespace", "name"],
         },
         handler=_rollout_history,
+    ),
+    "recent_changes": ToolSpec(
+        name="recent_changes",
+        description=(
+            "What changed recently: Deployment rollouts (each new revision with its "
+            "image/env/args change), Deployment scaling events, and Argo CD syncs, "
+            "newest first. Call this early — most incidents follow a change."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "namespace": {
+                    "type": "string",
+                    "description": "Namespace to inspect; omit for the whole cluster.",
+                },
+                "hours": {
+                    "type": "integer",
+                    "default": 24,
+                    "description": "How far back to look (1-336).",
+                },
+            },
+            "required": [],
+        },
+        handler=_recent_changes,
     ),
     "rollout_undo": ToolSpec(
         name="rollout_undo",

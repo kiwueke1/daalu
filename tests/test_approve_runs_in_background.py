@@ -13,6 +13,8 @@ from typing import Any
 import pytest
 from fastapi import BackgroundTasks
 
+pytestmark = pytest.mark.usefixtures("no_aiops_side_calls")
+
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_approve_returns_running_then_background_finishes(db, seeded, monkeypatch):

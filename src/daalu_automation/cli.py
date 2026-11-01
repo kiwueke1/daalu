@@ -24,6 +24,30 @@ from rich.console import Console
 from daalu_automation.core import model_catalog
 
 app = typer.Typer(help="Daalu Automation management CLI")
+
+# AI-Ops Maturity Model commands (docs/design/ai-ops-maturity.md §8–9).
+from daalu_automation.evals.cli import app as _eval_app  # noqa: E402
+
+app.add_typer(_eval_app, name="eval")
+from daalu_automation.core.aiops.runbooks_cli import app as _runbooks_app  # noqa: E402
+
+app.add_typer(_runbooks_app, name="runbooks")
+
+
+@app.command(name="mcp")
+def mcp(
+    url: str = typer.Option(
+        "http://localhost:8000", envvar="DAALU_URL",
+        help="Daalu API base URL (the /api/v1 prefix is added for you).",
+    ),
+    token: str = typer.Option(
+        ..., envvar="DAALU_TOKEN", help="Personal access token (dpat_…).",
+    ),
+) -> None:
+    """Serve Daalu to any MCP client (Claude Code, Cursor, …) over stdio."""
+    from daalu_automation.core.aiops.mcp_cli import run_stdio
+
+    run_stdio(url, token)
 console = Console()
 
 

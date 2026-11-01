@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/kiwueke1/daalu/spec/runbook.schema.json",
+  "title": "AOMM runbook frontmatter v0.1",
+  "x-aomm-version": "0.1",
+  "$defs": {
+    "RunbookMatch": {
+      "additionalProperties": false,
+      "properties": {
+        "alertname": {
+          "description": "Alert names (or titles) this runbook covers.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Alertname",
+          "type": "array"
+        },
+        "labels": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Every label must equal the alert's.",
+          "title": "Labels",
+          "type": "object"
+        }
+      },
+      "title": "RunbookMatch",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "YAML frontmatter of a runbook file. The markdown body follows it and\nshould have ``## Symptoms``, ``## Diagnosis`` and ``## Fix`` sections.",
+  "properties": {
+    "id": {
+      "description": "Stable slug.",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,127}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "title": {
+      "maxLength": 255,
+      "minLength": 1,
+      "title": "Title",
+      "type": "string"
+    },
+    "match": {
+      "$ref": "#/$defs/RunbookMatch",
+      "description": "At least one alertname or label is required."
+    },
+    "allowed_actions": {
+      "description": "Write tools the fix may use.",
+      "items": {
+        "type": "string"
+      },
+      "title": "Allowed Actions",
+      "type": "array"
+    },
+    "description": {
+      "default": "",
+      "title": "Description",
+      "type": "string"
+    },
+    "status": {
+      "anyOf": [
+        {
+          "enum": [
+            "draft",
+            "published"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Ask the importer to publish (or keep as draft).",
+      "title": "Status"
+    }
+  },
+  "required": [
+    "id",
+    "title",
+    "match"
+  ],
+  "type": "object"
+}

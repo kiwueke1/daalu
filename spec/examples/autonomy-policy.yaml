@@ -1,0 +1,31 @@
+# AOMM v0.1 autonomy policy (spec/autonomy-policy.schema.json).
+version: 1
+investigate_automatically: true
+defaults:
+  mode: approve
+  approvers: 1
+guardrails:
+  max_auto_actions_per_hour: 10
+  circuit_breaker:
+    cooldown_minutes: 60
+  freeze_windows:
+    - days: [sat, sun]
+      start: "00:00"
+      end: "23:59"
+      tz: UTC
+rules:
+  - id: dev-restarts
+    description: Restarting things in dev is cheap and reversible.
+    match: {tools: [restart_deployment, delete_pod], clusters: ["dev-*"], namespaces: ["*"]}
+    mode: auto
+  - id: prod-rollback
+    match: {tools: [rollout_undo], namespaces: ["prod-*", "default"]}
+    mode: approve
+    approvers: 2
+  - id: scale-earned
+    match: {tools: [scale_deployment]}
+    mode: auto_after_trust
+    trust: {min_successes: 10, max_failure_rate: 0.05, window_days: 30}
+  - id: no-patches-in-kube-system
+    match: {tools: [patch_resource, delete_pod], namespaces: [kube-system]}
+    mode: deny

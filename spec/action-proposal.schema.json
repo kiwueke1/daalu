@@ -1,0 +1,268 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/kiwueke1/daalu/spec/action-proposal.schema.json",
+  "title": "AOMM action proposal v0.1",
+  "x-aomm-version": "0.1",
+  "$defs": {
+    "Approval": {
+      "additionalProperties": false,
+      "properties": {
+        "user_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "User Id"
+        },
+        "email": {
+          "title": "Email",
+          "type": "string"
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "email",
+        "at"
+      ],
+      "title": "Approval",
+      "type": "object"
+    },
+    "BlastRadius": {
+      "additionalProperties": false,
+      "properties": {
+        "pods": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pods"
+        },
+        "deployments": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Deployments"
+        }
+      },
+      "title": "BlastRadius",
+      "type": "object"
+    },
+    "PolicyDecision": {
+      "additionalProperties": false,
+      "description": "The autonomy policy's answer for one write.",
+      "properties": {
+        "mode": {
+          "description": "Effective mode after guardrails.",
+          "enum": [
+            "deny",
+            "approve",
+            "auto"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "rule_id": {
+          "default": "",
+          "description": "Matching rule id; empty when the policy defaults applied.",
+          "title": "Rule Id",
+          "type": "string"
+        },
+        "reason": {
+          "default": "",
+          "title": "Reason",
+          "type": "string"
+        },
+        "approvers": {
+          "default": 1,
+          "maximum": 5,
+          "minimum": 1,
+          "title": "Approvers",
+          "type": "integer"
+        },
+        "configured_mode": {
+          "default": "approve",
+          "description": "The mode the rule (or defaults) configures, before trust and guardrails.",
+          "enum": [
+            "deny",
+            "approve",
+            "auto",
+            "auto_after_trust"
+          ],
+          "title": "Configured Mode",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "title": "PolicyDecision",
+      "type": "object"
+    },
+    "Preview": {
+      "additionalProperties": true,
+      "description": "Best-effort dry run of the write, shown to approvers.",
+      "properties": {
+        "summary": {
+          "default": "",
+          "title": "Summary",
+          "type": "string"
+        },
+        "blast_radius": {
+          "$ref": "#/$defs/BlastRadius"
+        },
+        "details": {
+          "additionalProperties": true,
+          "title": "Details",
+          "type": "object"
+        }
+      },
+      "title": "Preview",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "A state-changing action an AI agent wants to take, as gated by policy.\n\nEvery write an agent proposes becomes one of these; it is the unit that\nis approved, rejected, executed and verified.",
+  "properties": {
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "alert_id": {
+      "description": "The incident / alert the action remediates.",
+      "format": "uuid",
+      "title": "Alert Id",
+      "type": "string"
+    },
+    "tool": {
+      "description": "Write tool, e.g. rollout_undo.",
+      "minLength": 1,
+      "title": "Tool",
+      "type": "string"
+    },
+    "input": {
+      "additionalProperties": true,
+      "description": "Tool arguments.",
+      "title": "Input",
+      "type": "object"
+    },
+    "reason": {
+      "description": "Why the action is needed (cite the evidence) and what will happen.",
+      "minLength": 1,
+      "title": "Reason",
+      "type": "string"
+    },
+    "proposed_by": {
+      "description": "`agent` for the platform's own agent, `mcp:<email>` for an external agent over MCP.",
+      "title": "Proposed By",
+      "type": "string"
+    },
+    "proposed_at": {
+      "format": "date-time",
+      "title": "Proposed At",
+      "type": "string"
+    },
+    "decision": {
+      "$ref": "#/$defs/PolicyDecision"
+    },
+    "status": {
+      "enum": [
+        "pending",
+        "approved",
+        "rejected",
+        "executed",
+        "failed"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "approvals_required": {
+      "default": 1,
+      "maximum": 5,
+      "minimum": 1,
+      "title": "Approvals Required",
+      "type": "integer"
+    },
+    "approvals": {
+      "items": {
+        "$ref": "#/$defs/Approval"
+      },
+      "title": "Approvals",
+      "type": "array"
+    },
+    "preview": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Preview"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "auto_executed": {
+      "default": false,
+      "title": "Auto Executed",
+      "type": "boolean"
+    },
+    "executed_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Executed At"
+    },
+    "verified_resolved": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Did post-execution verification show recovery? null until verified.",
+      "title": "Verified Resolved"
+    }
+  },
+  "required": [
+    "id",
+    "alert_id",
+    "tool",
+    "input",
+    "reason",
+    "proposed_by",
+    "proposed_at",
+    "decision",
+    "status"
+  ],
+  "type": "object"
+}

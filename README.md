@@ -4,13 +4,42 @@ Daalu is a self-hostable operations platform for teams that run real
 infrastructure: Kubernetes clusters, GPU nodes serving LLMs, data-center
 switches, and the observability stack around them. It puts those systems in
 one place and pairs them with an AI agent that investigates alerts with
-read-only tools and proposes fixes. **Nothing changes until a human
-approves it.**
+read-only tools and proposes fixes. **By default nothing changes until a
+human approves it**; an autonomy policy written as code decides which proven,
+low-risk fixes may run on their own, under a kill switch and circuit breaker.
 
 The model can be one you host yourself (vLLM on your own NVIDIA GPU) or a
 hosted API. The platform runs the same way with either.
 
 > Copyright © 2026 Kezie Iwueke. Licensed under [Apache-2.0](LICENSE).
+
+## AI-Ops Maturity Model
+
+Daalu implements the **AI-Ops Maturity Model (AOMM)**: a standard for how
+infrastructure teams integrate AI, the way DevOps did for delivery. It
+defines six levels, practices expressed as code (autonomy policy, runbooks,
+eval scenarios, a hash-chained audit log) and shared metrics, and Daalu
+computes your team's level from what actually happened in the last 30 days
+(**AI Ops → Maturity** in the UI).
+
+| Level | Name | In one line |
+|---|---|---|
+| 0 | Ad hoc | Individuals paste logs into a chatbot; nothing is shared or recorded. |
+| 1 | Assisted | AI reads alerts, logs and metrics and explains them. Read-only. |
+| 2 | Proposing | AI names the root cause and proposes a fix; every change is human-approved and verified. |
+| 3 | Trusted | A policy lets low-risk, proven actions run automatically. |
+| 4 | Learning | Every incident improves the next: verdicts, runbooks, evals, metrics. |
+| 5 | Autonomous | AI resolves most routine incidents; humans own the policy and the exceptions. |
+
+With no saved autonomy policy, every write the AI proposes needs one human
+approval, exactly as before AOMM.
+
+- Team-facing summary and a 90-day plan: [docs/maturity-model.md](docs/maturity-model.md)
+- The standard and JSON Schemas: [spec/](spec/README.md)
+- Engineering manual, Part XV: [docs/book-engineer/15-ai-ops-maturity/](docs/book-engineer/15-ai-ops-maturity/README.md)
+- Operator's Handbook, Part IX: [docs/book-customer/09-ai-operations-maturity/](docs/book-customer/09-ai-operations-maturity/README.md)
+- Connect Claude Code or Cursor over MCP: [docs/mcp.md](docs/mcp.md)
+- Benchmark your AI SRE: [evals/](evals/README.md)
 
 ---
 
@@ -18,7 +47,8 @@ hosted API. The platform runs the same way with either.
 
 | Area | What you get |
 |---|---|
-| **AI SRE** | Alerts from Prometheus/Alertmanager are triaged by an agent that reads pod logs, events and metrics, names a root cause, and opens a per-alert chat. Write actions (restart, scale, patch, rollback) land as **pending** proposals that carry a reason and wait for approval. |
+| **AI SRE** | Alerts from Prometheus/Alertmanager are triaged by an agent that reads pod logs, events and metrics, names a root cause, and opens a per-alert chat. Write actions (restart, scale, patch, rollback) carry a reason, a dry-run preview and blast radius, and go through the **autonomy policy**: denied, queued for one or more approvers (the default), or run automatically and verified. |
+| **AI-Ops maturity** | Investigation records with human verdicts, runbooks the agent reads and drafts, a `recent_changes` tool, a hash-chained audit log, AI-ops metrics and an automatic maturity level, an eval harness for your AI SRE, and an MCP server so Claude Code or Cursor work through the same policy. |
 | **Cluster federation** | Manage clusters behind NAT with **zero inbound ports**: a `daalu-edge` chart dials a WireGuard hub, gets a mesh IP (default `10.200.0.0/16`), and the hub reaches its API server, Prometheus and Loki through the tunnel. |
 | **GPU & LLM serving** | Zero-touch GPU node onboarding (NVIDIA GPU Operator → vLLM → registered model), DCGM metrics in a native AI Factory UI, GPU sharing (time-slicing/MPS), a **local-first LLM router** with hosted fallbacks and per-tenant cost tracking, and AIPerf load tests. |
 | **Observability** | Onboard an existing Prometheus/Loki/OpenSearch, or install a stack into a cluster in one click. Grafana dashboards render natively, and the agent can generate new ones from plain English. |
@@ -152,6 +182,9 @@ helm install daalu-edge deploy/helm/daalu-edge -n daalu-edge --create-namespace 
 │   └── scripts/
 ├── dev/                         # kind bootstrap + Tiltfile
 ├── demo/                        # monitored kind lab with breakable apps
+├── evals/                       # eval scenarios for the AI SRE (`daalu eval`)
+├── runbooks/                    # runbooks as code (`daalu runbooks import`)
+├── spec/                        # the AI-Ops Maturity Model standard + JSON Schemas
 ├── migrations/                  # Alembic
 ├── docs/                        # architecture, guides, handbooks
 └── tests/
@@ -168,6 +201,9 @@ helm install daalu-edge deploy/helm/daalu-edge -n daalu-edge --create-namespace 
 - [docs/book-customer/](docs/book-customer/README.md): the user handbook (features, integrations, troubleshooting)
 - [docs/book-engineer/](docs/book-engineer/README.md): the contributor handbook (backend, frontend, federation, GPU, security, testing)
 - [docs/runbooks/](docs/runbooks/README.md): runbooks linked from the shipped alert rules
+- [docs/maturity-model.md](docs/maturity-model.md): the AI-Ops Maturity Model for your team, and [spec/](spec/README.md): the standard itself
+- [docs/mcp.md](docs/mcp.md): connecting Claude Code, Cursor or any MCP client
+- [evals/](evals/README.md): benchmarking your AI SRE
 
 ## Contributing
 

@@ -34,6 +34,8 @@ import {
 } from "@/lib/api";
 import { Accordion, AccordionItem } from "@/components/ui/accordion";
 import { TabBar, useUrlTab, type TabDef } from "@/components/ui/tabs";
+import { ActionPolicyInfo } from "@/components/aiops/action-policy";
+import { AlertInvestigationPanel } from "@/components/aiops/investigation-panel";
 
 interface InvestigationTabsProps {
   alert: Alert;
@@ -166,12 +168,15 @@ function InvestigationTabsInner({ alert, details }: InvestigationTabsProps) {
 
       <div role="tabpanel">
         {tab === "root-cause" && (
-          <NarrativePanel
-            subtitle="What broke and why"
-            body={sections.rootCause}
-            pending={triageInFlight && !sections.rootCause}
-            empty="No findings yet — hit Re-triage to start an investigation."
-          />
+          <div className="space-y-4">
+            <NarrativePanel
+              subtitle="What broke and why"
+              body={sections.rootCause}
+              pending={triageInFlight && !sections.rootCause}
+              empty="No findings yet — hit Re-triage to start an investigation."
+            />
+            <AlertInvestigationPanel alertId={alert.id} />
+          </div>
         )}
         {tab === "background" && (
           <NarrativePanel
@@ -491,10 +496,19 @@ function ApprovalCard({
   // Approving creates a workflow run and returns at once (the action and its
   // verification run in the background); we then open the run page, which
   // shows each step as it lands.
+  // With a multi-approver policy an approval may only record a vote:
+  // workflow_run_id is then "" and nothing runs yet, so stay on the page.
+  const [waitingFor, setWaitingFor] = useState<number | null>(null);
   const approveOne = useMutation({
     mutationFn: (actionId: string) => api.alerts.chat.approve(alert.id, actionId),
     onSuccess: (data) => {
       qc.setQueryData(["alert-chat", alert.id], data.messages);
+      qc.invalidateQueries({ queryKey: ["aiops-investigation-by-alert", alert.id] });
+      if (!data.workflow_run_id) {
+        setWaitingFor(data.approvals_remaining ?? 1);
+        return;
+      }
+      setWaitingFor(null);
       qc.invalidateQueries({ queryKey: ["workflow-runs"] });
       router.push(`/workflows/${data.workflow_run_id}`);
     },
@@ -511,20 +525,26 @@ function ApprovalCard({
   const approveAll = async () => {
     setBulkApproving(true);
     let firstRunId: string | null = null;
+    let stillWaiting = 0;
     try {
       for (const a of pendingWrites) {
         const res = await api.alerts.chat.approve(alert.id, a.id);
-        if (!firstRunId) firstRunId = res.workflow_run_id;
+        if (!firstRunId && res.workflow_run_id) firstRunId = res.workflow_run_id;
+        if (!res.workflow_run_id) stillWaiting += 1;
       }
       qc.invalidateQueries({ queryKey: ["alert-chat", alert.id] });
     } finally {
       setBulkApproving(false);
     }
     if (firstRunId) router.push(`/workflows/${firstRunId}`);
+    else if (stillWaiting) setWaitingFor(stillWaiting);
   };
 
   const busy = approveOne.isPending || rejectOne.isPending || bulkApproving;
-  const starting = approveOne.isPending || bulkApproving || approveOne.isSuccess;
+  const starting =
+    approveOne.isPending ||
+    bulkApproving ||
+    (approveOne.isSuccess && !!approveOne.data?.workflow_run_id);
   const failure = (approveOne.error ?? rejectOne.error) as Error | null;
 
   return (
@@ -563,6 +583,20 @@ function ApprovalCard({
             : "Creating the workflow run and starting the approved action…"}
         </div>
       )}
+      {waitingFor !== null && !starting && (
+        <div
+          role="status"
+          className="mb-3 rounded-md px-3 py-2 text-[12px] flex items-center gap-2"
+          style={{
+            background: "color-mix(in srgb, var(--warning) 10%, var(--bg-base))",
+            border: "1px solid color-mix(in srgb, var(--warning) 40%, var(--line))",
+          }}
+        >
+          <Check className="h-3.5 w-3.5" style={{ color: "var(--warning)" }} />
+          Your approval is recorded, waiting for {waitingFor} more. The action
+          runs when the policy&apos;s approver count is reached.
+        </div>
+      )}
       {failure && (
         <div
           role="alert"
@@ -591,6 +625,7 @@ function ApprovalCard({
             <div className="text-[12px] text-fg/80 mt-1.5 whitespace-pre-wrap">
               {actionReason(a) ?? actionRationale(a, contentById) ?? describeAction(a)}
             </div>
+            <ActionPolicyInfo action={a} />
             <details className="mt-1.5 group">
               <summary className="cursor-pointer text-[11px] text-muted hover:text-[color:var(--text)] inline-flex items-center gap-1">
                 <ChevronRight className="h-3 w-3 transition-transform group-open:rotate-90" />
@@ -622,6 +657,10 @@ function ApprovalCard({
                 {approveOne.isPending && approveOne.variables === a.id ? (
                   <>
                     <Loader2 className="h-3.5 w-3.5 animate-spin" /> Starting…
+                  </>
+                ) : (a.approvals_required ?? 1) - (a.approvals?.length ?? 0) > 1 ? (
+                  <>
+                    <Check className="h-3.5 w-3.5" /> Add my approval
                   </>
                 ) : (
                   <>
@@ -1561,6 +1600,9 @@ function ExecutedActionsList({ actions }: { actions: AlertAction[] }) {
                 {a.status}
               </span>
             </summary>
+            <div className="px-3 pb-2">
+              <ActionPolicyInfo action={a} />
+            </div>
             <div className="border-t border-line">
               <HighlightedLog
                 content={a.result_error || a.result_output || "(no output captured)"}

@@ -1,0 +1,27 @@
+# demo/break.sh bad-image: dummy-app pointed at an image tag that doesn't exist.
+# Recreate strategy → the old pod goes first → 0 available → DummyAppDown.
+id: dummy-app-bad-image
+title: dummy-app rolled to an image tag that doesn't exist
+description: >-
+  A rollout points dummy-app at nginx:this-tag-does-not-exist-9.9.9. The new pod
+  sits in ErrImagePull / ImagePullBackOff and the app is down. The right fix is
+  to roll back the bad revision.
+cluster: daalu-demo
+namespace: daalu-demo
+tags: [demo, kubernetes, rollout]
+setup:   # restore the known-good spec from demo/manifests/dummy-app.yaml (idempotent)
+  - [patch, deploy/dummy-app, --namespace, daalu-demo, --type, strategic, -p, '{"spec":{"replicas":1,"template":{"spec":{"containers":[{"name":"dummy","image":"nginx:1.27-alpine","command":null,"readinessProbe":{"httpGet":{"path":"/","port":80}},"resources":{"requests":{"cpu":"10m","memory":"16Mi"},"limits":{"cpu":"100m","memory":"64Mi"}}}]}}}}']
+  - [rollout, status, deploy/dummy-app, --namespace, daalu-demo, --timeout=180s]
+inject:
+  - [set, image, deploy/dummy-app, dummy=nginx:this-tag-does-not-exist-9.9.9, --namespace, daalu-demo]
+alert: DummyAppDown
+timeout_s: 600
+expect:
+  root_cause_any: [ImagePullBackOff, ErrImagePull, this-tag-does-not-exist, image tag, pull]
+  fix_tools_any: [rollout_undo]
+  fix_target: dummy-app
+  # Restarting or deleting pods re-pulls the same missing tag: looks like a fix, isn't.
+  forbidden_tools: [restart_deployment, delete_pod]
+cleanup:
+  - [patch, deploy/dummy-app, --namespace, daalu-demo, --type, strategic, -p, '{"spec":{"replicas":1,"template":{"spec":{"containers":[{"name":"dummy","image":"nginx:1.27-alpine","command":null,"readinessProbe":{"httpGet":{"path":"/","port":80}},"resources":{"requests":{"cpu":"10m","memory":"16Mi"},"limits":{"cpu":"100m","memory":"64Mi"}}}]}}}}']
+  - [rollout, status, deploy/dummy-app, --namespace, daalu-demo, --timeout=180s]

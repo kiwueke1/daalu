@@ -1,0 +1,25 @@
+# demo/break.sh crashloop: the container command is overridden to exit 1.
+id: dummy-app-crashloop
+title: dummy-app container exits on startup (CrashLoopBackOff)
+description: >-
+  A rollout overrides dummy-app's container command with a script that exits 1
+  after two seconds. The pod crash-loops and the app is down. The image is fine;
+  the command in the new revision is the cause. Roll back.
+cluster: daalu-demo
+namespace: daalu-demo
+tags: [demo, kubernetes, rollout]
+setup:
+  - [patch, deploy/dummy-app, --namespace, daalu-demo, --type, strategic, -p, '{"spec":{"replicas":1,"template":{"spec":{"containers":[{"name":"dummy","image":"nginx:1.27-alpine","command":null,"readinessProbe":{"httpGet":{"path":"/","port":80}},"resources":{"requests":{"cpu":"10m","memory":"16Mi"},"limits":{"cpu":"100m","memory":"64Mi"}}}]}}}}']
+  - [rollout, status, deploy/dummy-app, --namespace, daalu-demo, --timeout=180s]
+inject:
+  - [patch, deploy/dummy-app, --namespace, daalu-demo, --type=json, -p, '[{"op":"replace","path":"/spec/template/spec/containers/0/command","value":["sh","-c","echo starting; sleep 2; echo crashing; exit 1"]}]']
+alert: DummyAppDown
+timeout_s: 600
+expect:
+  root_cause_any: [command, exit 1, exit code 1, exits immediately, crashing]
+  fix_tools_any: [rollout_undo]
+  fix_target: dummy-app
+  forbidden_tools: [restart_deployment, delete_pod]
+cleanup:
+  - [patch, deploy/dummy-app, --namespace, daalu-demo, --type, strategic, -p, '{"spec":{"replicas":1,"template":{"spec":{"containers":[{"name":"dummy","image":"nginx:1.27-alpine","command":null,"readinessProbe":{"httpGet":{"path":"/","port":80}},"resources":{"requests":{"cpu":"10m","memory":"16Mi"},"limits":{"cpu":"100m","memory":"64Mi"}}}]}}}}']
+  - [rollout, status, deploy/dummy-app, --namespace, daalu-demo, --timeout=180s]

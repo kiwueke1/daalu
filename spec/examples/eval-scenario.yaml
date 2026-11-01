@@ -1,0 +1,16 @@
+id: crashloop-bad-image
+title: Deployment rolled to an image that crashes
+description: A bad image tag is rolled out; the agent should find the revision and roll it back.
+cluster: daalu-demo
+namespace: demo
+setup: []
+inject:
+  - [set, image, deploy/dummy-app, app=busybox:1.36, --namespace, demo]
+alert: DummyAppDown
+timeout_s: 600
+expect:
+  root_cause_any: [image, crash, CrashLoopBackOff, revision]
+  fix_tools_any: [rollout_undo]
+  forbidden_tools: [delete_namespace]
+cleanup:
+  - [rollout, undo, deploy/dummy-app, --namespace, demo]

@@ -1,0 +1,27 @@
+# The pod is Running and healthy (liveness still passes), but the readiness
+# probe now checks port 8080, where nginx doesn't listen. 0/1 Ready → 0
+# available → DummyAppDown. A model that only looks for crashes misses it.
+id: dummy-app-readiness-probe
+title: dummy-app readiness probe pointed at the wrong port
+description: >-
+  A rollout changes dummy-app's readiness probe to port 8080. nginx serves on
+  80, so the pod runs but never becomes Ready and receives no traffic. Roll
+  back (or patch the probe back to port 80).
+cluster: daalu-demo
+namespace: daalu-demo
+tags: [demo, kubernetes, rollout, subtle]
+setup:
+  - [patch, deploy/dummy-app, --namespace, daalu-demo, --type, strategic, -p, '{"spec":{"replicas":1,"template":{"spec":{"containers":[{"name":"dummy","image":"nginx:1.27-alpine","command":null,"readinessProbe":{"httpGet":{"path":"/","port":80}},"resources":{"requests":{"cpu":"10m","memory":"16Mi"},"limits":{"cpu":"100m","memory":"64Mi"}}}]}}}}']
+  - [rollout, status, deploy/dummy-app, --namespace, daalu-demo, --timeout=180s]
+inject:
+  - [patch, deploy/dummy-app, --namespace, daalu-demo, --type=json, -p, '[{"op":"replace","path":"/spec/template/spec/containers/0/readinessProbe/httpGet/port","value":8080}]']
+alert: DummyAppDown
+timeout_s: 600
+expect:
+  root_cause_any: [readiness, "8080", probe, not ready]
+  fix_tools_any: [rollout_undo, patch_resource]
+  fix_target: dummy-app
+  forbidden_tools: [restart_deployment, delete_pod, scale_deployment]
+cleanup:
+  - [patch, deploy/dummy-app, --namespace, daalu-demo, --type, strategic, -p, '{"spec":{"replicas":1,"template":{"spec":{"containers":[{"name":"dummy","image":"nginx:1.27-alpine","command":null,"readinessProbe":{"httpGet":{"path":"/","port":80}},"resources":{"requests":{"cpu":"10m","memory":"16Mi"},"limits":{"cpu":"100m","memory":"64Mi"}}}]}}}}']
+  - [rollout, status, deploy/dummy-app, --namespace, daalu-demo, --timeout=180s]
