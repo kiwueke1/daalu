@@ -8,6 +8,7 @@ import remarkGfm from "remark-gfm";
 import { Check, Send, ShieldAlert, Sparkles, Terminal, X } from "lucide-react";
 import { api, type AlertAction, type AlertChatMessage } from "@/lib/api";
 import { ActionPolicyInfo } from "@/components/aiops/action-policy";
+import { useAuth } from "@/lib/auth";
 
 interface AlertChatProps {
   alertId: string;
@@ -308,8 +309,12 @@ interface ActionCardProps {
  * until the operator decides.
  */
 function ActionCard({ action, onApprove, onReject, busy }: ActionCardProps) {
+  const { user } = useAuth();
   const isWrite = action.requires_approval;
   const isPending = action.status === "pending";
+  // Multi-approver policy: you can't approve twice, so hide the buttons once
+  // your approval is recorded (ActionPolicyInfo shows who it's waiting on).
+  const approvedByMe = !!user && (action.approvals ?? []).some((x) => x.user_id === user.id);
   const isFailed = action.status === "failed";
 
   const accent = isWrite
@@ -381,7 +386,12 @@ function ActionCard({ action, onApprove, onReject, busy }: ActionCardProps) {
         </pre>
       )}
 
-      {isPending && isWrite && (
+      {isPending && isWrite && approvedByMe && (
+        <div className="px-3 py-2 text-muted text-[11px]" style={{ borderTop: "1px solid var(--line)" }}>
+          You approved this. It runs when the policy&apos;s approver count is reached.
+        </div>
+      )}
+      {isPending && isWrite && !approvedByMe && (
         <div
           className="px-3 py-2 flex items-center gap-2"
           style={{ borderTop: "1px solid var(--line)" }}

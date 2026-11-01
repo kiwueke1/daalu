@@ -50,7 +50,9 @@ export function AlertInvestigationPanel({ alertId }: { alertId: string }) {
       </section>
     );
   }
-  if (q.isError || !q.data) {
+  // Anything but an investigation object (an empty body, a proxy's error
+  // page parsed as JSON) is "couldn't load", never a crash of the alert page.
+  if (q.isError || !q.data || Array.isArray(q.data) || typeof q.data !== "object") {
     return (
       <section className="surface p-4 text-[12px] text-muted">
         Couldn&apos;t load the investigation record.
@@ -94,7 +96,7 @@ export function AlertInvestigationPanel({ alertId }: { alertId: string }) {
           Actions {inv.actions_proposed} proposed · {inv.actions_approved} approved ·{" "}
           {inv.actions_rejected} rejected · {inv.actions_auto} auto
         </span>
-        {inv.runbook_ids.length > 0 && (
+        {(inv.runbook_ids?.length ?? 0) > 0 && (
           <span className="text-muted">
             {inv.runbook_ids.length} runbook{inv.runbook_ids.length === 1 ? "" : "s"} used
           </span>

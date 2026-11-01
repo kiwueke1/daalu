@@ -35,6 +35,7 @@ import {
 import { Accordion, AccordionItem } from "@/components/ui/accordion";
 import { TabBar, useUrlTab, type TabDef } from "@/components/ui/tabs";
 import { ActionPolicyInfo } from "@/components/aiops/action-policy";
+import { useAuth } from "@/lib/auth";
 import { AlertInvestigationPanel } from "@/components/aiops/investigation-panel";
 
 interface InvestigationTabsProps {
@@ -484,6 +485,11 @@ function ApprovalCard({
 }) {
   const qc = useQueryClient();
   const router = useRouter();
+  const { user } = useAuth();
+  // Under a multi-approver policy the same person can't approve twice (the
+  // API answers 409), so once you've added yours the button goes away.
+  const approvedByMe = (a: AlertAction) =>
+    !!user && (a.approvals ?? []).some((x) => x.user_id === user.id);
   // message id → its text, so each action can fall back to the agent's own
   // explanation (from the message that proposed it) when it has no reason.
   const contentById = useMemo(() => {
@@ -528,6 +534,7 @@ function ApprovalCard({
     let stillWaiting = 0;
     try {
       for (const a of pendingWrites) {
+        if (approvedByMe(a)) continue;
         const res = await api.alerts.chat.approve(alert.id, a.id);
         if (!firstRunId && res.workflow_run_id) firstRunId = res.workflow_run_id;
         if (!res.workflow_run_id) stillWaiting += 1;
@@ -644,6 +651,12 @@ function ApprovalCard({
               >
                 <X className="h-3.5 w-3.5" /> Reject
               </button>
+              {approvedByMe(a) ? (
+                <span className="h-8 px-3 rounded-md border border-line text-muted inline-flex items-center gap-1.5 text-[12px]">
+                  <Check className="h-3.5 w-3.5" /> You approved · waiting for{" "}
+                  {Math.max((a.approvals_required ?? 1) - (a.approvals?.length ?? 0), 1)} more
+                </span>
+              ) : (
               <button
                 type="button"
                 disabled={busy}
@@ -668,11 +681,12 @@ function ApprovalCard({
                   </>
                 )}
               </button>
+              )}
             </div>
           </div>
         ))}
       </div>
-      {pendingWrites.length > 1 && (
+      {pendingWrites.filter((a) => !approvedByMe(a)).length > 1 && (
         <button
           type="button"
           disabled={bulkApproving}
