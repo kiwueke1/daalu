@@ -65,13 +65,29 @@ the metrics in section 5; they are measured, not self-declared.
 
 ### Entry criteria
 
+Each row below is the measurable test for the level of the same number in the
+table above: `L1` is level 1 (Assisted), `L2` is level 2 (Proposing), and so
+on. The definition says what the level means; the criteria are the signals in
+the data that show a team is there. The criteria check those signals, not every
+word of the definition. Where a definition asks for something the data cannot
+show (for example, "humans own policy and exceptions" at level 5), the
+self-assessment below covers it.
+
 | Level | Criteria (all must hold) |
 |---|---|
-| L1 | `alerts_total ≥ 5` and `ai_triage_rate ≥ 0.5`. |
-| L2 | At least one human-approved write action executed, and `proposal_approval_rate` is defined (at least one human decision recorded). |
-| L3 | An active autonomy policy with at least one rule in mode `auto` or `auto_after_trust`; at least one automatic action executed; `ai_change_failure_rate ≤ 0.15`. |
-| L4 | `verdict_coverage ≥ 0.3`; at least one published runbook; at least one eval run in the window. |
-| L5 | `auto_resolution_rate ≥ 0.5`; `rca_agreement_rate ≥ 0.8`; `audit_chain_ok` is true; guardrails configured (a circuit breaker and an hourly rate limit on automatic actions). |
+| L0 · Ad hoc | None. Level 0 is the starting point, not something a team reaches. |
+| L1 · Assisted | `alerts_total ≥ 5` and `ai_triage_rate ≥ 0.5`. |
+| L2 · Proposing | At least one human-approved write action executed, and `proposal_approval_rate` is defined (at least one human decision recorded). |
+| L3 · Trusted | An active autonomy policy with at least one rule (or the default mode) set to `auto` or `auto_after_trust`; at least one automatic action executed; `ai_change_failure_rate ≤ 0.15`. |
+| L4 · Learning | `verdict_coverage ≥ 0.3`; at least one published runbook; at least one eval run in the window. |
+| L5 · Autonomous | `auto_resolution_rate ≥ 0.5`; `rca_agreement_rate ≥ 0.8`; `audit_chain_ok` is true; guardrails configured (a circuit breaker and an hourly rate limit on automatic actions). |
+
+**Why L0 has no criteria.** Level 0 describes what happens when there is no
+shared system: people paste logs into a chatbot, and nothing is recorded. There
+is nothing to measure, so there is nothing to test for. Every team starts at
+level 0 and stays there until the L1 criteria hold. A team that meets none of
+the criteria above is at level 0, including a team that has not connected any
+data yet.
 
 Organisational practices the data cannot show (on-call engineers trust AI
 output, post-incident reviews include the AI's investigation, the policy is
