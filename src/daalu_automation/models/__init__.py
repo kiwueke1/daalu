@@ -1,7 +1,6 @@
 """ORM models — importing this package registers every table on ``Base.metadata``."""
 
 from daalu_automation.models.agent_run import AgentRun
-from daalu_automation.models.aiperf_run import AiperfRun, AiperfRunState
 from daalu_automation.models.aiops import (
     AIOpsTenantState,
     AuditEvent,
@@ -11,6 +10,7 @@ from daalu_automation.models.aiops import (
     MaturityAssessment,
     Runbook,
 )
+from daalu_automation.models.aiperf_run import AiperfRun, AiperfRunState
 from daalu_automation.models.alert import (
     Alert,
     AlertOccurrence,

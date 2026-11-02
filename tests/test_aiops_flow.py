@@ -224,8 +224,7 @@ async def test_two_approvers_required(db, seeded, monkeypatch):
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_verdict_and_tamper_detection(db, seeded, monkeypatch):
-    from daalu_automation.api.routers import aiops_investigations
-    from daalu_automation.api.routers import alert_chat
+    from daalu_automation.api.routers import aiops_investigations, alert_chat
     from daalu_automation.core.aiops import audit
     from daalu_automation.models import AuditEvent, Investigation, User
 
