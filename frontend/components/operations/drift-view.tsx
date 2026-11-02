@@ -72,12 +72,18 @@ export function DriftView() {
           const headline = g.rows![0];
           const diffSummary = summarizeDiff(headline.diff);
           return (
-            <Link
+            // The whole card opens the device (a stretched link underneath);
+            // "Open proposal" sits above it. Links can't nest.
+            <div
               key={g.device_id}
-              href={`/devices/${g.device_id}`}
-              className="block surface p-4 hover:border-accent-blue/40 transition-colors"
+              className="relative surface p-4 hover:border-accent-blue/40 transition-colors"
             >
-              <div className="flex items-center gap-3">
+              <Link
+                href={`/devices/${g.device_id}`}
+                aria-label={`Open device ${g.device_id.slice(0, 8)}`}
+                className="absolute inset-0 rounded-[inherit]"
+              />
+              <div className="pointer-events-none flex items-center gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-[10px] uppercase tracking-wider text-[color:var(--warning)] font-semibold">
@@ -102,8 +108,7 @@ export function DriftView() {
                     <GitPullRequest className="h-3 w-3" />
                     <Link
                       href={`/proposals/${headline.id}`}
-                      className="hover:text-[color:var(--text)] underline"
-                      onClick={(e) => e.stopPropagation()}
+                      className="pointer-events-auto relative z-10 hover:text-[color:var(--text)] underline"
                     >
                       Open proposal
                     </Link>
@@ -113,7 +118,7 @@ export function DriftView() {
                   </div>
                 </div>
               </div>
-            </Link>
+            </div>
           );
         })}
       </div>
@@ -133,5 +138,6 @@ function summarizeDiff(diff: string): string {
   if (added === 0 && removed === 0) {
     return lines.slice(0, 1).join("") || "(empty diff)";
   }
-  return `${added} lines added, ${removed} lines removed`;
+  const n = (k: number, w: string) => `${k} ${k === 1 ? "line" : "lines"} ${w}`;
+  return `${n(added, "added")}, ${n(removed, "removed")}`;
 }

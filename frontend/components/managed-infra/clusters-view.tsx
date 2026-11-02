@@ -622,7 +622,7 @@ function OnboardForm({
             onChange={(e) => setSlug(e.target.value)}
             required
             placeholder="acme-prod"
-            pattern="[a-z0-9]([a-z0-9-]*[a-z0-9])?"
+            pattern="[a-z0-9]([a-z0-9\-]*[a-z0-9])?"
             className="w-full h-9 px-3 rounded-lg bg-bg-elevated/60 border border-line text-sm"
           />
         </label>
