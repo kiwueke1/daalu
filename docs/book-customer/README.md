@@ -84,8 +84,10 @@ folders.
 
 ## Part IX — AI Operations Maturity
 
-How your team works with the AI SRE, measured — and how to move up the
-AI-Ops Maturity Model. Start with the
+How well your team works with the AI SRE, measured: five key metrics
+(time to diagnosis, time to resolve, RCA agreement, AI change-failure rate,
+auto-resolution rate), how their thresholds place you on the six levels of
+the AI-Ops Maturity Model, and how to move up. Start with the
 [section overview](09-ai-operations-maturity/README.md).
 
 51. [Where is your team?](09-ai-operations-maturity/51-where-is-your-team.md)

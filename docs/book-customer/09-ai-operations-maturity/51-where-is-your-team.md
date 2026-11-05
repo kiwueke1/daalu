@@ -1,15 +1,39 @@
 # 51. Where is your team?
 
-The **Maturity** page answers one question: how does your team actually work
+The **Maturity** page answers one question: how well does your team work
 with the AI SRE today? It doesn't ask you to fill in a survey to find out.
-It measures what happened over a window (the last 7, 30 or 90 days) and
-places you on the AI-Ops Maturity Model ladder from Level 0 to Level 5.
+It measures what happened over a window (the last 7, 30 or 90 days), reports
+the metrics, and uses thresholds on those metrics to place you on the AI-Ops
+Maturity Model ladder from Level 0 to Level 5.
 
 URL: `https://daalu.example.com/maturity` (sidebar: **AI Ops → Maturity**).
 
 ---
 
-## The six levels
+## Start with the metrics
+
+Five key metrics say how your AI operations are performing, in the same way
+the DORA metrics do for software delivery:
+
+| Group | Metric | Tile on the page | Better is |
+|---|---|---|---|
+| Speed | Time to diagnosis | **Time to diagnosis** | Lower |
+| Speed | Time to resolve | **MTTR** | Lower |
+| Quality | Root-cause (RCA) agreement | **RCA agreement** | Higher |
+| Quality | AI change-failure rate | **AI change-failure rate** | Lower |
+| Autonomy | Auto-resolution rate | **Auto-resolution rate** | Higher |
+
+Supporting metrics explain them: **AI triage rate** and the alert count (how
+much the AI sees), **verdict coverage** (how much of its work you grade, the
+sample behind RCA agreement), **approval rate** (how often you accept its
+fixes), published **runbooks**, **eval runs**, and whether the **audit
+chain** verifies. [Chapter 55](55-metrics-dashboard.md) explains every one.
+
+---
+
+## How the metrics map to the levels
+
+### The six levels
 
 | Level | Name | In one sentence |
 |---|---|---|
@@ -22,32 +46,38 @@ URL: `https://daalu.example.com/maturity` (sidebar: **AI Ops → Maturity**).
 
 Those are the exact descriptions the page shows when you hover a level.
 
----
+### The thresholds behind each level
 
-## How your level is computed
+Each level from 1 to 5 is a short list of criteria. Most are thresholds on
+the metrics above; a few are facts about what ran and what your saved policy
+allows. Daalu checks every one against the data in the window. Your
+**automatic level** is the highest level whose criteria are all met **and**
+every level below it is met too. Levels are cumulative: if you meet Level
+4's criteria but not Level 3's, you are at Level 2.
 
-Each level from 1 to 5 has a short list of criteria. Daalu checks every one
-against the data in the window. Your **automatic level** is the highest level
-whose criteria are all met **and** every level below it is met too. Levels
-are cumulative: if you meet Level 4's criteria but not Level 3's, you are at
-Level 2.
+| Level | Criterion (as shown on the page) | Metric or fact behind it | Met when |
+|---|---|---|---|
+| 1 | Alerts investigated by the AI | AI triage rate | at least 50% of the alerts in the window have an AI investigation |
+| 1 | Alerts in the window | Alert count | at least 5 alerts reached Daalu in the window |
+| 2 | Human-approved fixes executed | Fact: what ran | at least 1 fix a person approved has run |
+| 2 | Proposal approval rate measured | Approval rate | at least one proposal has been approved or rejected, so the rate is known |
+| 3 | Policy rules allowing automatic actions | Fact: saved policy | your **saved** policy has at least one `auto` or `auto_after_trust` rule (a `defaults.mode` of `auto` or `auto_after_trust` also counts as one) |
+| 3 | Automatic actions executed | Fact: what ran | at least 1 automatic action has run |
+| 3 | AI change failure rate | **AI change-failure rate** (key) | 15% or less of the executed fixes failed verification |
+| 4 | Investigations with a human verdict | Verdict coverage | at least 30% of investigations have a verdict |
+| 4 | Published runbooks | Runbooks published | at least 1 published runbook |
+| 4 | Eval runs in the window | Eval runs | at least 1 eval run in the window |
+| 5 | Resolved automatically | **Auto-resolution rate** (key) | at least 50% of resolved investigations were fixed automatically |
+| 5 | Root-cause agreement | **RCA agreement** (key) | at least 80% agreement between the AI's root cause and your verdicts |
+| 5 | Audit chain verifies | Audit chain | the audit log's hash chain is intact |
+| 5 | Guardrails configured (circuit breaker + rate limit) | Fact: saved policy | your **saved** policy sets both `guardrails.circuit_breaker` and a non-zero `guardrails.max_auto_actions_per_hour` |
 
-| Level | Criterion (as shown on the page) | Met when |
-|---|---|---|
-| 1 | Alerts investigated by the AI | at least 50% of the alerts in the window have an AI investigation |
-| 1 | Alerts in the window | at least 5 alerts reached Daalu in the window |
-| 2 | Human-approved fixes executed | at least 1 fix a person approved has run |
-| 2 | Proposal approval rate measured | at least one proposal has been approved or rejected, so the rate is known |
-| 3 | Policy rules allowing automatic actions | your **saved** policy has at least one `auto` or `auto_after_trust` rule (a `defaults.mode` of `auto` or `auto_after_trust` also counts as one) |
-| 3 | Automatic actions executed | at least 1 automatic action has run |
-| 3 | AI change failure rate | 15% or less of the executed fixes failed verification |
-| 4 | Investigations with a human verdict | at least 30% of investigations have a verdict |
-| 4 | Published runbooks | at least 1 published runbook |
-| 4 | Eval runs in the window | at least 1 eval run in the window |
-| 5 | Resolved automatically | at least 50% of resolved investigations were fixed automatically |
-| 5 | Root-cause agreement | at least 80% agreement between the AI's root cause and your verdicts |
-| 5 | Audit chain verifies | the audit log's hash chain is intact |
-| 5 | Guardrails configured (circuit breaker + rate limit) | your **saved** policy sets both `guardrails.circuit_breaker` and a non-zero `guardrails.max_auto_actions_per_hour` |
+Read from the metric side: of the five key metrics, AI change-failure rate
+gates Level 3, and auto-resolution rate and RCA agreement gate Level 5. Time
+to diagnosis and time to resolve gate no level, on purpose. Every team's
+systems and alert mix differ, so there is no fair single threshold; they are
+what climbing the levels should improve. Watch them against your own
+history, for example by comparing the 30-day and 90-day windows.
 
 Two details worth knowing:
 
@@ -58,7 +88,7 @@ Two details worth knowing:
 - **A rate with no data is "unknown", not zero.** If no fixes have run, the
   change failure rate is unknown and that criterion is "not yet".
 
-The metrics behind these criteria are explained one by one in
+Every metric behind these criteria is explained in
 [Chapter 55](55-metrics-dashboard.md).
 
 ---
@@ -84,7 +114,9 @@ you can see which lower-level gap is holding you back.
 
 ### The stat tiles
 
-Eight tiles with the headline numbers:
+Eight tiles with the headline numbers. Five of them are the key metrics
+(time to diagnosis, RCA agreement, AI change-failure rate, auto-resolution
+rate and MTTR); the other three are supporting metrics:
 
 | Tile | What it shows |
 |---|---|
@@ -106,7 +138,7 @@ A line chart over the window: **Alerts**, **Investigated**,
 
 ### Criteria
 
-The table from the section above, filled in with your numbers. Columns:
+The threshold table from the section above, filled in with your numbers. Columns:
 **Level**, **Criterion**, **Met** ("met" or "not yet"), **Value** and
 **Target**.
 
@@ -172,16 +204,24 @@ recent one.
 
 ## A typical climb
 
-- **Level 0 → 1.** Connect your alert source ([chapter 8](../02-getting-started/08-onboarding-your-observability-stack.md)) and turn on
+Each step moves a metric, and the metric moves the level.
+
+- **Level 0 → 1: raise the triage rate.** Connect your alert source ([chapter 8](../02-getting-started/08-onboarding-your-observability-stack.md)) and turn on
   `investigate_automatically` in the autonomy policy (chapter 52).
-- **Level 1 → 2.** Approve or reject the fixes the AI proposes on the alert
-  page, so a human-approved change runs and is verified.
-- **Level 2 → 3.** Add an `auto_after_trust` rule for a low-risk action you
-  approve often. It runs on its own once it has a clean record.
-- **Level 3 → 4.** Grade investigations, publish a runbook, run an eval.
-- **Level 4 → 5.** Widen the automatic rules to your most frequent proven
-  fixes, keep root-cause agreement high, and save a policy with a circuit
-  breaker and an hourly cap.
+- **Level 1 → 2: get the approval rate measured.** Approve or reject the
+  fixes the AI proposes on the alert page, so a human-approved change runs
+  and is verified.
+- **Level 2 → 3: start automatic fixes, keep the change-failure rate low.**
+  Add an `auto_after_trust` rule for a low-risk action you approve often. It
+  runs on its own once it has a clean record.
+- **Level 3 → 4: raise verdict coverage.** Grade investigations, publish a
+  runbook, run an eval.
+- **Level 4 → 5: raise auto-resolution, keep RCA agreement high.** Widen the
+  automatic rules to your most frequent proven fixes and save a policy with
+  a circuit breaker and an hourly cap.
+
+Along the way, time to diagnosis and time to resolve should fall. If they
+don't, look at where alerts wait before anyone (or the AI) picks them up.
 
 The team-facing version of this plan, as a 90-day schedule, is in
 [docs/maturity-model.md](../../maturity-model.md).

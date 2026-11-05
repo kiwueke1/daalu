@@ -6,7 +6,8 @@ happened to each proposal, how the alert ended, and — once someone on your
 team has looked — whether the AI was right. That record is an
 **investigation**. Grading it is the single most useful thing you can do to
 move from Level 2 to Level 4: it's how "the AI is usually right" becomes a
-number instead of a feeling.
+number instead of a feeling. That number is **RCA agreement**, one of the
+five key metrics (chapter 55).
 
 URL: `https://daalu.example.com/investigations` (sidebar: **AI Ops →
 Investigations**).

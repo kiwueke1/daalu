@@ -1,13 +1,13 @@
 # The AI-Ops Maturity Model (AOMM), for your team
 
-DevOps gave teams a shared picture of good delivery: practices written as
-code, and four numbers (DORA) anyone could compute. The AI-Ops Maturity
-Model does the same for how an infrastructure team works with AI. It asks
-two questions: **who decides** what the AI may change, and **what the team
-learns** from each incident.
+DevOps gave teams four numbers (DORA) anyone could compute, and practices
+written as code. The AI-Ops Maturity Model does the same for how an
+infrastructure team works with AI. It starts with **five key metrics** that
+say how well the AI is doing, then uses thresholds on those metrics to place
+a team on **six levels**, so the level is measured, never claimed.
 
 This page is the short version for a team deciding where it stands and what
-to do next. The standard itself is [`spec/README.md`](../spec/README.md)
+to do next: the metrics first, then how they map to the levels. The standard itself is [`spec/README.md`](../spec/README.md)
 (AOMM v0.1, with JSON Schemas for every artefact). Daalu's implementation is
 documented in the
 [engineering manual, Part XV](book-engineer/15-ai-ops-maturity/README.md)
@@ -16,7 +16,54 @@ and, page by page for operators, in the
 
 ---
 
-## The six levels
+## The metrics
+
+### The five key metrics
+
+These are the AOMM equivalent of the DORA four keys. DORA measures delivery
+with two speed numbers and two stability numbers; AOMM measures AI operations
+with two speed numbers, two quality numbers, and one for autonomy.
+
+| Group | Metric | Question it answers | Better is | DORA counterpart |
+|---|---|---|---|---|
+| Speed | Time to diagnosis | How long from the alert firing to the AI naming a root cause? | Lower | Lead time for changes |
+| Speed | Time to resolve | How long from the alert firing to a verified fix (or resolution)? | Lower | Time to restore service |
+| Quality | RCA agreement | How often does the team agree with the AI's root cause (partly right counts half)? | Higher | — (is the AI right?) |
+| Quality | AI change-failure rate | Of the AI fixes that ran, how many didn't fix the problem? | Lower | Change failure rate |
+| Autonomy | Auto-resolution rate | Of resolved incidents, how many did the AI fix with no human? | Higher | — (new to AI operations) |
+
+Read them together. A fast diagnosis that is usually wrong is worse than a
+slow one that is right, and auto-resolution with a high change-failure rate is
+unattended damage. A healthy team sees the two times fall while agreement
+stays high and change failures stay low, with auto-resolution rising on top.
+
+### Supporting metrics
+
+These explain the key metrics and show whether the practices behind them are
+in place.
+
+| Metric | Question it answers | Healthy direction |
+|---|---|---|
+| Alerts in the window | Is real alert traffic reaching the AI? | Enough to measure: ≥ 5 |
+| AI triage rate | What share of alerts does the AI investigate? | Up |
+| Verdict coverage | What share of investigations has a human verdict? (The sample behind RCA agreement.) | Up |
+| Approval rate | Of the fixes put to a human, how many were approved? | Up, but not 100 %: a team that never rejects isn't reading |
+| Runbooks published / drafted | Is knowledge being kept as code? | Up |
+| Eval runs and mean score | Is the AI benchmarked before models change? | Regular runs; score up |
+| Audit chain | Can the record of what the AI did be trusted? | Always verifies |
+
+Rates run from 0 to 100 % over the window (30 days by default; 7 and 90 are
+also available), or "—" when there is nothing to measure yet.
+
+Engineering detail on each definition:
+[ch. 88](book-engineer/15-ai-ops-maturity/88-metrics-and-maturity-scoring.md).
+For operators: [ch. 55](book-customer/09-ai-operations-maturity/55-metrics-dashboard.md).
+
+---
+
+## How the metrics map to the levels
+
+### The six levels
 
 | Level | Name | What it looks like | You're here if |
 |---|---|---|---|
@@ -29,53 +76,43 @@ and, page by page for operators, in the
 
 Levels are cumulative: you're at the highest level whose criteria, and
 every lower level's, all hold. Daalu measures this from what actually
-happened in the last 30 days (7 and 90 are also available), not from what is
-switched on.
+happened in the window, not from what is switched on.
+
+### The thresholds
+
+Each level is a set of thresholds on the metrics above, plus a few facts
+about what ran and what the saved policy allows:
+
+| Level | All of these must hold over the window |
+|---|---|
+| 1 | Alerts in the window ≥ 5, and AI triage rate ≥ 50 %. |
+| 2 | At least one human-approved fix ran, and the approval rate is measured (at least one proposal approved or rejected). |
+| 3 | AI change-failure rate ≤ 15 %; your saved autonomy policy has at least one `auto` or `auto_after_trust` rule, and at least one automatic fix ran. |
+| 4 | Verdict coverage ≥ 30 %, at least one runbook published, and at least one eval run in the window. |
+| 5 | Auto-resolution rate ≥ 50 %, RCA agreement ≥ 80 %, the audit chain verifies, and the saved policy has a circuit breaker and an hourly cap on automatic actions. |
+
+Read from the metric side, three of the five key metrics gate a level:
+**AI change-failure rate** gates Level 3, and **auto-resolution rate** and
+**RCA agreement** gate Level 5. **Time to diagnosis** and **time to resolve**
+gate nothing, on purpose: every team's systems and alert mix differ, so
+there is no fair single threshold. They are what climbing the levels is meant
+to improve; compare them against your own history.
 
 ---
 
 ## How to tell where you are
 
-Open **AI Ops → Maturity** in Daalu. The big number is computed from these
-criteria:
+Open **AI Ops → Maturity** in Daalu. The headline tiles show the metrics for
+the window; the big number is the level those metrics put you at. Below
+them, every criterion is listed with its current value and its target.
 
-| Level | All of these must hold over the window |
-|---|---|
-| 1 | At least 5 alerts reached Daalu, and the AI investigated at least 50 % of them. |
-| 2 | At least one human-approved fix ran, and at least one proposal was approved or rejected. |
-| 3 | Your saved autonomy policy has at least one `auto` or `auto_after_trust` rule, at least one automatic fix ran, and no more than 15 % of executed AI fixes failed verification. |
-| 4 | At least 30 % of investigations have a human verdict, at least one runbook is published, and at least one eval ran in the window. |
-| 5 | At least 50 % of resolved incidents were fixed automatically, root-cause agreement is at least 80 %, the audit chain verifies, and the saved policy has a circuit breaker and an hourly cap on automatic actions. |
-
-Below the criteria, **Next steps** lists exactly what is missing for the
+Under the criteria, **Next steps** lists exactly what is missing for the
 next level. Next to the computed level, a **self-assessment** of 16 yes/no
 questions covers what data can't see: does on-call review the AI's root
 cause before acting, does the policy go through code review, do
 post-incident reviews include the AI's investigation, is there an error
 budget for automatic changes. Answer it honestly; it is reported beside the
 measured level, never instead of it.
-
----
-
-## The metrics
-
-The AOMM equivalent of DORA. All are rates from 0 to 100 % over the window,
-or "—" when there is nothing to measure yet.
-
-| Metric | Question it answers | Healthy direction |
-|---|---|---|
-| AI triage rate | What share of alerts does the AI investigate? | Up; ≥ 50 % for Level 1 |
-| Time to diagnosis | How long from the alert firing to the AI naming a root cause? | Down |
-| RCA agreement | How often does the team agree with the AI's root cause (partly right counts half)? | Up; ≥ 80 % for Level 5 |
-| Verdict coverage | What share of investigations has a human verdict? | ≥ 30 % for Level 4 |
-| Approval rate | Of the fixes put to a human, how many were approved? | Up, but not 100 %: a team that never rejects isn't reading |
-| AI change-failure rate | Of the AI fixes that ran, how many didn't fix the problem? | Down; ≤ 15 % for Level 3 |
-| Auto-resolution rate | Of resolved incidents, how many did the AI fix with no human? | Up; ≥ 50 % for Level 5 |
-| Time to resolve | Alert firing to verified fix (or resolution) | Down |
-
-Engineering detail on each definition:
-[ch. 88](book-engineer/15-ai-ops-maturity/88-metrics-and-maturity-scoring.md).
-For operators: [ch. 55](book-customer/09-ai-operations-maturity/55-metrics-dashboard.md).
 
 ---
 

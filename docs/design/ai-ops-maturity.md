@@ -7,9 +7,28 @@ customer book, Part IX (chapters 51–58).
 
 ## 1. The standard: AI-Ops Maturity Model (AOMM) v0.1
 
-DevOps spread because it came with a model of what good looks like, practices
-expressed as code, and shared metrics (DORA). AOMM is the same thing for how
-infrastructure teams work with AI.
+DevOps spread because it came with shared metrics (DORA), a picture of what
+good looks like, and practices expressed as code. AOMM is the same thing for
+how infrastructure teams work with AI, and it leads with the numbers.
+
+**Metrics first.** Five key metrics say how well a team's AI operations
+perform; the rest are supporting metrics that explain them (section 7, spec
+§3):
+
+| Group | Key metric | DORA counterpart |
+|---|---|---|
+| Speed | `median_time_to_diagnosis_s` | Lead time for changes |
+| Speed | `median_time_to_resolve_s` | Time to restore service |
+| Quality | `rca_agreement_rate` | — (is the AI right?) |
+| Quality | `ai_change_failure_rate` | Change failure rate |
+| Autonomy | `auto_resolution_rate` | — (new to AI operations) |
+
+Supporting: `alerts_total`, `ai_triage_rate` (coverage), `verdict_coverage`
+(feedback), `proposal_approval_rate` (trust), `runbooks_published`,
+`runbooks_generated`, `eval_runs`, `eval_mean_score` (learning),
+`audit_chain_ok` (integrity).
+
+**Then levels, as thresholds on those metrics.**
 
 | Level | Name | Definition | What Daalu provides |
 |---|---|---|---|
@@ -21,7 +40,10 @@ infrastructure teams work with AI.
 | 5 | Autonomous | AI resolves most routine incidents; humans own policy and exceptions. | Auto-execution with guardrails (kill switch, circuit breaker, freeze windows, rate limit), audit chain, exception queue, MCP for any agent |
 
 The level a team is *at* is the highest level whose criteria are all met
-(section 7). Levels are cumulative.
+(section 7). Levels are cumulative. Three key metrics gate a level
+(`ai_change_failure_rate` → L3; `auto_resolution_rate`, `rca_agreement_rate`
+→ L5); the two speed metrics gate none, on purpose, and are tracked against
+the team's own history.
 
 ## 2. Data model (`src/daalu_automation/models/aiops.py`, migration `0034_aiops_maturity`)
 
@@ -171,30 +193,43 @@ allowed_actions: [rollout_undo, restart_deployment]
 
 ## 7. Metrics and maturity (`core/aiops/metrics.py`, `core/aiops/maturity.py`)
 
-`GET /aiops/metrics?days=30` returns:
+`GET /aiops/metrics?days=30` returns the metrics below. They come first;
+the level is derived from them.
 
-| Metric | Definition |
-|---|---|
-| `alerts_total` | Alerts created in the window |
-| `ai_triage_rate` | Alerts with an investigation / alerts |
-| `median_time_to_diagnosis_s` | `diagnosed_at − alert.created_at`, median |
-| `rca_agreement_rate` | (`correct` + 0.5·`partial`) / verdicts |
-| `verdict_coverage` | Investigations with a verdict / investigations |
-| `proposal_approval_rate` | Approved / (approved + rejected) human-gated actions |
-| `ai_change_failure_rate` | Executed actions with `verified_resolved=false` / executed actions |
-| `auto_resolution_rate` | Investigations resolved `auto` / resolved investigations |
-| `median_time_to_resolve_s` | `resolved_at − alert.created_at`, median |
-| `runbooks_published`, `runbooks_generated` | Counts |
-| `eval_runs`, `eval_mean_score` | In the window |
-| `audit_chain_ok` | Chain verifies |
+**Key metrics** (spec §3.1), reported together for the same window:
 
-Automatic level (all criteria of a level and every level below):
+| Metric | Group | Definition |
+|---|---|---|
+| `median_time_to_diagnosis_s` | Speed | `diagnosed_at − alert.created_at`, median |
+| `median_time_to_resolve_s` | Speed | `resolved_at − alert.created_at`, median |
+| `rca_agreement_rate` | Quality | (`correct` + 0.5·`partial`) / verdicts |
+| `ai_change_failure_rate` | Quality | Executed actions with `verified_resolved=false` / executed actions |
+| `auto_resolution_rate` | Autonomy | Investigations resolved `auto` / resolved investigations |
 
-* **L1**: `ai_triage_rate ≥ 0.5` and ≥ 5 alerts.
+**Supporting metrics** (spec §3.2):
+
+| Metric | Group | Definition |
+|---|---|---|
+| `alerts_total` | Coverage | Alerts created in the window |
+| `ai_triage_rate` | Coverage | Alerts with an investigation / alerts |
+| `verdict_coverage` | Feedback | Investigations with a verdict / investigations |
+| `proposal_approval_rate` | Trust | Approved / (approved + rejected) human-gated actions |
+| `runbooks_published`, `runbooks_generated` | Learning | Counts |
+| `eval_runs`, `eval_mean_score` | Learning | In the window |
+| `audit_chain_ok` | Integrity | Chain verifies |
+
+**Mapping to levels.** Automatic level = all criteria of a level and every
+level below:
+
+* **L1**: `ai_triage_rate ≥ 0.5` and `alerts_total ≥ 5`.
 * **L2**: ≥ 1 human-approved action executed and `proposal_approval_rate` known.
-* **L3**: active policy with at least one `auto`/`auto_after_trust` rule, ≥ 1 auto action executed, `ai_change_failure_rate ≤ 0.15`.
-* **L4**: `verdict_coverage ≥ 0.3`, ≥ 1 published runbook, ≥ 1 eval run in the window.
+* **L3**: `ai_change_failure_rate ≤ 0.15`, active policy with at least one `auto`/`auto_after_trust` rule, ≥ 1 auto action executed.
+* **L4**: `verdict_coverage ≥ 0.3`, `runbooks_published ≥ 1`, `eval_runs ≥ 1` in the window.
 * **L5**: `auto_resolution_rate ≥ 0.5`, `rca_agreement_rate ≥ 0.8`, `audit_chain_ok`, guardrails configured (circuit breaker + rate limit).
+
+`median_time_to_diagnosis_s` and `median_time_to_resolve_s` gate no level:
+they depend on each team's systems and alert mix, so no single threshold is
+fair. They are the outcome the levels are meant to improve.
 
 `GET /aiops/maturity` returns `{level, name, criteria: [{level, id, label, met, value}], next_steps: [...], assessment}`.
 The self-assessment (`POST /aiops/maturity/assessment`) covers the
@@ -250,7 +285,8 @@ the rule sets `allow_external_auto: true`), `get_policy`,
 
 ## 10. Open specs (`spec/`)
 
-`spec/README.md` (AOMM v0.1 text), JSON Schemas:
+`spec/README.md` (AOMM v0.1 text: §3 metrics, §4 levels, §5 practices,
+§6 artefacts), JSON Schemas:
 `autonomy-policy.schema.json`, `action-proposal.schema.json`,
 `audit-event.schema.json`, `investigation.schema.json`,
 `runbook.schema.json` (frontmatter), `eval-scenario.schema.json`.

@@ -163,9 +163,11 @@ inside it, and the laptop `daalu` CLI. Start with the
 
 ## Part XV — The AI-Ops Maturity Model
 
-The AI-Ops Maturity Model (AOMM): autonomy policy as code, guardrails and
-automatic execution, investigations and verdicts, runbooks as code, the
-audit chain, metrics, evals and the MCP server. Start with the
+The AI-Ops Maturity Model (AOMM): five key metrics (time to diagnosis, time
+to resolve, RCA agreement, AI change-failure rate, auto-resolution rate) and
+the levels they score, then the practices that move them: autonomy policy as
+code, guardrails and automatic execution, investigations and verdicts,
+runbooks as code, the audit chain, evals and the MCP server. Start with the
 [section overview](15-ai-ops-maturity/README.md).
 
 81. [The maturity model](15-ai-ops-maturity/81-the-maturity-model.md)

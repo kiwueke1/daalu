@@ -1,10 +1,14 @@
 # 88. Metrics and maturity scoring
 
 DORA gave DevOps four numbers everyone could compute. AOMM's equivalent is
-the metrics in `core/aiops/metrics.py`: how much of the alert load the AI
-triages, how fast and how correctly it diagnoses, how often its changes are
-approved and how often they fail, how much resolves without a human. The
-maturity level (chapter 81) is a set of thresholds on these numbers.
+five key metrics, computed in `core/aiops/metrics.py`: **time to diagnosis**
+and **time to resolve** (speed), **RCA agreement** and **AI change-failure
+rate** (quality), and **auto-resolution rate** (autonomy). Supporting metrics
+around them say how much of the alert load the AI sees, how much of its work
+humans grade, how often its proposals are approved, and whether the learning
+and audit practices are in use. The maturity level (chapter 81) is a set of
+thresholds on these numbers, so this chapter covers the metrics first and the
+scoring second.
 
 Code: `core/aiops/metrics.py`, `core/aiops/maturity.py`,
 `api/routers/aiops_metrics.py`.
@@ -34,30 +38,47 @@ and the UI shows `—` for the second.
 
 ## Definitions, as computed
 
-| Metric | Computation |
+### Key metrics
+
+| Metric | Group | Computation | DORA counterpart |
+|---|---|---|---|
+| `median_time_to_diagnosis_s` | Speed | median of `diagnosed_at − alert.created_at` over diagnosed investigations | Lead time for changes |
+| `median_time_to_resolve_s` | Speed | median of `resolved_at − alert.created_at` over resolved investigations | Time to restore service |
+| `rca_agreement_rate` | Quality | `(correct + 0.5 · partial) / verdicts` | — |
+| `ai_change_failure_rate` | Quality | `actions.failed_verification` / `actions.executed` | Change failure rate |
+| `auto_resolution_rate` | Autonomy | `auto` / (`auto` + `approved` + `manual`) | — |
+
+### Supporting metrics
+
+| Metric | Group | Computation |
+|---|---|---|
+| `alerts_total` | Coverage | alerts in the window |
+| `ai_triage_rate` | Coverage | alerts with an investigation / `alerts_total` |
+| `verdict_coverage` | Feedback | verdicts / `investigations_total` |
+| `proposal_approval_rate` | Trust | approved / (approved + rejected) |
+| `runbooks_published`, `runbooks_generated` | Learning | current totals by status / by `source=generated` |
+| `eval_runs`, `eval_mean_score` | Learning | count and mean score of runs started in the window |
+| `audit_chain_ok` | Integrity | `verify_chain(...).ok` |
+
+### Counts the rates are built from
+
+| Field | Computation |
 |---|---|
-| `alerts_total` | alerts in the window |
-| `investigations_total` | investigations of those alerts |
-| `ai_triage_rate` | alerts with an investigation / `alerts_total` |
-| `median_time_to_diagnosis_s` | median of `diagnosed_at − alert.created_at` over diagnosed investigations |
+| `investigations_total` | investigations of the alerts in the window |
 | `verdicts` | counts of `correct`, `partial`, `wrong` |
-| `rca_agreement_rate` | `(correct + 0.5 · partial) / verdicts` |
-| `verdict_coverage` | verdicts / `investigations_total` |
 | `actions.proposed` | write actions created in the window |
 | `actions.approved` | human-gated (not `auto_executed`) actions in `approved`, `executed` or `failed` |
 | `actions.rejected` | human-gated actions in `rejected` |
 | `actions.auto` | `auto_executed` actions |
 | `actions.executed` | actions in `executed` or `failed` (they ran) |
 | `actions.failed_verification` | executed actions with `verified_resolved = false` |
-| `proposal_approval_rate` | approved / (approved + rejected) |
-| `ai_change_failure_rate` | `failed_verification` / `executed` |
 | `resolutions` | counts by effective resolution (`effective_resolution`, `:47`: an `open` investigation whose alert is resolved counts as `manual` at the alert's `resolved_at`) |
-| `auto_resolution_rate` | `auto` / (`auto` + `approved` + `manual`) |
-| `median_time_to_resolve_s` | median of `resolved_at − alert.created_at` over resolved investigations |
-| `runbooks_published`, `runbooks_generated` | current totals by status / by `source=generated` |
-| `eval_runs`, `eval_mean_score` | count and mean score of runs started in the window |
-| `audit_chain_ok` | `verify_chain(...).ok` |
 | `daily` | per UTC day, oldest first: `alerts`, `investigations` (by `started_at`), `auto_resolved`, `approved_resolved` (by resolution day) |
+
+Every metric is a top-level field of the response (only the counts
+`verdicts`, `actions` and `resolutions` are nested objects). The key /
+supporting split is how the spec (§3) and the docs group the fields, not a
+structure in the payload.
 
 Choices worth defending:
 
@@ -89,7 +110,19 @@ Known inaccuracies:
 
 ---
 
-## The automatic level
+## From metrics to the automatic level
+
+| Level | Gated by these metrics | Plus |
+|---|---|---|
+| 1 | `alerts_total ≥ 5`, `ai_triage_rate ≥ 0.5` | — |
+| 2 | `proposal_approval_rate` not null | ≥ 1 human-approved write executed |
+| 3 | `ai_change_failure_rate ≤ 0.15` | an `auto` / `auto_after_trust` rule saved; ≥ 1 automatic write executed |
+| 4 | `verdict_coverage ≥ 0.3`, `runbooks_published ≥ 1`, `eval_runs ≥ 1` | — |
+| 5 | `auto_resolution_rate ≥ 0.5`, `rca_agreement_rate ≥ 0.8`, `audit_chain_ok` | guardrails saved (circuit breaker + hourly cap) |
+
+Three of the five key metrics gate a level. `median_time_to_diagnosis_s`
+and `median_time_to_resolve_s` gate none (chapter 81 explains why); they are
+returned in `metrics` and shown as tiles, and that is all.
 
 `maturity.compute` (`core/aiops/maturity.py:254`) returns:
 
@@ -108,7 +141,7 @@ cumulative "this level is reached". The UI ladder shows both, so a team
 can see that it already meets the Level 4 criteria while being held at
 Level 2 by Level 3.
 
-The fourteen criteria and their thresholds are listed in chapter 81.
+The fourteen criteria, by id, are listed in chapter 81.
 `build_criteria` (`core/aiops/maturity.py:103`) is pure: it takes the
 metrics, two counts that aren't in the public metrics shape
 (`human_executed`, `auto_executed`, from `collect`'s `extras`), and the

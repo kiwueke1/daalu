@@ -1,42 +1,66 @@
 # Part XV — The AI-Ops Maturity Model
 
 Everything behind the **AI Ops** section of the sidebar: the AI-Ops Maturity
-Model (AOMM) itself, the autonomy policy that decides which writes the agent
+Model (AOMM) itself, its metrics and how they score a team's level, the
+autonomy policy that decides which writes the agent
 may make on its own, the guardrails around automatic execution, the
 investigation record and human verdicts, runbooks as code, change context and
-write previews, the hash-chained audit log, the metrics and maturity scoring,
-the eval harness, and the MCP server plus the open `spec/` schemas.
+write previews, the hash-chained audit log, the eval harness, and the MCP server plus the open `spec/` schemas.
 
-DevOps spread because it came with a picture of what good looks like,
-practices expressed as code, and shared metrics (DORA). AOMM is Daalu's
-attempt at the same thing for how infrastructure teams work with AI. The
-standard text is [`spec/README.md`](../../../spec/README.md); the build
-contract is [`docs/design/ai-ops-maturity.md`](../../design/ai-ops-maturity.md).
-Where those two and the code disagree, these chapters describe the code.
+DevOps spread because it came with shared metrics (DORA), a picture of what
+good looks like, and practices expressed as code. AOMM is Daalu's attempt at
+the same thing for how infrastructure teams work with AI, and like DORA it
+starts from numbers. The standard text is
+[`spec/README.md`](../../../spec/README.md); the build contract is
+[`docs/design/ai-ops-maturity.md`](../../design/ai-ops-maturity.md). Where
+those two and the code disagree, these chapters describe the code.
 
-The levels:
+### The metrics
 
-| Level | Name | One line |
+Five key metrics, computed by `core/aiops/metrics.py` (chapter 88):
+
+| Group | Key metric | Measures | DORA counterpart |
+|---|---|---|---|
+| Speed | `median_time_to_diagnosis_s` | Alert firing → AI names a root cause | Lead time for changes |
+| Speed | `median_time_to_resolve_s` | Alert firing → incident resolved | Time to restore service |
+| Quality | `rca_agreement_rate` | How often humans agree with the AI's root cause | — |
+| Quality | `ai_change_failure_rate` | Share of executed AI writes that failed verification | Change failure rate |
+| Autonomy | `auto_resolution_rate` | Share of resolved incidents the AI fixed with no human | — |
+
+Supporting metrics explain them: `alerts_total` and `ai_triage_rate`
+(coverage), `verdict_coverage` (feedback, the sample behind RCA agreement),
+`proposal_approval_rate` (trust), runbook and eval counts (learning), and
+`audit_chain_ok` (integrity).
+
+### How they map to the levels
+
+Each level is a set of thresholds on those metrics (chapter 81 has the full
+criteria table):
+
+| Level | Name | Gated by |
 |---|---|---|
-| 0 | Ad hoc | Individuals paste logs into a chatbot. No shared context, no record. |
-| 1 | Assisted | AI reads alerts, logs, metrics and explains them. Read-only. |
-| 2 | Proposing | AI names the root cause and proposes a fix; every change is human-approved. |
-| 3 | Trusted | Policy lets low-risk, proven actions run automatically. |
-| 4 | Learning | Every incident improves the next: verdicts, runbooks, evals, metrics. |
-| 5 | Autonomous | AI resolves most routine incidents; humans own policy and exceptions. |
+| 0 | Ad hoc | Nothing: the starting point. |
+| 1 | Assisted | `alerts_total ≥ 5`, `ai_triage_rate ≥ 0.5` |
+| 2 | Proposing | ≥ 1 human-approved write executed, `proposal_approval_rate` known |
+| 3 | Trusted | `ai_change_failure_rate ≤ 0.15`, an `auto` rule saved, ≥ 1 automatic write executed |
+| 4 | Learning | `verdict_coverage ≥ 0.3`, `runbooks_published ≥ 1`, `eval_runs ≥ 1` |
+| 5 | Autonomous | `auto_resolution_rate ≥ 0.5`, `rca_agreement_rate ≥ 0.8`, `audit_chain_ok`, guardrails saved |
+
+The two speed metrics gate no level, on purpose: they depend on each team's
+systems and alert mix. They are what climbing the levels should improve.
 
 ## Chapters
 
 | # | Chapter | What it covers |
 |---|---------|----------------|
-| 81 | [The maturity model](81-the-maturity-model.md) | The six levels, how the automatic level is computed, and a map of every Daalu feature (old and new) to the level it serves. |
+| 81 | [The maturity model](81-the-maturity-model.md) | The key and supporting metrics, how they map to the six levels, how the automatic level is computed, and a map of every Daalu feature (old and new) to the level it serves. |
 | 82 | [Autonomy policy as code](82-autonomy-policy.md) | The policy schema, `decide()`, versioned storage, the API, and why the policy governs writes only. |
 | 83 | [Guardrails and automatic execution](83-guardrails-and-auto-execution.md) | `auto` / `auto_after_trust`, trust stats, kill switch, circuit breaker, freeze windows, hourly cap, multi-approver, and the background execute-then-verify path. |
 | 84 | [Investigations and verdicts](84-investigations-and-verdicts.md) | The per-alert investigation record, root-cause detection, outcome verification, `manual` resolution, verdicts, automatic investigation. |
 | 85 | [Runbooks as code](85-runbooks-as-code.md) | File format, matching, prompt injection, AI-drafted runbooks after a verified fix, the API and `daalu runbooks`. |
 | 86 | [Change context and previews](86-change-context-and-previews.md) | The `recent_changes` read tool and the blast-radius preview on every proposed write. |
 | 87 | [The audit log](87-audit-log.md) | The per-tenant hash chain, the advisory lock, event kinds, verification and its limits. |
-| 88 | [Metrics and maturity scoring](88-metrics-and-maturity-scoring.md) | Metric definitions as computed, the automatic level, next steps, the self-assessment. |
+| 88 | [Metrics and maturity scoring](88-metrics-and-maturity-scoring.md) | The five key and the supporting metrics as computed, the automatic level derived from them, next steps, the self-assessment. |
 | 89 | [The eval harness](89-eval-harness.md) | Scenario format, the runner, grading, the leaderboard, `daalu eval`. |
 | 90 | [The MCP server and open specs](90-mcp-server-and-open-specs.md) | MCP over HTTP and stdio, the tool surface, the external-agent rules, the laptop `daalu mcp`, and the `spec/` JSON Schemas. |
 
@@ -53,8 +77,10 @@ through the same execute-then-verify path in the background. The outcome of
 each verification feeds back into the policy (trust stats, circuit breaker),
 into the per-alert **investigation** record (time to diagnosis, resolution,
 human verdict), and into **runbook** drafts. Everything is written to a
-per-tenant **hash-chained audit log**. **Metrics** over those records compute
-the team's level. **Evals** benchmark the agent on scripted outages, and an
+per-tenant **hash-chained audit log**. **Metrics** over those records (five
+key ones: time to diagnosis, time to resolve, RCA agreement, AI change-failure
+rate, auto-resolution rate) say how well it is working, and thresholds on
+them compute the team's level. **Evals** benchmark the agent on scripted outages, and an
 **MCP server** opens the same tools and the same policy to external agents
 such as Claude Code and Cursor. With no saved policy, nothing changes: every
 write needs one approval, exactly as before.

@@ -16,20 +16,39 @@ hosted API. The platform runs the same way with either.
 ## AI-Ops Maturity Model
 
 Daalu implements the **AI-Ops Maturity Model (AOMM)**: a standard for how
-infrastructure teams integrate AI, the way DevOps did for delivery. It
-defines six levels, practices expressed as code (autonomy policy, runbooks,
-eval scenarios, a hash-chained audit log) and shared metrics, and Daalu
-computes your team's level from what actually happened in the last 30 days
+infrastructure teams integrate AI, the way DevOps did for delivery. Like DORA,
+it starts with metrics. Daalu computes them from what actually happened in the
+last 30 days and places your team on one of six levels from them
 (**AI Ops → Maturity** in the UI).
 
-| Level | Name | In one line |
-|---|---|---|
-| 0 | Ad hoc | Individuals paste logs into a chatbot; nothing is shared or recorded. |
-| 1 | Assisted | AI reads alerts, logs and metrics and explains them. Read-only. |
-| 2 | Proposing | AI names the root cause and proposes a fix; every change is human-approved and verified. |
-| 3 | Trusted | A policy lets low-risk, proven actions run automatically. |
-| 4 | Learning | Every incident improves the next: verdicts, runbooks, evals, metrics. |
-| 5 | Autonomous | AI resolves most routine incidents; humans own the policy and the exceptions. |
+**Five key metrics**, the AOMM counterpart of the DORA four keys:
+
+| Group | Metric | Question it answers | DORA counterpart |
+|---|---|---|---|
+| Speed | Time to diagnosis | Alert firing → AI names a root cause, how long? | Lead time for changes |
+| Speed | Time to resolve | Alert firing → incident resolved, how long? | Time to restore service |
+| Quality | RCA agreement | How often does the team agree with the AI's root cause? | — |
+| Quality | AI change-failure rate | Of the fixes the AI ran, how many didn't fix the problem? | Change failure rate |
+| Autonomy | Auto-resolution rate | Of resolved incidents, how many did the AI fix with no human? | — |
+
+Supporting metrics explain them: alert volume and AI triage rate (coverage),
+verdict coverage (how much of the AI's work humans grade), approval rate,
+runbook and eval counts, and whether the hash-chained audit log verifies.
+
+**Levels are thresholds on those metrics:**
+
+| Level | Name | In one line | Reached when (plus every lower level) |
+|---|---|---|---|
+| 0 | Ad hoc | Individuals paste logs into a chatbot; nothing is shared or recorded. | Starting point |
+| 1 | Assisted | AI reads alerts, logs and metrics and explains them. Read-only. | ≥ 5 alerts, triage rate ≥ 50 % |
+| 2 | Proposing | AI names the root cause and proposes a fix; every change is human-approved and verified. | A human-approved fix ran; approval rate measured |
+| 3 | Trusted | A policy lets low-risk, proven actions run automatically. | Change-failure rate ≤ 15 %; an automatic fix ran under a saved `auto` rule |
+| 4 | Learning | Every incident improves the next: verdicts, runbooks, evals, metrics. | Verdict coverage ≥ 30 %; a runbook published; an eval run |
+| 5 | Autonomous | AI resolves most routine incidents; humans own the policy and the exceptions. | Auto-resolution ≥ 50 %, RCA agreement ≥ 80 %, audit chain verifies, guardrails saved |
+
+The two speed metrics gate no level, on purpose: they are what climbing the
+levels should improve. The practices that move the metrics are expressed as
+code (autonomy policy, runbooks, eval scenarios, the audit log).
 
 With no saved autonomy policy, every write the AI proposes needs one human
 approval, exactly as before AOMM.

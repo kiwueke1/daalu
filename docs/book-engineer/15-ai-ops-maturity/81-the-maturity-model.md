@@ -2,16 +2,61 @@
 
 Daalu's goal is to define how infrastructure teams integrate AI, the way
 DevOps defined how they ship software. DevOps won because it came with three
-things at once: a picture of what good looks like, practices you can express
-as code, and shared metrics (DORA) that let a team say where it stands. The
-AI-Ops Maturity Model (AOMM) is the same package for AI in operations. This
-chapter presents the model, explains how Daalu computes a team's level, and
-maps every Daalu feature, including the ones that predate AOMM, to the level
-it serves.
+things at once: shared metrics (DORA) that let a team say where it stands, a
+picture of what good looks like, and practices you can express as code. The
+AI-Ops Maturity Model (AOMM) is the same package for AI in operations, and it
+is built the same way round: metrics first, levels derived from them. This
+chapter presents the metrics, shows how they map to the six levels, explains
+how Daalu computes a team's level, and maps every Daalu feature, including the
+ones that predate AOMM, to the level it serves.
 
 The normative text is [`spec/README.md`](../../../spec/README.md) (AOMM v0.1).
 The build contract is [`docs/design/ai-ops-maturity.md`](../../design/ai-ops-maturity.md).
 The scoring code is `src/daalu_automation/core/aiops/maturity.py`.
+
+---
+
+## The metrics
+
+DORA measures delivery with two speed numbers (deployment frequency, lead
+time) and two stability numbers (change failure rate, time to restore). AOMM
+measures AI operations with two speed numbers, two quality numbers, and one
+for autonomy, which DORA has no need for. Exact computations are in
+chapter 88.
+
+### The five key metrics
+
+| Group | Metric | Question it answers | Better is | DORA counterpart |
+|---|---|---|---|---|
+| Speed | `median_time_to_diagnosis_s` | How long from the alert firing to the AI naming a root cause? | Lower | Lead time for changes |
+| Speed | `median_time_to_resolve_s` | How long from the alert firing to the incident being resolved? | Lower | Time to restore service |
+| Quality | `rca_agreement_rate` | How often do humans agree with the AI's root cause (`partial` counts half)? | Higher | — (is the AI right?) |
+| Quality | `ai_change_failure_rate` | Of the AI writes that ran, how many failed verification? | Lower | Change failure rate |
+| Autonomy | `auto_resolution_rate` | Of resolved incidents, how many did the AI fix with no human? | Higher | — (new to AI operations) |
+
+They are read together, and that is the point of having five rather than
+one. A fast time to diagnosis with low RCA agreement is a fast wrong answer;
+a high auto-resolution rate with a high change-failure rate is unattended
+damage. A team is doing well when the two times fall while agreement stays
+high and change failures stay low, with auto-resolution rising on top. The
+Maturity page shows all five as headline tiles (as "Time to diagnosis",
+"RCA agreement", "AI change-failure rate", "Auto-resolution rate" and
+"MTTR"), next to three supporting ones.
+
+### Supporting metrics
+
+| Group | Metric | Why it matters |
+|---|---|---|
+| Coverage | `alerts_total`, `ai_triage_rate` | How much of the incident work the AI sees and investigates. |
+| Feedback | `verdict_coverage` | How much of the AI's work humans grade; the sample behind `rca_agreement_rate`. |
+| Trust | `proposal_approval_rate` | How often humans accept the AI's proposed writes. |
+| Learning | `runbooks_published`, `runbooks_generated`, `eval_runs`, `eval_mean_score` | Whether each incident improves the next. |
+| Integrity | `audit_chain_ok` | Whether the record of what the AI did can be trusted. |
+
+Some supporting metrics are inputs to the key ones (no verdicts, no
+`rca_agreement_rate`); the rest count whether a practice is in use. Of them,
+`ai_triage_rate`, `proposal_approval_rate` and `audit_chain_ok` are also
+tiles on the Maturity page.
 
 ---
 
@@ -44,10 +89,12 @@ of order stops being a ladder.
 
 ---
 
-## How the level is computed
+## How the metrics map to the levels
 
-`maturity.compute` (`core/aiops/maturity.py:254`) reads the metrics for the
-window (`metrics.collect`, chapter 88), a few facts about the *saved* policy
+Each level is a set of thresholds on the metrics above, plus a few facts
+about what ran and what the saved policy allows. `maturity.compute`
+(`core/aiops/maturity.py:254`) reads the metrics for the window
+(`metrics.collect`, chapter 88), a few facts about the *saved* policy
 (`_policy_facts`, `core/aiops/maturity.py:182`), and evaluates fourteen
 criteria (`build_criteria`, `core/aiops/maturity.py:103`):
 
@@ -67,6 +114,34 @@ criteria (`build_criteria`, `core/aiops/maturity.py:103`):
 | 5 | `rca_agreement_rate` | `rca_agreement_rate ≥ 0.8` |
 | 5 | `audit_chain_ok` | the audit chain verifies |
 | 5 | `guardrails` | the saved policy has a `circuit_breaker` and a non-zero `max_auto_actions_per_hour` |
+
+Read from the metric side:
+
+| Metric | Kind | Gates | Threshold |
+|---|---|---|---|
+| `median_time_to_diagnosis_s` | Key | — | none |
+| `median_time_to_resolve_s` | Key | — | none |
+| `ai_change_failure_rate` | Key | L3 | ≤ 0.15 |
+| `auto_resolution_rate` | Key | L5 | ≥ 0.5 |
+| `rca_agreement_rate` | Key | L5 | ≥ 0.8 |
+| `alerts_total` | Supporting | L1 | ≥ 5 |
+| `ai_triage_rate` | Supporting | L1 | ≥ 0.5 |
+| `proposal_approval_rate` | Supporting | L2 | not null |
+| `verdict_coverage` | Supporting | L4 | ≥ 0.3 |
+| `runbooks_published` | Supporting | L4 | ≥ 1 |
+| `eval_runs` | Supporting | L4 | ≥ 1 |
+| `audit_chain_ok` | Supporting | L5 | true |
+
+The other four criteria are not metrics: `human_approved_executed` and
+`auto_executed` are counts `collect` returns outside the public metrics shape
+(its `extras`), and `auto_rule` and `guardrails` are facts about the saved
+policy.
+
+**The speed metrics gate nothing, on purpose.** Time to diagnosis and time
+to resolve depend on a team's systems and alert mix: a fleet of stateless
+web services and a GPU cluster with slow-draining nodes should not share a
+threshold. They are the outcome climbing the levels is meant to improve, so
+the Maturity page shows them as tiles, but no criterion tests them. Compare them against your own history.
 
 Two details worth knowing:
 
@@ -92,7 +167,7 @@ the level after, each with a sentence that names the page to open.
 
 ---
 
-## Mapping Daalu to the levels
+## Mapping Daalu features to the levels
 
 AOMM was designed around what Daalu already did, then extended. Most of
 Levels 1 and 2 existed before the AOMM branch; Levels 3–5 are new.
@@ -154,6 +229,13 @@ Levels 1 and 2 existed before the AOMM branch; Levels 3–5 are new.
 
 ## Why the model is defined this way
 
+**Why metrics first, levels second.** DORA's lesson is that outcomes are
+what matter and that a ladder of practices, on its own, rewards box-ticking.
+So the five key metrics are the result AOMM asks a team to improve, and the
+levels are a reading of those metrics plus the practices that produce them.
+A team that asks "what level are we?" gets a number; a team that asks "are
+we getting better?" looks at the key metrics over time.
+
 **Why levels at all, rather than a feature checklist.** A checklist
 rewards buying features. Levels describe a working relationship between
 people and the AI, and every criterion is measured from what actually
@@ -187,5 +269,5 @@ before. Climbing a level is always an explicit, audited policy change.
 ## Where to go next
 
 * Chapter 82 — the policy that makes Level 3 possible.
-* Chapter 88 — the exact metric definitions behind the criteria above.
+* Chapter 88 — the exact metric computations behind the tables above.
 * Team-facing summary with a 90-day plan: [`docs/maturity-model.md`](../../maturity-model.md).

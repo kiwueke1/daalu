@@ -1,15 +1,19 @@
 # 55. The metrics dashboard
 
 DevOps teams measure delivery with four numbers: deployment frequency, lead
-time, change failure rate and time to restore. AI-Ops needs its own set: how
-much of the alert load the AI handles, how fast and how correctly it
-diagnoses, how often its changes are accepted and how often they fail, and
-how much gets fixed without a person in the loop. Daalu computes all of them
-from what actually happened. This chapter explains each one.
+time, change failure rate and time to restore. AI operations need their own
+set. The AI-Ops Maturity Model leads with **five key metrics**: two for speed
+(time to diagnosis, time to resolve), two for quality (RCA agreement, AI
+change-failure rate) and one for autonomy (auto-resolution rate). **Supporting
+metrics** explain them: how much of the alert load the AI sees, how much of
+its work you grade, how often you accept its fixes, and whether the learning
+practices and the audit record are in place. Daalu computes all of them from
+what actually happened. This chapter explains each one, then shows how they
+map to the levels.
 
 Where they appear: the stat tiles and daily trend on the **Maturity** page
 (`https://daalu.example.com/maturity`, chapter 51), and the **Criteria** table on
-the same page, which compares them with each level's targets.
+the same page, which compares them with each level's thresholds.
 
 ---
 
@@ -30,16 +34,12 @@ approval rate before anyone has approved or rejected anything. "—" means
 
 ---
 
-## The metrics
+## The five key metrics
 
-### AI triage rate
-
-**What:** the share of alerts in the window that the AI investigated.
-**Tile:** **AI triage rate**, with "*n* of *m* alerts" underneath.
-**Healthy:** 50% or more is the Level 1 bar. With
-`investigate_automatically: true` in your policy it should be close to 100%.
-If it's low, people are only opening some alerts, or automatic investigation
-is off.
+Read them together. A fast diagnosis that is usually wrong doesn't help, and
+automatic fixes with a high failure rate are unattended damage. A healthy
+team sees the two times fall while RCA agreement stays high and the
+change-failure rate stays low, with auto-resolution rising on top.
 
 ### Time to diagnosis
 
@@ -49,6 +49,17 @@ cause. Undiagnosed alerts aren't included.
 **Read it:** seconds to a few minutes is normal with automatic investigation.
 Long times usually mean the alert sat unopened before anyone triggered the
 AI.
+**Gates:** no level. It is tracked, not thresholded (see below).
+
+### Time to resolve (MTTR)
+
+**What:** the median time from an alert firing to its investigation being
+resolved — by a verified fix, or by the alert being closed (manually or
+because it cleared).
+**Tile:** **MTTR** (median time to resolve).
+**Read it:** this is the end-to-end number your on-call feels. It should fall
+as more fixes are proposed, approved and, later, run automatically.
+**Gates:** no level. It is tracked, not thresholded (see below).
 
 ### RCA agreement
 
@@ -56,23 +67,7 @@ AI.
 of partly right) ÷ all verdicts.
 **Tile:** **RCA agreement**, with verdict coverage underneath.
 **Healthy:** Level 5 needs 80% or more. It only means something once you have
-a reasonable number of verdicts — see coverage.
-
-### Verdict coverage
-
-**What:** investigations with a verdict ÷ all investigations.
-**Shown:** under the RCA agreement tile and in the criteria table.
-**Healthy:** Level 4 needs 30% or more.
-
-### Approval rate
-
-**What:** of the fixes that waited for a human and got a decision, the share
-that were approved. Automatic fixes aren't counted; fixes still waiting
-aren't counted either.
-**Tile:** **Approval rate**, with approved / rejected counts.
-**Read it:** a high rate on a particular kind of fix is the signal that it's a
-candidate for an `auto_after_trust` rule. A low rate means the AI's proposals
-need work — read the rejected ones.
+a reasonable number of verdicts — see verdict coverage below.
 
 ### AI change-failure rate
 
@@ -90,12 +85,37 @@ approved fix, or manually), the share resolved automatically.
 **Tile:** **Auto-resolution rate**, with the auto-resolved count.
 **Healthy:** Level 5 needs 50% or more.
 
-### MTTR
+---
 
-**What:** the median time from an alert firing to its investigation being
-resolved — by a verified fix, or by the alert being closed (manually or
-because it cleared).
-**Tile:** **MTTR** (median time to resolve).
+## Supporting metrics
+
+These explain the key metrics and show whether the practices behind them are
+in place.
+
+### AI triage rate
+
+**What:** the share of alerts in the window that the AI investigated.
+**Tile:** **AI triage rate**, with "*n* of *m* alerts" underneath.
+**Healthy:** 50% or more is the Level 1 bar. With
+`investigate_automatically: true` in your policy it should be close to 100%.
+If it's low, people are only opening some alerts, or automatic investigation
+is off.
+
+### Verdict coverage
+
+**What:** investigations with a verdict ÷ all investigations.
+**Shown:** under the RCA agreement tile and in the criteria table.
+**Healthy:** Level 4 needs 30% or more.
+
+### Approval rate
+
+**What:** of the fixes that waited for a human and got a decision, the share
+that were approved. Automatic fixes aren't counted; fixes still waiting
+aren't counted either.
+**Tile:** **Approval rate**, with approved / rejected counts.
+**Read it:** a high rate on a particular kind of fix is the signal that it's a
+candidate for an `auto_after_trust` rule. A low rate means the AI's proposals
+need work — read the rejected ones.
 
 ### Audit chain
 
@@ -115,6 +135,35 @@ needs at least one published.
 **What:** eval runs started in the window and their average score.
 **Shown:** the **Eval runs in the window** row of the criteria table; the
 details are on the **Evals** page (chapter 57). Level 4 needs at least one.
+
+---
+
+## How the metrics map to the levels
+
+Each level is a set of thresholds on these metrics, plus a few facts about
+what ran and what your saved policy allows (chapter 51 has the full list).
+From the metric side:
+
+| Metric | Kind | Gates | Threshold |
+|---|---|---|---|
+| Time to diagnosis | Key | — | Tracked at every level |
+| Time to resolve (MTTR) | Key | — | Tracked at every level |
+| AI change-failure rate | Key | Level 3 | 15% or less |
+| Auto-resolution rate | Key | Level 5 | 50% or more |
+| RCA agreement | Key | Level 5 | 80% or more |
+| Alerts in the window | Supporting | Level 1 | 5 or more |
+| AI triage rate | Supporting | Level 1 | 50% or more |
+| Approval rate | Supporting | Level 2 | Known (at least one decision) |
+| Verdict coverage | Supporting | Level 4 | 30% or more |
+| Published runbooks | Supporting | Level 4 | 1 or more |
+| Eval runs | Supporting | Level 4 | 1 or more |
+| Audit chain | Supporting | Level 5 | Intact |
+
+The two speed metrics gate no level, on purpose. How fast a team diagnoses
+and resolves depends on its systems and its alert mix, so no single threshold
+is fair to everyone. They are what climbing the levels is meant to improve:
+compare them with your own history, for example the 30-day window against
+the 90-day one.
 
 ---
 

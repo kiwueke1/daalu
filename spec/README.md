@@ -5,19 +5,24 @@ Reference implementation: [Daalu](https://github.com/kiwueke1/daalu).
 
 ## 1. Purpose
 
-DevOps spread because it came with three things: a model of what good looks
-like, practices expressed as code, and shared metrics (DORA). Teams adopting
-AI for infrastructure operations have none of these. Each vendor defines its
-own "autonomy", nobody can say whether one team's AI is doing better than
-another's, and changes made by AI agents are hard to review after the fact.
+DevOps spread because it came with three things: shared metrics (DORA), a
+picture of what good looks like, and practices expressed as code. Teams
+adopting AI for infrastructure operations have none of these. Each vendor
+defines its own "autonomy", nobody can say whether one team's AI is doing
+better than another's, and changes made by AI agents are hard to review after
+the fact.
 
-AOMM is a vendor-neutral model of how infrastructure teams work with AI:
+AOMM is a vendor-neutral model of how infrastructure teams work with AI. It
+starts from numbers, the way DORA does:
 
-* **Levels** (section 3) that describe where a team is and what the next step is.
-* **Practices** (section 4) that a team adopts to move up, each expressed as a
-  machine-readable artefact.
-* **Metrics** (section 5) with exact definitions, so levels are measured, not
+* **Metrics** (section 3): five key metrics that say how well a team's AI
+  operations perform, plus supporting metrics that explain them. Every one
+  has an exact definition, so any implementation computes the same value.
+* **Levels** (section 4): where a team is and what the next step is. Each
+  level is a set of thresholds on the metrics, so levels are measured, not
   claimed.
+* **Practices** (section 5) that a team adopts to move the metrics, each
+  expressed as a machine-readable artefact.
 * **Artefact schemas** (section 6), so policies, runbooks, investigations,
   audit logs and evals move between tools.
 
@@ -47,7 +52,75 @@ The key words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119.
   the affected system recovered.
 * **Implementation** — software that conforms to this standard.
 
-## 3. Levels
+## 3. Metrics
+
+All metrics are computed over a window of `days` days (default 30) ending now.
+Rates are numbers in `[0, 1]`, or `null` when the denominator is 0. Medians of
+empty sets are `null`.
+
+### 3.1 The five key metrics
+
+DORA measures software delivery with two speed metrics (deployment frequency,
+lead time) and two stability metrics (change failure rate, time to restore).
+AOMM measures AI operations the same way, and adds the one thing DORA has no
+need for: how much of the work runs without a human.
+
+| Group | Key metric | Question it answers | Better is | DORA counterpart |
+|---|---|---|---|---|
+| Speed | `median_time_to_diagnosis_s` | How long from an alert firing to the AI naming a root cause? | Lower | Lead time for changes |
+| Speed | `median_time_to_resolve_s` | How long from an alert firing to the incident being resolved? | Lower | Time to restore service |
+| Quality | `rca_agreement_rate` | How often do humans agree with the AI's root cause? | Higher | — (is the AI right?) |
+| Quality | `ai_change_failure_rate` | Of the changes the AI made, how many failed verification? | Lower | Change failure rate |
+| Autonomy | `auto_resolution_rate` | Of resolved incidents, how many did the AI fix with no human? | Higher | — (new to AI operations) |
+
+Read the key metrics together. Speed with poor quality is a fast wrong answer.
+Autonomy with a high change failure rate is unattended damage. A team is doing
+well when time to diagnosis and time to resolve fall while root-cause
+agreement stays high and the change failure rate stays low, and
+auto-resolution rises on top of that.
+
+Implementations claiming AOMM conformance MUST report the five key metrics
+together, for the same window.
+
+### 3.2 Supporting metrics
+
+Supporting metrics explain the key metrics and show whether the practices
+behind them are in place. Some are inputs to the key metrics (no verdicts
+means no `rca_agreement_rate`); others count adoption of a practice.
+
+| Group | Metric | Why it matters |
+|---|---|---|
+| Coverage | `alerts_total`, `ai_triage_rate` | How much of the incident work the AI sees and investigates. |
+| Feedback | `verdict_coverage` | How much of the AI's work humans grade; the sample behind `rca_agreement_rate`. |
+| Trust | `proposal_approval_rate` | How often humans accept the AI's proposed changes. |
+| Learning | `runbooks_published`, `runbooks_generated`, `eval_runs`, `eval_mean_score` | Whether each incident improves the next. |
+| Integrity | `audit_chain_ok` | Whether the record of what the AI did can be trusted. |
+
+### 3.3 Definitions
+
+| Metric | Kind | Definition |
+|---|---|---|
+| `median_time_to_diagnosis_s` | Key | Median of `diagnosed_at − alert.created_at` (seconds) over investigations with a diagnosis. |
+| `median_time_to_resolve_s` | Key | Median of `resolved_at − alert.created_at` (seconds) over resolved investigations. |
+| `rca_agreement_rate` | Key | (`correct` + 0.5 × `partial`) ÷ investigations with a verdict. |
+| `ai_change_failure_rate` | Key | Executed write actions with `verified_resolved = false` ÷ executed write actions. |
+| `auto_resolution_rate` | Key | Investigations resolved `auto` ÷ resolved investigations (`auto`, `approved`, `manual`). |
+| `alerts_total` | Supporting | Alerts created in the window. |
+| `ai_triage_rate` | Supporting | Alerts in the window that have an investigation ÷ `alerts_total`. |
+| `verdict_coverage` | Supporting | Investigations with a verdict ÷ investigations. |
+| `proposal_approval_rate` | Supporting | Human-approved ÷ (human-approved + rejected) action proposals. Automatic actions are excluded. |
+| `runbooks_published` | Supporting | Runbooks in status `published`. |
+| `runbooks_generated` | Supporting | Runbooks drafted from an investigation. |
+| `eval_runs` | Supporting | Eval runs in the window. |
+| `eval_mean_score` | Supporting | Mean score (0..1) of those runs. |
+| `audit_chain_ok` | Supporting | The audit chain verifies end to end. |
+
+Investigation `resolution` values: `open` (in progress), `auto` (a verified
+automatic action fixed it), `approved` (a verified human-approved action fixed
+it), `manual` (the alert resolved with no executed action), `unresolved`
+(actions ran but verification failed).
+
+## 4. Levels
 
 | Level | Name | Definition |
 |---|---|---|
@@ -60,18 +133,16 @@ The key words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119.
 
 Levels are cumulative. A team is **at** the highest level whose entry
 criteria, and the criteria of every level below it, are all met over the
-measurement window (default: the last 30 days). Criteria are evaluated from
-the metrics in section 5; they are measured, not self-declared.
+measurement window (default: the last 30 days). Criteria are thresholds on the
+metrics in section 3; they are measured, not self-declared.
 
-### Entry criteria
+### 4.1 How the metrics map to the levels
 
 Each row below is the measurable test for the level of the same number in the
-table above: `L1` is level 1 (Assisted), `L2` is level 2 (Proposing), and so
-on. The definition says what the level means; the criteria are the signals in
-the data that show a team is there. The criteria check those signals, not every
-word of the definition. Where a definition asks for something the data cannot
-show (for example, "humans own policy and exceptions" at level 5), the
-self-assessment below covers it.
+table above. The definition says what the level means; the criteria are the
+signals in the metrics that show a team is there. Where a definition asks for
+something the data cannot show (for example, "humans own policy and
+exceptions" at level 5), the self-assessment in section 4.3 covers it.
 
 | Level | Criteria (all must hold) |
 |---|---|
@@ -79,32 +150,63 @@ self-assessment below covers it.
 | L1 · Assisted | `alerts_total ≥ 5` and `ai_triage_rate ≥ 0.5`. |
 | L2 · Proposing | At least one human-approved write action executed, and `proposal_approval_rate` is defined (at least one human decision recorded). |
 | L3 · Trusted | An active autonomy policy with at least one rule (or the default mode) set to `auto` or `auto_after_trust`; at least one automatic action executed; `ai_change_failure_rate ≤ 0.15`. |
-| L4 · Learning | `verdict_coverage ≥ 0.3`; at least one published runbook; at least one eval run in the window. |
+| L4 · Learning | `verdict_coverage ≥ 0.3`; `runbooks_published ≥ 1`; `eval_runs ≥ 1`. |
 | L5 · Autonomous | `auto_resolution_rate ≥ 0.5`; `rca_agreement_rate ≥ 0.8`; `audit_chain_ok` is true; guardrails configured (a circuit breaker and an hourly rate limit on automatic actions). |
 
-**Why L0 has no criteria.** Level 0 describes what happens when there is no
-shared system: people paste logs into a chatbot, and nothing is recorded. There
-is nothing to measure, so there is nothing to test for. Every team starts at
-level 0 and stays there until the L1 criteria hold. A team that meets none of
-the criteria above is at level 0, including a team that has not connected any
-data yet.
+The same mapping, read from the metric side:
+
+| Metric | Kind | Gates | Threshold |
+|---|---|---|---|
+| `median_time_to_diagnosis_s` | Key | — | Tracked at every level; no threshold |
+| `median_time_to_resolve_s` | Key | — | Tracked at every level; no threshold |
+| `ai_change_failure_rate` | Key | L3 | ≤ 0.15 |
+| `auto_resolution_rate` | Key | L5 | ≥ 0.5 |
+| `rca_agreement_rate` | Key | L5 | ≥ 0.8 |
+| `alerts_total` | Supporting | L1 | ≥ 5 |
+| `ai_triage_rate` | Supporting | L1 | ≥ 0.5 |
+| `proposal_approval_rate` | Supporting | L2 | Defined |
+| `verdict_coverage` | Supporting | L4 | ≥ 0.3 |
+| `runbooks_published` | Supporting | L4 | ≥ 1 |
+| `eval_runs` | Supporting | L4 | ≥ 1 |
+| `audit_chain_ok` | Supporting | L5 | True |
+
+Three criteria are facts about executed actions and the saved policy rather
+than metrics: at least one human-approved action executed (L2), at least one
+automatic action executed and an `auto` rule in the policy (L3), and
+guardrails configured (L5).
+
+The two speed metrics gate no level, on purpose. How fast a team diagnoses and
+resolves depends on its systems and its alert mix, so no single threshold fits
+every team. They are the result climbing the levels is meant to improve, and
+they SHOULD be tracked against the team's own history.
+
+### 4.2 Why L0 has no criteria
+
+Level 0 describes what happens when there is no shared system: people paste
+logs into a chatbot, and nothing is recorded. There is nothing to measure, so
+there is nothing to test for. Every team starts at level 0 and stays there
+until the L1 criteria hold. A team that meets none of the criteria above is at
+level 0, including a team that has not connected any data yet.
+
+### 4.3 Self-assessment
 
 Organisational practices the data cannot show (on-call engineers trust AI
 output, post-incident reviews include the AI's investigation, the policy is
 reviewed at least quarterly, …) SHOULD be captured as a self-assessment and
 reported **next to** the measured level, never in place of it.
 
-## 4. Core practices
+## 5. Core practices
 
 An implementation claiming a level MUST support the practices that level
-relies on.
+relies on. Each practice produces the data one or more metrics are computed
+from.
 
-### 4.1 Read before write (L1+)
+### 5.1 Read before write (L1+)
 The agent gathers evidence with read actions before it concludes. Read actions
 MAY run without approval. Every read action an agent runs SHOULD be recorded
 in the investigation transcript.
 
-### 4.2 Human-gated writes with verification after every change (L2+)
+### 5.2 Human-gated writes with verification after every change (L2+)
 * Every write action MUST become an action proposal before it executes.
 * Every proposal MUST carry a human-readable `reason`: why the action is
   needed, citing evidence, and what will happen.
@@ -114,7 +216,7 @@ in the investigation transcript.
   implementation MUST run a verification and record the result as
   `verified_resolved` on the proposal.
 
-### 4.3 Autonomy policy as code (L3+)
+### 5.3 Autonomy policy as code (L3+)
 * Whether a write is denied, approved by humans or run automatically MUST be
   decided by a versioned, machine-readable policy
   ([`autonomy-policy.schema.json`](autonomy-policy.schema.json)), not by the
@@ -128,7 +230,7 @@ in the investigation transcript.
   `trust.min_successes` verified successes and a failure rate at or below
   `trust.max_failure_rate` within `trust.window_days`; `approve` until then).
 * Guardrails narrow `auto` back to `approve`, evaluated in this order:
-  kill switch → external-agent rule (section 4.7) → tripped circuit breaker →
+  kill switch → external-agent rule (section 5.7) → tripped circuit breaker →
   change-freeze window → hourly automatic-action cap.
 * An automatic action whose verification fails MUST trip the circuit breaker
   for its rule (when configured), demoting the rule to `approve` for the
@@ -140,7 +242,7 @@ in the investigation transcript.
   approval (Level 2 behaviour).
 * Every policy change MUST be versioned and audited.
 
-### 4.4 Investigation records and verdicts (L4)
+### 5.4 Investigation records and verdicts (L4)
 * Each investigation MUST be recorded as an investigation record
   ([`investigation.schema.json`](investigation.schema.json)), including when
   it started, when it first named a root cause, the root cause text, the
@@ -148,7 +250,7 @@ in the investigation transcript.
 * Humans grade the root cause with a **verdict**: `correct`, `partial` or
   `wrong`. Verdicts are the ground truth behind `rca_agreement_rate`.
 
-### 4.5 Runbooks as code (L4)
+### 5.5 Runbooks as code (L4)
 * Operational knowledge MUST be stored as runbook files: YAML frontmatter
   ([`runbook.schema.json`](runbook.schema.json)) followed by a markdown body
   with `## Symptoms`, `## Diagnosis` and `## Fix` sections.
@@ -159,7 +261,7 @@ in the investigation transcript.
   implementation SHOULD draft one from the investigation. Drafts MUST NOT be
   used until a human publishes them.
 
-### 4.6 Eval suites (L4)
+### 5.6 Eval suites (L4)
 * Agent quality MUST be measured against reproducible scenarios
   ([`eval-scenario.schema.json`](eval-scenario.schema.json)): how to inject a
   fault, which alert to expect, and an answer key written before any model
@@ -169,7 +271,7 @@ in the investigation transcript.
   diagnosed within the timeout 10 %. Implementations MAY use other weights but
   MUST publish them alongside scores.
 
-### 4.7 An open tool protocol (L5)
+### 5.7 An open tool protocol (L5)
 * An implementation at L5 MUST let any external agent use it through an open
   protocol. The reference binding is the
   [Model Context Protocol](https://modelcontextprotocol.io) (version
@@ -181,7 +283,7 @@ in the investigation transcript.
   `allow_external_auto: true`.
 * Every external call MUST be audited (kind `mcp.call`).
 
-### 4.8 Audit chain (L5)
+### 5.8 Audit chain (L5)
 * Every AI read, proposal, denial, approval, rejection, execution,
   verification, policy change, verdict, runbook publication, external call and
   eval result MUST be written to an append-only audit log
@@ -203,34 +305,6 @@ in the investigation transcript.
 * Actors: a human's email, `agent` for the built-in agent, `mcp:<email>` for
   an external agent acting with that person's credentials, `verifier` for the
   verification step.
-
-## 5. Metrics
-
-All metrics are computed over a window of `days` days (default 30) ending now.
-Rates are numbers in `[0, 1]`, or `null` when the denominator is 0. Medians of
-empty sets are `null`.
-
-| Metric | Definition |
-|---|---|
-| `alerts_total` | Alerts created in the window. |
-| `ai_triage_rate` | Alerts in the window that have an investigation ÷ `alerts_total`. |
-| `median_time_to_diagnosis_s` | Median of `diagnosed_at − alert.created_at` (seconds) over investigations with a diagnosis. |
-| `rca_agreement_rate` | (`correct` + 0.5 × `partial`) ÷ investigations with a verdict. |
-| `verdict_coverage` | Investigations with a verdict ÷ investigations. |
-| `proposal_approval_rate` | Human-approved ÷ (human-approved + rejected) action proposals. Automatic actions are excluded. |
-| `ai_change_failure_rate` | Executed write actions with `verified_resolved = false` ÷ executed write actions. |
-| `auto_resolution_rate` | Investigations resolved `auto` ÷ resolved investigations (`auto`, `approved`, `manual`). |
-| `median_time_to_resolve_s` | Median of `resolved_at − alert.created_at` (seconds) over resolved investigations. |
-| `runbooks_published` | Runbooks in status `published`. |
-| `runbooks_generated` | Runbooks drafted from an investigation. |
-| `eval_runs` | Eval runs in the window. |
-| `eval_mean_score` | Mean score (0..1) of those runs. |
-| `audit_chain_ok` | The audit chain verifies end to end. |
-
-Investigation `resolution` values: `open` (in progress), `auto` (a verified
-automatic action fixed it), `approved` (a verified human-approved action fixed
-it), `manual` (the alert resolved with no executed action), `unresolved`
-(actions ran but verification failed).
 
 ## 6. Artefacts
 
@@ -256,7 +330,7 @@ Notes:
   `reason`. `decision.mode` is the effective mode after guardrails;
   `decision.configured_mode` is what the rule says.
 * **Audit event** — the example's `hash` is computed with the algorithm in
-  section 4.8 and can be checked by any implementation.
+  section 5.8 and can be checked by any implementation.
 * **Runbook** — `match` must name at least one alertname or label; the body
   is free markdown with the three sections above.
 
@@ -280,8 +354,9 @@ Notes:
 ## 8. Conformance
 
 An implementation conforms to AOMM 0.1 at level *N* when it supports the
-practices in section 4 that levels 1..*N* rely on, computes the metrics in
-section 5 with the definitions given, and can import and export the
+practices in section 5 that levels 1..*N* rely on, computes the metrics in
+section 3 with the definitions given (reporting the five key metrics
+together), and can import and export the
 artefacts in section 6 in the published formats.
 
 ## 9. Reference implementation
