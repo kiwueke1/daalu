@@ -1,0 +1,38 @@
+id: kubelet-stop
+title: Stop the kubelet on one node (node goes NotReady)
+description: >-
+  Stops the node's kubelet (or k3s/rke2 agent) service. A systemd timer on the
+  node starts it again after `restore_after`, so the node comes back even though
+  nothing can reach it through Kubernetes while it's down. Revert via SSH
+  inventories starts it at once.
+scope: cluster
+blast: node
+requires: [multi-node, systemd]
+params:
+  node: {type: node}
+  unit: {type: token, default: "", help: "kubelet | k3s-agent | rke2-agent (auto-detected)"}
+  restore_after: {type: duration, default: 20m}
+prepare:
+  - node: for u in kubelet k3s-agent rke2-agent k3s rke2-server; do systemctl is-active -q $u && { echo $u; break; }; done
+    capture: unit
+    when_empty: unit
+inject:
+  # Both actions are transient systemd timers: they belong to the node's
+  # systemd, not to the helper pod, so they outlive it.
+  - node: >-
+      systemd-run --unit=restore-${fault_id} --on-active=${restore_after} systemctl start ${unit} &&
+      systemd-run --unit=stop-${fault_id} --on-active=3 systemctl stop ${unit}
+revert:
+  - node: systemctl start ${unit}; systemctl stop restore-${fault_id}.timer 2>/dev/null; true
+check:
+  kubectl: [get, node, "${node}", -o, 'jsonpath={.status.conditions[?(@.type=="Ready")].status}']
+  match: "^True$"
+warning: >-
+  Don't pick a node that runs the only API server (k3s/rke2 servers do). With
+  node_access helper-pod, revert can't reach the node while it's down: the
+  node's own timer restarts the service after restore_after.
+expect:
+  symptoms: [node NotReady, pods on it Unknown/Terminating after ~5 min, workloads rescheduled]
+  root_cause: the kubelet on the node is stopped
+  fix: start the kubelet on the node (a human job; Daalu has no node shell)
+  daalu_can_fix: false

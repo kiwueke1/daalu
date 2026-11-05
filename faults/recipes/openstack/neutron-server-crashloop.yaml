@@ -1,0 +1,9 @@
+id: neutron-server-crashloop
+title: neutron-server rolled out with a command that exits
+fault: kubernetes/crashloop
+target: neutron-server
+episodes:
+- S1-07
+expect:
+  root_cause: the last neutron-server rollout changed the container command
+  fix: rollout_undo on neutron-server

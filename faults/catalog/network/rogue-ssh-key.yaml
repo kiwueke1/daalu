@@ -1,0 +1,23 @@
+id: rogue-ssh-key
+title: Leave an extra SSH key in a switch user's authorized_keys (drift)
+description: The S2-04 break. Nothing stops working; only drift detection notices.
+scope: fabric
+blast: device
+nos: [linux]
+params:
+  device: {type: device}
+  user: {type: token, default: cumulus}
+  comment: {type: token, default: contractor@laptop}
+inject:
+  - device: >-
+      H=$(getent passwd ${user} | cut -d: -f6); mkdir -p $H/.ssh &&
+      echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK9zVQmZr2w0YbqX8b1hUe3eQx7t4uWkq0d5n2pS6aLm ${comment}" >> $H/.ssh/authorized_keys &&
+      chown -R ${user}: $H/.ssh && chmod 600 $H/.ssh/authorized_keys
+revert:
+  - device: >-
+      H=$(getent passwd ${user} | cut -d: -f6); F=$H/.ssh/authorized_keys;
+      [ -f $F ] && grep -v " ${comment}$" $F > $F.tmp; [ -f $F.tmp ] && cat $F.tmp > $F && rm -f $F.tmp; true
+expect:
+  symptoms: [none on the data plane; drift on authorized_keys]
+  root_cause: an unapproved SSH key was added to the switch
+  fix: the drift reconciler proposes removing it; a human approves

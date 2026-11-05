@@ -1,0 +1,23 @@
+id: cpu-throttle
+title: CPU limit so low the app starves (slow, probes time out)
+scope: cluster
+blast: workload
+params:
+  kind: {type: enum, choices: [deployment, statefulset, daemonset], default: deployment}
+  name: {type: name, help: "The workload name"}
+  namespace: {type: name}
+  container: {type: token, default: "", help: "Container to break (default: the first one)"}
+  cpu: {type: token, default: 5m}
+prepare:
+  - kubectl: [get, "${kind}/${name}", -n, "${namespace}", -o, "jsonpath={.spec.template.spec.containers[0].name}"]
+    capture: container
+    when_empty: container
+inject:
+  - snapshot: "${kind}/${name}"
+  - kubectl: [set, resources, "${kind}/${name}", -n, "${namespace}", -c, "${container}", "--limits=cpu=${cpu}", "--requests=cpu=${cpu}"]
+check:
+  kubectl: [rollout, status, "${kind}/${name}", -n, "${namespace}", --timeout=5s]
+expect:
+  symptoms: [high latency, container_cpu_cfs_throttled ratio near 100%, liveness/readiness timeouts]
+  root_cause: the CPU limit was cut so far the container is throttled
+  fix: restore the CPU limit or roll back

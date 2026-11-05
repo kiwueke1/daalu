@@ -1,0 +1,53 @@
+id: cable-swap
+title: Cross two cables on a server (both links stay up, wrong neighbours)
+description: >-
+  The S2-07 break, on a containerlab host: the server's two NICs swap which
+  switch ports they land on. Recreates the veth pairs with `containerlab tools
+  veth`, re-adds the server's addresses and re-applies the switches' interface
+  config. Revert puts the original cabling back the same way.
+scope: fabric
+blast: link
+nos: [linux]
+requires: [containerlab, sudo-host]
+params:
+  device: {type: device, help: "The server, e.g. gpu2"}
+  a_if: {type: iface, help: "First NIC, e.g. eth3"}
+  a_peer: {type: device, help: "Switch a_if is cabled to today, e.g. leaf3"}
+  a_peer_if: {type: iface}
+  b_if: {type: iface}
+  b_peer: {type: device}
+  b_peer_if: {type: iface}
+prepare:
+  - device: ip -4 -o addr show dev ${a_if} | awk '{print $4}' | head -1
+    capture: a_addr
+  - device: ip -4 -o addr show dev ${b_if} | awk '{print $4}' | head -1
+    capture: b_addr
+  - device: cat /sys/class/net/${a_if}/mtu
+    capture: a_mtu
+  - device: cat /sys/class/net/${b_if}/mtu
+    capture: b_mtu
+inject:
+  - device: ip link del ${a_if}; ip link del ${b_if}
+  - host: containerlab tools veth create -a ${clab_prefix}${device}:${a_if} -b ${clab_prefix}${b_peer}:${b_peer_if} && containerlab tools veth create -a ${clab_prefix}${device}:${b_if} -b ${clab_prefix}${a_peer}:${a_peer_if}
+  - device: >-
+      ip link set ${a_if} mtu ${a_mtu} up; ip link set ${b_if} mtu ${b_mtu} up;
+      [ -n "${a_addr}" ] && ip addr replace ${a_addr} dev ${a_if}; [ -n "${b_addr}" ] && ip addr replace ${b_addr} dev ${b_if}; true
+  - device: ifreload -a 2>/dev/null || nv config apply -y 2>/dev/null; true
+    at: "${a_peer}"
+  - device: ifreload -a 2>/dev/null || nv config apply -y 2>/dev/null; true
+    at: "${b_peer}"
+revert:
+  - device: ip link del ${a_if}; ip link del ${b_if}; true
+  - host: containerlab tools veth create -a ${clab_prefix}${device}:${a_if} -b ${clab_prefix}${a_peer}:${a_peer_if} && containerlab tools veth create -a ${clab_prefix}${device}:${b_if} -b ${clab_prefix}${b_peer}:${b_peer_if}
+  - device: >-
+      ip link set ${a_if} mtu ${a_mtu} up; ip link set ${b_if} mtu ${b_mtu} up;
+      [ -n "${a_addr}" ] && ip addr replace ${a_addr} dev ${a_if}; [ -n "${b_addr}" ] && ip addr replace ${b_addr} dev ${b_if}; true
+  - device: ifreload -a 2>/dev/null || nv config apply -y 2>/dev/null; true
+    at: "${a_peer}"
+  - device: ifreload -a 2>/dev/null || nv config apply -y 2>/dev/null; true
+    at: "${b_peer}"
+expect:
+  symptoms: [both links up, LLDP shows the wrong neighbour on each port, cabling validation fails twice]
+  root_cause: two cables are crossed
+  fix: a technician swaps them back
+  daalu_can_fix: false

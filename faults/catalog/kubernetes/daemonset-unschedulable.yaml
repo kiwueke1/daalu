@@ -1,0 +1,24 @@
+id: daemonset-unschedulable
+title: DaemonSet nodeSelector matches no node (its pods disappear)
+description: >-
+  A nodeSelector change for a label no node has. Every pod of the DaemonSet is
+  removed: per-node agents (nova-compute, OVS agents, log shippers) vanish
+  without a single error. Operator-owned DaemonSets (e.g. GPU operator) are
+  put back by their operator, which is itself a fine demo.
+scope: cluster
+blast: service
+params:
+  name: {type: name}
+  namespace: {type: name}
+  label: {type: token, default: node-pool}
+  value: {type: token, default: pool-b}
+inject:
+  - snapshot: "daemonset/${name}"
+  - kubectl: [patch, "daemonset/${name}", -n, "${namespace}", --type, merge, -p, '{"spec":{"template":{"spec":{"nodeSelector":{"${label}":"${value}"}}}}}']
+check:
+  kubectl: [get, "daemonset/${name}", -n, "${namespace}", -o, "jsonpath={.status.numberReady}"]
+  match: "^[1-9]"
+expect:
+  symptoms: [DaemonSet desired 0, the per-node service is missing on every node, no crash events]
+  root_cause: the DaemonSet's nodeSelector matches no node
+  fix: restore the nodeSelector

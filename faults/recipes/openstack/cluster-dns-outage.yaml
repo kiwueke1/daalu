@@ -1,0 +1,10 @@
+id: cluster-dns-outage
+title: 'CoreDNS scaled to zero: every service-to-service call fails'
+fault: kubernetes/scale-to-zero
+target: coredns
+story: Every OpenStack service reaches the others by DNS name. With CoreDNS at zero the failures show
+  up everywhere at once and the obvious suspects are all healthy. Add `-n kube-system` to `init` so the
+  coredns target exists.
+expect:
+  root_cause: CoreDNS was scaled to 0
+  fix: scale coredns back up

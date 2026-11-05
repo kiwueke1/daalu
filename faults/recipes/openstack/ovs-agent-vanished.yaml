@@ -1,0 +1,7 @@
+id: ovs-agent-vanished
+title: Neutron OVS agent DaemonSet no longer schedules
+fault: kubernetes/daemonset-unschedulable
+target: neutron-ovs-agent-default
+expect:
+  root_cause: the neutron OVS agent DaemonSet's nodeSelector matches no node; new ports never bind
+  fix: restore the nodeSelector

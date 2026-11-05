@@ -1,0 +1,36 @@
+id: volume-fill
+title: Fill a pod's volume until writes fail
+description: >-
+  Writes a file inside a running pod until the filesystem at `path` has only
+  `keep_mb` free (a database data dir, an image store), writing at most
+  `max_mb`. Needs sh, df and dd in the container. Careful with hostPath-style
+  volumes (local-path, the k3s default): there `df` shows the node's own disk,
+  so the fill lands on the node; keep max_mb small or use a real volume.
+scope: cluster
+blast: workload
+params:
+  kind: {type: enum, choices: [deployment, statefulset, daemonset], default: statefulset}
+  name: {type: name}
+  namespace: {type: name}
+  container: {type: token, default: ""}
+  path: {type: token, help: "Mount path, e.g. /var/lib/mysql"}
+  keep_mb: {type: int, default: "1"}
+  max_mb: {type: int, default: "2048", help: "Never write more than this"}
+prepare:
+  - kubectl: [get, "${kind}/${name}", -n, "${namespace}", -o, "jsonpath={.spec.template.spec.containers[0].name}"]
+    capture: container
+    when_empty: container
+inject:
+  - exec: >-
+      AVAIL=$(df -Pk ${path} | awk 'NR==2{print $4}');
+      N=$(( AVAIL / 1024 - ${keep_mb} )); [ "$N" -gt ${max_mb} ] && N=${max_mb};
+      [ "$N" -gt 0 ] && dd if=/dev/zero of=${path}/.tmp-${fault_id} bs=1M count=$N 2>/dev/null; sync; df -h ${path} | tail -1
+revert:
+  - exec: rm -f ${path}/.tmp-${fault_id}
+check:
+  exec: "[ $(df -Pk ${path} | awk 'NR==2{print $4}') -gt 102400 ]"
+expect:
+  symptoms: ["No space left on device in logs", writes failing, DB errors]
+  root_cause: the volume at the path is full
+  fix: free space or grow the volume; a rollback doesn't help
+  daalu_can_fix: false

@@ -1,0 +1,20 @@
+id: drain
+title: Cordon and drain a node (forgotten maintenance)
+scope: cluster
+blast: node
+params:
+  node: {type: node}
+inject:
+  - kubectl: [drain, "${node}", --ignore-daemonsets, --delete-emptydir-data, --force, --timeout=120s]
+    ignore_errors: true
+revert:
+  - kubectl: [uncordon, "${node}"]
+check:
+  kubectl: [get, node, "${node}", -o, "jsonpath={.spec.unschedulable}"]
+  match: "^$"
+warning: On a single-node cluster this evicts everything, Daalu's edge agent included.
+expect:
+  symptoms: [node SchedulingDisabled, pods Pending]
+  root_cause: the node was drained and never uncordoned
+  fix: uncordon the node
+  daalu_can_fix: false

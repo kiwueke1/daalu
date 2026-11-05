@@ -1,0 +1,23 @@
+id: nvue-mtu-change
+title: Commit an MTU change to one switch port's config (NVUE)
+description: >-
+  A config change, not a kernel tweak: `nv set interface X link mtu 1500` and
+  apply. It shows up in the next config backup diff (S2-05) and as intended vs
+  running drift. The applied config is saved first and put back on revert.
+scope: fabric
+blast: interface
+nos: [cumulus]
+params:
+  device: {type: device}
+  interface: {type: iface}
+  mtu: {type: int, default: "1500"}
+inject:
+  - device: nv config show -o yaml > /tmp/.nv-${fault_id}.yaml
+  - device: nv set interface ${interface} link mtu ${mtu} && nv config apply -y
+revert:
+  - device: nv config replace /tmp/.nv-${fault_id}.yaml && nv config apply -y && rm -f /tmp/.nv-${fault_id}.yaml
+expect:
+  symptoms: [jumbo frames dropped on the port, small pings pass, a one-line MTU diff in the config backup]
+  root_cause: someone committed MTU 1500 on a 9216 fabric port
+  fix: revert the config line (an approved change)
+  daalu_can_fix: false

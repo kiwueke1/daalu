@@ -20,6 +20,11 @@ Every `dummy-app` scenario's `setup` and `cleanup` re-apply the known-good spec
 from `demo/manifests/dummy-app.yaml` with an idempotent strategic-merge patch,
 so a run always starts and ends healthy, even if the AI's fix already ran.
 
+Need an outage that isn't graded (a demo, a recording, a game day)? The
+same kinds of breaks, revertible and pointed at any cluster or fabric, are in
+`daalu fault` ([guide](../docs/fault-injection.md)). A scenario here is that plus a strict
+answer key.
+
 ## Run
 
 ```bash

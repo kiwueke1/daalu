@@ -1,0 +1,13 @@
+id: overnight
+title: A noisy night on the OpenStack cluster (for the morning briefing)
+description: >-
+  Three incidents spread over the night, each left in place for 40 minutes so
+  alerts fire, investigations run and the briefing has something to tell.
+  Start it before bed: `daalu fault drill openstack/overnight -y`.
+env: openstack-lab
+timeout: 40m
+pause: 60m
+items:
+  - recipe: openstack/nova-api-oom
+  - recipe: openstack/glance-never-ready
+  - recipe: openstack/memcached-down

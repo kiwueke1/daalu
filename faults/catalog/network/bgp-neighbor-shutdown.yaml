@@ -1,0 +1,26 @@
+id: bgp-neighbor-shutdown
+title: Shut one BGP session (FRR runtime, not saved)
+description: >-
+  `neighbor X shutdown` in the running FRR config of the default VRF. Not
+  written to NVUE/frr.conf, so it's also running-vs-intended drift.
+scope: fabric
+blast: link
+nos: [cumulus, sonic, frr]
+params:
+  device: {type: device}
+  neighbor: {type: token, help: "Neighbor IP or interface (unnumbered), e.g. swp51"}
+prepare:
+  - device: vtysh -c 'show running-config' | awk '/^router bgp [0-9]+$/{print $3; exit}'
+    capture: asn
+inject:
+  - device: vtysh -c 'configure terminal' -c 'router bgp ${asn}' -c 'neighbor ${neighbor} shutdown'
+revert:
+  - device: vtysh -c 'configure terminal' -c 'router bgp ${asn}' -c 'no neighbor ${neighbor} shutdown'
+check:
+  device: vtysh -c 'show bgp neighbor ${neighbor} json'
+  match: '"bgpState": ?"Established"'
+expect:
+  symptoms: [BGP session Idle (Admin. shutdown), fewer ECMP paths, routes withdrawn]
+  root_cause: the BGP neighbor was administratively shut down
+  fix: remove the shutdown (an approved change)
+  daalu_can_fix: false

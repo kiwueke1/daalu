@@ -1,0 +1,11 @@
+id: memcached-down
+title: 'Memcached gone: Keystone token validation crawls'
+fault: kubernetes/scale-to-zero
+target: memcached-memcached
+story: Nothing fails outright. Every API call validates its token against Keystone without a cache, so
+  latency climbs and timeouts appear under load. A latency alert, not an availability one.
+episodes:
+- S1-06
+expect:
+  root_cause: memcached was scaled to 0, so token caching is gone
+  fix: scale memcached back up

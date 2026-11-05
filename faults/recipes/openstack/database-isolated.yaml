@@ -1,0 +1,15 @@
+id: database-isolated
+title: A default-deny NetworkPolicy cuts every service off from MariaDB
+fault: kubernetes/network-policy-deny
+target: mariadb-server
+story: A security hardening change lands a default-deny policy on the database pods. Connections time
+  out instead of being refused. Needs a CNI that enforces NetworkPolicy.
+episodes:
+- S3-07
+expect:
+  symptoms:
+  - DB connection timeouts in every API
+  - mariadb pods healthy
+  root_cause: a NetworkPolicy denies ingress to the mariadb pods
+  fix: remove the policy
+  daalu_can_fix: false

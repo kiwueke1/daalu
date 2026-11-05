@@ -1,0 +1,12 @@
+id: dummy-bad-image
+title: 'dummy-app: image tag that doesn''t exist'
+fault: kubernetes/bad-image
+target: dummy-app
+params:
+  image: nginx:this-tag-does-not-exist-9.9.9
+episodes:
+- S0-02
+- S3-10
+expect:
+  root_cause: bad image tag in the last rollout
+  fix: rollout_undo

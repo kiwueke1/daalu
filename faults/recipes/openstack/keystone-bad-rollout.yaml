@@ -1,0 +1,15 @@
+id: keystone-bad-rollout
+title: Keystone rolled out with an image that doesn't exist
+fault: kubernetes/bad-image
+target: keystone-api
+story: A routine image bump for Keystone points at a tag that was never pushed. With RollingUpdate the
+  old pods keep serving and the rollout hangs; scale the target to one replica first (or use a Recreate
+  deployment) if you want a hard outage where every `openstack` command fails to authenticate.
+episodes:
+- S0-01
+expect:
+  symptoms:
+  - new keystone-api pods ImagePullBackOff
+  - rollout never completes
+  root_cause: the last keystone-api rollout set an image tag that doesn't exist
+  fix: rollout_undo on keystone-api

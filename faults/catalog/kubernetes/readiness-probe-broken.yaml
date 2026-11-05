@@ -1,0 +1,25 @@
+id: readiness-probe-broken
+title: Readiness probe pointed at a port nothing listens on
+description: Pods run but never turn Ready, so the Service has no endpoints.
+scope: cluster
+blast: workload
+params:
+  kind: {type: enum, choices: [deployment, statefulset, daemonset], default: deployment}
+  name: {type: name, help: "The workload name"}
+  namespace: {type: name}
+  container: {type: token, default: "", help: "Container to break (default: the first one)"}
+  port: {type: int, default: "65000"}
+prepare:
+  - kubectl: [get, "${kind}/${name}", -n, "${namespace}", -o, "jsonpath={.spec.template.spec.containers[0].name}"]
+    capture: container
+    when_empty: container
+inject:
+  - snapshot: "${kind}/${name}"
+  - kubectl: [patch, "${kind}/${name}", -n, "${namespace}", --type, strategic, -p,
+      '{"spec":{"template":{"spec":{"containers":[{"name":"${container}","readinessProbe":{"$patch":"replace","tcpSocket":{"port":${port}},"periodSeconds":5,"failureThreshold":2}}]}}}}']
+check:
+  kubectl: [rollout, status, "${kind}/${name}", -n, "${namespace}", --timeout=5s]
+expect:
+  symptoms: [pods Running but 0/1 Ready, Service has no endpoints, 503s upstream]
+  root_cause: the readiness probe checks a port the app doesn't listen on
+  fix: roll back, or patch the probe back

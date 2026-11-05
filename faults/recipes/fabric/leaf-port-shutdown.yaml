@@ -1,0 +1,10 @@
+id: leaf-port-shutdown
+title: A leaf port facing a GPU server is shut in the config
+fault: network/interface-shutdown
+target: leaf1-swp1
+episodes:
+- S2-06
+expect:
+  root_cause: leaf1 swp1 was administratively shut
+  fix: approve a change that sets the port up
+  daalu_can_fix: false

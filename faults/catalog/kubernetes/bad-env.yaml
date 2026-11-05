@@ -1,0 +1,26 @@
+id: bad-env
+title: Roll out a wrong environment variable
+description: >-
+  Sets one environment variable to a bad value (a wrong DB host, a GPU memory
+  fraction the card can't give, a feature flag that breaks the app).
+scope: cluster
+blast: workload
+params:
+  kind: {type: enum, choices: [deployment, statefulset, daemonset], default: deployment}
+  name: {type: name, help: "The workload name"}
+  namespace: {type: name}
+  container: {type: token, default: "", help: "Container to break (default: the first one)"}
+  env_name: {type: token}
+  env_value: {type: token}
+prepare:
+  - kubectl: [get, "${kind}/${name}", -n, "${namespace}", -o, "jsonpath={.spec.template.spec.containers[0].name}"]
+    capture: container
+    when_empty: container
+inject:
+  - snapshot: "${kind}/${name}"
+  - kubectl: [set, env, "${kind}/${name}", -n, "${namespace}", -c, "${container}", "${env_name}=${env_value}"]
+check:
+  kubectl: [rollout, status, "${kind}/${name}", -n, "${namespace}", --timeout=5s]
+expect:
+  root_cause: the last rollout changed an environment variable
+  fix: roll back or set the variable back

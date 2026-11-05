@@ -1,0 +1,19 @@
+id: gpu-persistence-off
+title: Turn GPU persistence mode off
+description: The DCGM level-1 diagnostic fails on persistence-mode-disabled; a GPU health check should catch it.
+scope: cluster
+blast: node
+params:
+  node: {type: node}
+inject:
+  - node: nvidia-smi -pm 0
+revert:
+  - node: nvidia-smi -pm 1
+check:
+  node: nvidia-smi --query-gpu=persistence_mode --format=csv,noheader
+  match: "^Enabled"
+expect:
+  symptoms: [dcgmi diag -r 1 fails on persistence mode, slower first CUDA init]
+  root_cause: GPU persistence mode is disabled
+  fix: nvidia-smi -pm 1 on the node (and a unit that keeps it on after reboot)
+  daalu_can_fix: false

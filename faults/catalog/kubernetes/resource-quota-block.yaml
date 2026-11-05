@@ -1,0 +1,33 @@
+id: resource-quota-block
+title: A ResourceQuota that allows no new pods, then the workload's pods are recycled
+description: Replacement pods are rejected ("exceeded quota"), so the workload drains to zero.
+scope: cluster
+blast: namespace
+params:
+  kind: {type: enum, choices: [deployment, statefulset, daemonset], default: deployment}
+  name: {type: name}
+  namespace: {type: name}
+  quota: {type: name, default: compute-resources}
+prepare:
+  - kubectl: [get, "${kind}/${name}", -n, "${namespace}", -o, 'go-template={{$f := true}}{{range $k, $v := .spec.selector.matchLabels}}{{if not $f}},{{end}}{{$k}}={{$v}}{{$f = false}}{{end}}']
+    capture: selector
+inject:
+  - kubectl: [apply, -n, "${namespace}", -f, "-"]
+    stdin: |
+      apiVersion: v1
+      kind: ResourceQuota
+      metadata:
+        name: ${quota}
+      spec:
+        hard:
+          pods: "0"
+  - kubectl: [delete, pods, -n, "${namespace}", -l, "${selector}", --wait=false]
+revert:
+  - kubectl: [delete, resourcequota, "${quota}", -n, "${namespace}", --ignore-not-found]
+check:
+  kubectl: [rollout, status, "${kind}/${name}", -n, "${namespace}", --timeout=5s]
+expect:
+  symptoms: [0 pods, ReplicaSet/StatefulSet events "exceeded quota", nothing crashing]
+  root_cause: a ResourceQuota with pods=0 blocks every new pod in the namespace
+  fix: remove or raise the quota
+  daalu_can_fix: false

@@ -1,0 +1,22 @@
+id: packet-loss
+title: Drop a percentage of packets on a link
+description: Uses tc netem on the interface. Revert removes the root qdisc.
+scope: fabric
+blast: link
+nos: [linux]
+params:
+  device: {type: device}
+  interface: {type: iface}
+  loss: {type: percent, default: "2"}
+inject:
+  - device: tc qdisc replace dev ${interface} root netem loss ${loss}%
+revert:
+  - device: tc qdisc del dev ${interface} root 2>/dev/null; true
+check:
+  device: tc qdisc show dev ${interface}
+  match: "^(?![\\s\\S]*netem)"
+expect:
+  symptoms: [retransmits, slow collective ops, no errors on the switch]
+  root_cause: packet loss on the link (bad optic or cable)
+  fix: a human replaces the optic/cable or drains the link
+  daalu_can_fix: false

@@ -1,0 +1,7 @@
+id: dummy-scaled-to-zero
+title: 'dummy-app: scaled to zero'
+fault: kubernetes/scale-to-zero
+target: dummy-app
+expect:
+  root_cause: replicas set to 0
+  fix: scale_deployment (not rollback)

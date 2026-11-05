@@ -1,0 +1,11 @@
+id: glance-never-ready
+title: 'Glance readiness probe broken: image API has no endpoints'
+fault: kubernetes/readiness-probe-broken
+target: glance-api
+story: 'glance-api pods are Running but never Ready, so the Service has no endpoints and image list/upload
+  503s. Running pods with no errors in their logs: the AI has to read the probe.'
+episodes:
+- S4-02
+expect:
+  root_cause: glance-api's readiness probe checks a port nothing listens on
+  fix: rollout_undo or patch the probe

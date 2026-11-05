@@ -1,0 +1,26 @@
+id: crashloop
+title: Roll out a command that exits on start (CrashLoopBackOff)
+description: >-
+  A rollout overrides the container's command so it logs a fatal error and exits
+  1 after a few seconds. Needs sh in the image.
+scope: cluster
+blast: workload
+params:
+  kind: {type: enum, choices: [deployment, statefulset, daemonset], default: deployment}
+  name: {type: name, help: "The workload name"}
+  namespace: {type: name}
+  container: {type: token, default: "", help: "Container to break (default: the first one)"}
+prepare:
+  - kubectl: [get, "${kind}/${name}", -n, "${namespace}", -o, "jsonpath={.spec.template.spec.containers[0].name}"]
+    capture: container
+    when_empty: container
+inject:
+  - snapshot: "${kind}/${name}"
+  - kubectl: [patch, "${kind}/${name}", -n, "${namespace}", --type, strategic, -p,
+      '{"spec":{"template":{"spec":{"containers":[{"name":"${container}","command":["sh","-c","echo \"fatal: configuration validation failed\" >&2; sleep 3; exit 1"]}]}}}}']
+check:
+  kubectl: [rollout, status, "${kind}/${name}", -n, "${namespace}", --timeout=5s]
+expect:
+  symptoms: [CrashLoopBackOff, rising restart count, "fatal: configuration validation failed in the previous logs"]
+  root_cause: the last rollout changed the container command
+  fix: roll back the rollout

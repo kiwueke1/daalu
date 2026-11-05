@@ -1,0 +1,19 @@
+id: crossed-cables
+title: gpu2's rail-2 and rail-3 cables swapped
+fault: network/cable-swap
+params:
+  device: gpu2
+  a_if: eth3
+  a_peer: leaf3
+  a_peer_if: swp2
+  b_if: eth4
+  b_peer: leaf4
+  b_peer_if: swp2
+story: The S2-07 break, with the original cabling captured so revert puts it back exactly. Check the ports
+  against your topology file before the take.
+episodes:
+- S2-07
+expect:
+  root_cause: gpu2's eth3/eth4 cables are crossed between leaf3 and leaf4
+  fix: swap them back (a technician)
+  daalu_can_fix: false

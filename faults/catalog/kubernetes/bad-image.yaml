@@ -1,0 +1,27 @@
+id: bad-image
+title: Roll out an image tag that doesn't exist
+description: >-
+  A rollout points the workload at an image tag that was never pushed. New pods
+  sit in ImagePullBackOff; with RollingUpdate the old pods keep serving (degraded
+  rollout), with Recreate the workload goes down.
+scope: cluster
+blast: workload
+params:
+  kind: {type: enum, choices: [deployment, statefulset, daemonset], default: deployment}
+  name: {type: name, help: "The workload name"}
+  namespace: {type: name}
+  container: {type: token, default: "", help: "Container to break (default: the first one)"}
+  image: {type: image, default: "registry.k8s.io/pause:does-not-exist-9.9.9"}
+prepare:
+  - kubectl: [get, "${kind}/${name}", -n, "${namespace}", -o, "jsonpath={.spec.template.spec.containers[0].name}"]
+    capture: container
+    when_empty: container
+inject:
+  - snapshot: "${kind}/${name}"
+  - kubectl: [set, image, "${kind}/${name}", -n, "${namespace}", "${container}=${image}"]
+check:
+  kubectl: [rollout, status, "${kind}/${name}", -n, "${namespace}", --timeout=5s]
+expect:
+  symptoms: [ImagePullBackOff / ErrImagePull on new pods, rollout stuck]
+  root_cause: the last rollout changed the image to a tag that doesn't exist
+  fix: roll back the rollout (rollout_undo) or set the previous image

@@ -1,0 +1,31 @@
+id: disk-pressure
+title: Fill a node's disk until the kubelet reports DiskPressure and evicts pods
+description: >-
+  Writes one file on the node so the filesystem holding `path` reaches
+  `fill_percent` used. Above the kubelet's eviction threshold (default 85-90 %
+  for nodefs) it sets DiskPressure, taints the node and starts evicting pods.
+scope: cluster
+blast: node
+params:
+  node: {type: node}
+  path: {type: token, default: /var/lib}
+  fill_percent: {type: int, default: "93"}
+inject:
+  - node: >-
+      set -- $(df -Pk ${path} | awk 'NR==2{print $2, $3}');
+      N=$(( $1 * ${fill_percent} / 100 - $2 ));
+      if [ "$N" -gt 0 ]; then fallocate -l $(( N * 1024 )) ${path}/.cache-${fault_id} || dd if=/dev/zero of=${path}/.cache-${fault_id} bs=1M count=$(( N / 1024 )); fi;
+      df -h ${path} | tail -1
+revert:
+  - node: rm -f ${path}/.cache-${fault_id}
+check:
+  kubectl: [get, node, "${node}", -o, 'jsonpath={.status.conditions[?(@.type=="DiskPressure")].status}']
+  match: "^False$"
+warning: >-
+  On a single-node cluster the kubelet may evict Daalu's own edge agent; set
+  fill_percent just past the eviction threshold, not 99.
+expect:
+  symptoms: [node condition DiskPressure=True, Evicted pods, new pods Pending with a disk-pressure taint]
+  root_cause: the node's filesystem is nearly full
+  fix: find and remove what filled it (a human job on the node)
+  daalu_can_fix: false

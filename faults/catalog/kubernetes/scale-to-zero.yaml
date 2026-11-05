@@ -1,0 +1,19 @@
+id: scale-to-zero
+title: Scaled to zero replicas
+description: Rollback is the wrong fix here; nothing about the pod template changed.
+scope: cluster
+blast: workload
+params:
+  kind: {type: enum, choices: [deployment, statefulset], default: deployment}
+  name: {type: name}
+  namespace: {type: name}
+inject:
+  - snapshot: "${kind}/${name}"
+  - kubectl: [scale, "${kind}/${name}", -n, "${namespace}", --replicas=0]
+check:
+  kubectl: [get, "${kind}/${name}", -n, "${namespace}", -o, "jsonpath={.status.readyReplicas}"]
+  match: "^[1-9]"
+expect:
+  symptoms: [0 ready replicas, Service has no endpoints, no failing pods to look at]
+  root_cause: someone scaled the workload to zero
+  fix: scale it back up (rollback won't help)

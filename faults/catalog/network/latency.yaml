@@ -1,0 +1,23 @@
+id: latency
+title: Add latency (and jitter) on a link
+description: Uses tc netem on the interface. Revert removes the root qdisc.
+scope: fabric
+blast: link
+nos: [linux]
+params:
+  device: {type: device}
+  interface: {type: iface}
+  delay: {type: duration, default: "20ms"}
+  jitter: {type: duration, default: 5ms}
+inject:
+  - device: tc qdisc replace dev ${interface} root netem delay ${delay} ${jitter}
+revert:
+  - device: tc qdisc del dev ${interface} root 2>/dev/null; true
+check:
+  device: tc qdisc show dev ${interface}
+  match: "^(?![\\s\\S]*netem)"
+expect:
+  symptoms: [higher RTT, slow training steps, timeouts]
+  root_cause: added latency on the link
+  fix: a human replaces the optic/cable or drains the link
+  daalu_can_fix: false

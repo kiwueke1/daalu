@@ -1,0 +1,11 @@
+id: compute-node-disk-full
+title: The compute node's disk fills past the eviction threshold
+fault: node/disk-pressure
+story: Give the node with --target node-<name>. The kubelet evicts pods and new instances won't schedule.
+  A node-level fault the AI can diagnose but shouldn't try to fix with kubectl.
+episodes:
+- S0-04
+expect:
+  root_cause: the node's filesystem is nearly full (DiskPressure)
+  fix: a human frees space on the node
+  daalu_can_fix: false

@@ -1,0 +1,12 @@
+id: lossy-optic
+title: 2% packet loss on one leaf-to-GPU link
+fault: network/packet-loss
+target: leaf1-swp1
+params:
+  loss: '2'
+episodes:
+- S2-10
+expect:
+  root_cause: packet loss on leaf1 swp1
+  fix: replace the optic/cable or drain the link
+  daalu_can_fix: false

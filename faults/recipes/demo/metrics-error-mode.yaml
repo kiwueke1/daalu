@@ -1,0 +1,10 @@
+id: metrics-error-mode
+title: 'metrics-app: error rate climbs, pods stay healthy'
+fault: kubernetes/bad-env
+target: metrics-app
+params:
+  env_name: ERROR_MODE
+  env_value: 'true'
+expect:
+  root_cause: ERROR_MODE=true in the last rollout
+  fix: rollout_undo

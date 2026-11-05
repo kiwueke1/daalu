@@ -1,0 +1,17 @@
+id: traffic-drop
+title: Drop routed traffic to a prefix with a firewall rule (a bad ACL)
+scope: fabric
+blast: device
+nos: [linux]
+params:
+  device: {type: device}
+  prefix: {type: cidr}
+inject:
+  - device: iptables -I FORWARD -d ${prefix} -j DROP
+revert:
+  - device: while iptables -D FORWARD -d ${prefix} -j DROP 2>/dev/null; do :; done; true
+expect:
+  symptoms: [routes present, traceroute stops at this switch, counters on the ACL rising]
+  root_cause: an ACL/firewall rule drops traffic to the prefix
+  fix: remove the rule (an approved change)
+  daalu_can_fix: false

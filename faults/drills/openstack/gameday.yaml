@@ -1,0 +1,19 @@
+id: gameday
+title: OpenStack game day (eight incidents, easy to hard)
+description: >-
+  A mix that the metrics can tell apart: rollbacks (Daalu should fix them),
+  "rollback is wrong" faults (scale back, restore a Service), and faults where
+  the right answer is to escalate. Run it with the autonomy policy you want to
+  measure, then read the AI Ops metrics for the same window.
+env: openstack-lab
+timeout: 20m
+pause: 3m
+items:
+  - recipe: openstack/keystone-bad-rollout
+  - recipe: openstack/nova-api-oom
+  - recipe: openstack/mariadb-down
+  - recipe: openstack/glance-never-ready
+  - recipe: openstack/keystone-service-wrong-port
+  - recipe: openstack/neutron-server-crashloop
+  - recipe: openstack/rabbitmq-down
+  - recipe: openstack/nova-compute-vanished

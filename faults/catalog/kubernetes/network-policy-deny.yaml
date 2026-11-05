@@ -1,0 +1,33 @@
+id: network-policy-deny
+title: A NetworkPolicy that blocks all ingress to some pods
+description: >-
+  Selects pods by one label and allows no ingress, the way an over-eager
+  "default deny" lands. Needs a CNI that enforces NetworkPolicy (Cilium, Calico,
+  k3s' built-in controller); on plain flannel/kindnet it does nothing.
+scope: cluster
+blast: service
+params:
+  namespace: {type: name}
+  pod_label: {type: token, help: "Pod label key, e.g. application"}
+  pod_value: {type: token, help: "Pod label value, e.g. mariadb"}
+  policy: {type: name, default: default-deny-ingress}
+inject:
+  - kubectl: [apply, -n, "${namespace}", -f, "-"]
+    stdin: |
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: ${policy}
+      spec:
+        podSelector:
+          matchLabels:
+            ${pod_label}: "${pod_value}"
+        policyTypes: [Ingress]
+        ingress: []
+revert:
+  - kubectl: [delete, networkpolicy, "${policy}", -n, "${namespace}", --ignore-not-found]
+expect:
+  symptoms: [clients time out (not refused) connecting to the pods, pods healthy]
+  root_cause: a NetworkPolicy denies all ingress to the pods
+  fix: remove or correct the NetworkPolicy
+  daalu_can_fix: false

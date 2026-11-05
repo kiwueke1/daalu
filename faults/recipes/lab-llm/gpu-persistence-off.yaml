@@ -1,0 +1,11 @@
+id: gpu-persistence-off
+title: GPU persistence mode turned off on the GPU node
+fault: node/gpu-persistence-off
+story: Give the GPU node with --target node-<name>. The DCGM diagnostic fails on persistence mode; GPU
+  health should flag it.
+episodes:
+- S1-16
+expect:
+  root_cause: persistence mode is disabled on the GPU
+  fix: nvidia-smi -pm 1 (a human/node job)
+  daalu_can_fix: false

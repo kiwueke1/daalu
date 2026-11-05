@@ -1,0 +1,8 @@
+id: namespace-quota-zero
+title: A ResourceQuota blocks every new pod in the openstack namespace
+fault: kubernetes/resource-quota-block
+target: keystone-api
+expect:
+  root_cause: a pods=0 ResourceQuota rejects keystone's replacement pods
+  fix: remove the quota
+  daalu_can_fix: false

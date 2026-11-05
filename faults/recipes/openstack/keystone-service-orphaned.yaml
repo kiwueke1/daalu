@@ -1,0 +1,7 @@
+id: keystone-service-orphaned
+title: Keystone Service selector selects nothing
+fault: kubernetes/service-selector-mismatch
+target: svc-keystone-api
+expect:
+  root_cause: the keystone-api Service selector matches no pods
+  fix: restore the Service selector

@@ -1,0 +1,27 @@
+id: configmap-corrupt
+title: Change one configmap key, then restart the workload that reads it
+description: >-
+  The classic config push: one value in a configmap (a DB password, a connection
+  string, a whole config file) changes and the workload restarts onto it. The
+  pod template is unchanged, so rolling back the workload does NOT fix it.
+scope: cluster
+blast: workload
+params:
+  kind: {type: enum, choices: [deployment, statefulset, daemonset], default: deployment}
+  name: {type: name, help: "The workload that reads the configmap"}
+  namespace: {type: name}
+  object: {type: name, help: "The configmap name"}
+  key: {type: token}
+  value: {type: token, default: rotated-but-not-applied}
+inject:
+  - snapshot: "configmap/${object}"
+  - kubectl: [patch, "configmap/${object}", -n, "${namespace}", --type, merge, -p, '{"data":{"${key}":"${value}"}}']
+  - kubectl: [rollout, restart, "${kind}/${name}", -n, "${namespace}"]
+revert:
+  - kubectl: [rollout, restart, "${kind}/${name}", -n, "${namespace}"]
+check:
+  kubectl: [rollout, status, "${kind}/${name}", -n, "${namespace}", --timeout=5s]
+
+expect:
+  root_cause: a value in the configmap changed and the restarted pods read it
+  fix: restore the value, then restart; a rollback of the workload does not help

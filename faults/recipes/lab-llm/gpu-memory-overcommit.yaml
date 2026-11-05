@@ -1,0 +1,23 @@
+id: gpu-memory-overcommit
+title: chat-llm asks for 90% of a GPU that's already shared
+fault: kubernetes/bad-env
+target: chat-llm
+params:
+  env_name: GPU_MEM_UTIL
+  env_value: '0.90'
+story: 'The S1-01 break: someone raises vLLM''s --gpu-memory-utilization for throughput and forgets the
+  card is shared. vLLM can''t allocate and crash-loops.'
+episodes:
+- S1-01
+- S1-12
+- S3-01
+- S3-02
+- S3-03
+- S3-04
+- S3-10
+expect:
+  symptoms:
+  - chat-llm CrashLoopBackOff
+  - 'vLLM: not enough free GPU memory'
+  root_cause: GPU_MEM_UTIL was raised to 0.90 on a shared GPU
+  fix: rollout_undo on chat-llm

@@ -79,6 +79,15 @@ Using the kind/Helm install of Daalu? Add `DAALU_API=http://localhost:8080`.
 ./demo/status.sh           # app + alert state at any time
 ```
 
+More outages than `break.sh` has, each revertible with one command: `daalu fault`
+([guide](../docs/fault-injection.md)).
+
+```bash
+daalu fault init cluster demo --context kind-daalu-demo -n daalu-demo   # once
+daalu fault inject demo/dummy-scaled-to-zero --env demo                 # or any kubernetes/* fault: --target dummy-app
+daalu fault revert <id>
+```
+
 Open Daalu → **Alerts**. Within ~2–3 min `DummyAppDown` appears; open it and let
 the agent investigate. It inspects the workload over the tunnel, finds the bad
 rollout and proposes a **rollback** as a change proposal for you to approve. (Or

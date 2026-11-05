@@ -1,0 +1,22 @@
+id: packet-corruption
+title: Corrupt a percentage of packets on a link
+description: Uses tc netem on the interface. Revert removes the root qdisc.
+scope: fabric
+blast: link
+nos: [linux]
+params:
+  device: {type: device}
+  interface: {type: iface}
+  corrupt: {type: percent, default: "1"}
+inject:
+  - device: tc qdisc replace dev ${interface} root netem corrupt ${corrupt}%
+revert:
+  - device: tc qdisc del dev ${interface} root 2>/dev/null; true
+check:
+  device: tc qdisc show dev ${interface}
+  match: "^(?![\\s\\S]*netem)"
+expect:
+  symptoms: [CRC/checksum errors, retransmits]
+  root_cause: corrupted frames on the link (bad optic)
+  fix: a human replaces the optic/cable or drains the link
+  daalu_can_fix: false

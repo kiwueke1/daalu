@@ -1,0 +1,11 @@
+id: keystone-service-wrong-port
+title: Keystone Service targetPort changed
+fault: kubernetes/service-wrong-port
+target: svc-keystone-api
+story: Pods are healthy, endpoints exist, and every client gets connection refused. Only the Service spec
+  shows why.
+episodes:
+- S1-14
+expect:
+  root_cause: the keystone-api Service targetPort no longer matches the container port
+  fix: patch the Service targetPort back

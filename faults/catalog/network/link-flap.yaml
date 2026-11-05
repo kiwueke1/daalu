@@ -1,0 +1,23 @@
+id: link-flap
+title: Flap a link (down and up on a timer)
+scope: fabric
+blast: link
+nos: [linux]
+params:
+  device: {type: device}
+  interface: {type: iface}
+  down_s: {type: int, default: "5"}
+  up_s: {type: int, default: "20"}
+  count: {type: int, default: "500"}
+inject:
+  - device: >-
+      nohup sh -c 'i=0; while [ $i -lt ${count} ]; do ip link set ${interface} down; sleep ${down_s};
+      ip link set ${interface} up; sleep ${up_s}; i=$((i+1)); done' >/dev/null 2>&1 &
+      echo $! > /tmp/.lf-${fault_id}.pid
+revert:
+  - device: kill $(cat /tmp/.lf-${fault_id}.pid) 2>/dev/null; rm -f /tmp/.lf-${fault_id}.pid; ip link set ${interface} up
+expect:
+  symptoms: [carrier transitions climbing, BGP session resets, LLDP neighbour comes and goes]
+  root_cause: the link is flapping
+  fix: a human replaces the cable/optic; meanwhile shut the port
+  daalu_can_fix: false

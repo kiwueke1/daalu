@@ -1,0 +1,10 @@
+id: cable-pulled
+title: A cable pulled between a leaf and a GPU server
+fault: network/cable-pull
+target: leaf1-swp1
+episodes:
+- S2-01
+expect:
+  root_cause: the leaf1 swp1 link lost carrier on both ends; config unchanged
+  fix: a human checks the cable
+  daalu_can_fix: false

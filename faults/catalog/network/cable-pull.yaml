@@ -1,0 +1,29 @@
+id: cable-pull
+title: Pull a cable (carrier lost on both ends, config untouched)
+description: >-
+  Takes both ends of a link down in the kernel. The switch config still says
+  the port is up, so it looks like a physical fault, not a change.
+scope: fabric
+blast: link
+nos: [linux]
+params:
+  device: {type: device}
+  interface: {type: iface}
+  peer_device: {type: device}
+  peer_interface: {type: iface}
+inject:
+  - device: ip link set ${interface} down
+  - device: ip link set ${peer_interface} down
+    at: "${peer_device}"
+revert:
+  - device: ip link set ${interface} up
+  - device: ip link set ${peer_interface} up
+    at: "${peer_device}"
+check:
+  device: ip -br link show ${interface}
+  match: "\\bUP\\b"
+expect:
+  symptoms: [link down, LLDP neighbour gone, BGP session on the link drops, config unchanged]
+  root_cause: the physical link is down (cable, optic or far-end port)
+  fix: a human checks the cable and optics
+  daalu_can_fix: false

@@ -1,0 +1,10 @@
+id: spine-routing-down
+title: FRR stopped on a spine
+fault: network/routing-daemon-stop
+target: spine1
+episodes:
+- S2-09
+expect:
+  root_cause: FRR is stopped on spine1
+  fix: start FRR and find out why
+  daalu_can_fix: false

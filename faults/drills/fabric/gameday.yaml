@@ -1,0 +1,15 @@
+id: gameday
+title: Fabric game day (six network incidents)
+description: >-
+  Network faults where the honest answer is usually "a human goes and looks".
+  Measures how fast the fault is detected and named, not auto-fixed.
+env: spectrum-x
+timeout: 15m
+pause: 2m
+items:
+  - recipe: fabric/leaf-port-shutdown
+  - recipe: fabric/lossy-optic
+  - recipe: fabric/jumbo-frames-broken
+  - recipe: fabric/flapping-link
+  - recipe: fabric/spine-routing-down
+  - recipe: fabric/rogue-ssh-key

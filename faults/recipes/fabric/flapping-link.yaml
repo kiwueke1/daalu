@@ -1,0 +1,8 @@
+id: flapping-link
+title: A leaf-to-GPU link flapping every 20 s
+fault: network/link-flap
+target: leaf1-swp1
+expect:
+  root_cause: the link is flapping
+  fix: shut it and replace the cable
+  daalu_can_fix: false

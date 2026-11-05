@@ -1,0 +1,21 @@
+id: switch-isolated
+title: Isolate a switch (every front-panel port down, mgmt still up)
+description: Like a hung ASIC or a bad upgrade. Ports that were already down stay down on revert.
+scope: fabric
+blast: device
+nos: [linux]
+params:
+  device: {type: device}
+  ports: {type: token, default: "swp", help: "Interface name prefix of the front-panel ports"}
+prepare:
+  - device: ip -br link | awk '$1 ~ /^${ports}[0-9]/ && $2 != "DOWN" {sub(/@.*/, "", $1); printf "%s,", $1}'
+    capture: up_ports
+inject:
+  - device: for i in $(echo ${up_ports} | tr , ' '); do ip link set $i down; done
+revert:
+  - device: for i in $(echo ${up_ports} | tr , ' '); do ip link set $i up; done
+expect:
+  symptoms: [every link on the switch down, all its BGP sessions down, mgmt ping still works]
+  root_cause: the switch's data plane is down
+  fix: a human looks at the switch (reload, RMA)
+  daalu_can_fix: false

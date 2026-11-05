@@ -1,0 +1,13 @@
+id: database-disk-full
+title: MariaDB data volume full
+fault: kubernetes/volume-fill
+target: mariadb-server
+params:
+  kind: statefulset
+  path: /var/lib/mysql
+story: The DB volume fills up (binlogs, a runaway table). Writes fail; reads still work, so some API calls
+  succeed and others 500.
+expect:
+  root_cause: the mariadb volume at /var/lib/mysql is full
+  fix: free space or grow the PVC (a human job)
+  daalu_can_fix: false

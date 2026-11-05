@@ -1,0 +1,20 @@
+id: pod-kill
+title: Kill every pod of a workload at once
+description: Self-healing; useful to show Daalu noticing a blip that fixed itself (the right action is none).
+scope: cluster
+blast: workload
+self_heals: true
+params:
+  kind: {type: enum, choices: [deployment, statefulset, daemonset], default: deployment}
+  name: {type: name}
+  namespace: {type: name}
+prepare:
+  - kubectl: [get, "${kind}/${name}", -n, "${namespace}", -o, 'go-template={{$f := true}}{{range $k, $v := .spec.selector.matchLabels}}{{if not $f}},{{end}}{{$k}}={{$v}}{{$f = false}}{{end}}']
+    capture: selector
+inject:
+  - kubectl: [delete, pods, -n, "${namespace}", -l, "${selector}", --wait=false]
+check:
+  kubectl: [rollout, status, "${kind}/${name}", -n, "${namespace}", --timeout=5s]
+expect:
+  root_cause: the pods were deleted and the controller recreated them
+  fix: none needed once it's back; a write action is the wrong answer

@@ -1,0 +1,12 @@
+id: nova-api-oom
+title: nova-api memory limit cut to 64Mi (OOMKilled)
+fault: kubernetes/oom-limit
+target: nova-api-osapi
+params:
+  limit: 64Mi
+story: A resource-tuning PR trims nova-api's memory limit. The WSGI workers are OOM-killed on start.
+episodes:
+- S4-03
+expect:
+  root_cause: nova-api's memory limit is below what its workers need
+  fix: restore the memory limit (patch_resource) or rollout_undo

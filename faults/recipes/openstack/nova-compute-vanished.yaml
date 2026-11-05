@@ -1,0 +1,9 @@
+id: nova-compute-vanished
+title: nova-compute DaemonSet no longer schedules on any node
+fault: kubernetes/daemonset-unschedulable
+target: nova-compute-default
+story: A node-label refactor changes nova-compute's nodeSelector. Every hypervisor disappears from `openstack
+  compute service list` and nothing logs an error, because there's no pod left to log.
+expect:
+  root_cause: the nova-compute DaemonSet's nodeSelector matches no node
+  fix: restore the nodeSelector

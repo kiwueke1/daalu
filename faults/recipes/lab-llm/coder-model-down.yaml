@@ -1,0 +1,11 @@
+id: coder-model-down
+title: The local coder model is scaled to zero (the router should fail over)
+fault: kubernetes/scale-to-zero
+target: llm-coder
+story: The GPU-served model behind the coding tools disappears. A local-first router should notice and
+  fall back, and say so; the tools in front of it shouldn't break.
+episodes:
+- S1-13
+expect:
+  root_cause: the llm-coder deployment has 0 replicas
+  fix: scale it back; meanwhile the router serves from the fallback

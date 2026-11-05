@@ -1,0 +1,18 @@
+id: rabbitmq-down
+title: 'RabbitMQ scaled to zero: compute and network agents go dark'
+fault: kubernetes/scale-to-zero
+target: rabbitmq-rabbitmq
+params:
+  kind: statefulset
+story: APIs still answer (reads hit the DB), but every RPC to nova-compute, the scheduler and the neutron
+  agents times out. New servers sit in BUILD forever. A good test of whether the AI follows the dependency,
+  not the loudest symptom.
+episodes:
+- S1-11
+expect:
+  symptoms:
+  - openstack server create stays BUILD
+  - compute services down
+  - AMQP connection refused in logs
+  root_cause: the RabbitMQ StatefulSet was scaled to 0
+  fix: scale RabbitMQ back up

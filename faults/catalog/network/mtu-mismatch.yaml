@@ -1,0 +1,25 @@
+id: mtu-mismatch
+title: Drop one interface to MTU 1500 on a jumbo-frame fabric
+description: >-
+  Small packets still pass (ping works), jumbo frames don't. The classic
+  "everything is up but RDMA/storage is broken" fault. Kernel only, so the
+  switch config still says 9216.
+scope: fabric
+blast: interface
+nos: [linux]
+params:
+  device: {type: device}
+  interface: {type: iface}
+  mtu: {type: int, default: "1500"}
+prepare:
+  - device: cat /sys/class/net/${interface}/mtu
+    capture: old_mtu
+inject:
+  - device: ip link set ${interface} mtu ${mtu}
+revert:
+  - device: ip link set ${interface} mtu ${old_mtu}
+expect:
+  symptoms: [large pings fail with DF set, small pings pass, RoCE/NFS stalls, OSPF/BGP may stay up]
+  root_cause: MTU mismatch on one end of the link
+  fix: set the MTU back to the fabric's value
+  daalu_can_fix: false

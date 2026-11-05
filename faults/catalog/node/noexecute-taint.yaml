@@ -1,0 +1,19 @@
+id: noexecute-taint
+title: Taint a node NoExecute (evicts everything that doesn't tolerate it)
+scope: cluster
+blast: node
+params:
+  node: {type: node}
+  key: {type: token, default: maintenance}
+  value: {type: token, default: planned}
+  effect: {type: enum, choices: [NoExecute, NoSchedule], default: NoExecute}
+inject:
+  - kubectl: [taint, node, "${node}", "${key}=${value}:${effect}", --overwrite]
+revert:
+  - kubectl: [taint, node, "${node}", "${key}:${effect}-"]
+    ignore_errors: true
+expect:
+  symptoms: [pods evicted or Pending with "untolerated taint"]
+  root_cause: a NoExecute taint was put on the node
+  fix: remove the taint (or confirm the maintenance is real)
+  daalu_can_fix: false

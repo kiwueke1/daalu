@@ -1,0 +1,19 @@
+id: blackhole-route
+title: Blackhole a prefix on one switch
+description: A kernel blackhole route for the prefix; traffic through this switch toward it is dropped.
+scope: fabric
+blast: device
+nos: [linux]
+params:
+  device: {type: device}
+  prefix: {type: cidr}
+  vrf: {type: token, default: "", help: "VRF name, or empty for the default VRF"}
+inject:
+  - device: if [ -n "${vrf}" ]; then ip route replace blackhole ${prefix} vrf ${vrf}; else ip route replace blackhole ${prefix}; fi
+revert:
+  - device: if [ -n "${vrf}" ]; then ip route del blackhole ${prefix} vrf ${vrf}; else ip route del blackhole ${prefix}; fi; true
+expect:
+  symptoms: [traffic to the prefix dropped on paths through this switch only, ECMP makes it intermittent]
+  root_cause: a blackhole route for the prefix on the switch
+  fix: remove the route
+  daalu_can_fix: false

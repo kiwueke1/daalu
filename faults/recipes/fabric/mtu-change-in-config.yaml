@@ -1,0 +1,12 @@
+id: mtu-change-in-config
+title: 'A committed MTU change on one leaf port: the line in the config diff'
+fault: network/nvue-mtu-change
+target: leaf1-swp1
+story: 'Training got slow on Tuesday. The only clue is one line in the nightly config diff: a port that
+  dropped to MTU 1500.'
+episodes:
+- S2-05
+expect:
+  root_cause: leaf1 swp1 was committed at MTU 1500
+  fix: revert the line (an approved change)
+  daalu_can_fix: false

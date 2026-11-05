@@ -1,0 +1,16 @@
+id: service-wrong-port
+title: Service targetPort points at a port the app doesn't listen on
+scope: cluster
+blast: service
+params:
+  service: {type: name}
+  namespace: {type: name}
+  port: {type: int, help: "The Service port to change"}
+  target_port: {type: int, default: "9999"}
+inject:
+  - snapshot: "service/${service}"
+  - kubectl: [patch, "service/${service}", -n, "${namespace}", --type, strategic, -p, '{"spec":{"ports":[{"port":${port},"targetPort":${target_port}}]}}']
+expect:
+  symptoms: [connection refused through the Service, endpoints present, pods healthy]
+  root_cause: the Service's targetPort was changed
+  fix: restore the targetPort

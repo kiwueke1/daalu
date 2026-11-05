@@ -1,0 +1,25 @@
+id: interface-shutdown
+title: Shut a switch port in the config (NVUE link state down)
+description: >-
+  An admin shutdown committed to the switch config, the way a port gets shut
+  by mistake during a change. The applied config is saved first and put back
+  on revert, so nothing else in the config moves.
+scope: fabric
+blast: interface
+nos: [cumulus]
+params:
+  device: {type: device}
+  interface: {type: iface}
+inject:
+  - device: nv config show -o yaml > /tmp/.nv-${fault_id}.yaml
+  - device: nv set interface ${interface} link state down && nv config apply -y
+revert:
+  - device: nv config replace /tmp/.nv-${fault_id}.yaml && nv config apply -y && rm -f /tmp/.nv-${fault_id}.yaml
+check:
+  device: ip -br link show ${interface}
+  match: "\\bUP\\b"
+expect:
+  symptoms: [link down on both ends, LLDP neighbour gone, topology map shows the link red]
+  root_cause: the port was administratively shut in the switch config
+  fix: set the link state back to up (an approved config change)
+  daalu_can_fix: false

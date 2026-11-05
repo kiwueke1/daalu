@@ -1,0 +1,60 @@
+# daalu fault inventory: the ONLY environments `daalu fault` will touch.
+#
+# Copy to ~/.daalu/faults/inventory.yaml, or let `daalu fault init` write the
+# entries for you (it discovers workloads, Services, nodes, devices and links):
+#
+#   daalu fault init cluster openstack-lab --kubeconfig ~/.kube/lab -n openstack -n kube-system
+#   daalu fault init clab spectrum-x --lab daalu-spectrum-x
+#
+# Guide: docs/fault-injection.md
+environments:
+
+  # An OpenStack-on-Kubernetes lab (openstack-helm). `server` is the safety pin:
+  # if this context ever resolves to a different API server, every command refuses.
+  openstack-lab:
+    kind: cluster
+    kubeconfig: ~/.kube/openstack-lab
+    context: default
+    server: https://127.0.0.1:6443
+    node_access: helper-pod        # or ssh (then fill ssh:); helper-pod needs no SSH
+    helper_image: alpine:3.21      # needs nsenter; point at your mirror if air-gapped
+    protect_namespaces: [daalu-edge, daalu-system]
+    targets:
+      keystone-api:        {kind: deployment,  name: keystone-api,        namespace: openstack, container: keystone-api}
+      nova-api-osapi:      {kind: deployment,  name: nova-api-osapi,      namespace: openstack, container: nova-osapi}
+      neutron-server:      {kind: deployment,  name: neutron-server,      namespace: openstack, container: neutron-server}
+      glance-api:          {kind: deployment,  name: glance-api,          namespace: openstack, container: glance-api}
+      memcached-memcached: {kind: deployment,  name: memcached-memcached, namespace: openstack}
+      mariadb-server:      {kind: statefulset, name: mariadb-server,      namespace: openstack, container: mariadb, pod_label: application, pod_value: mariadb}
+      rabbitmq-rabbitmq:   {kind: statefulset, name: rabbitmq-rabbitmq,   namespace: openstack}
+      nova-compute-default:      {kind: daemonset, name: nova-compute-default,      namespace: openstack}
+      neutron-ovs-agent-default: {kind: daemonset, name: neutron-ovs-agent-default, namespace: openstack}
+      coredns:             {kind: deployment,  name: coredns,             namespace: kube-system}
+      svc-keystone-api:    {service: keystone-api, namespace: openstack, port: "5000"}
+      node-lab01:          {node: lab01}
+
+  # A containerlab fabric on this host (docker exec into clab-<lab>-<node>).
+  spectrum-x:
+    kind: fabric
+    nos: cumulus
+    transport: containerlab
+    lab: daalu-spectrum-x
+    devices: [spine1, spine2, leaf1, leaf2, leaf3, leaf4, gpu1, gpu2]
+    targets:
+      leaf1-swp1: {device: leaf1, interface: swp1, peer_device: gpu1, peer_interface: eth1}
+      leaf1:      {device: leaf1}
+      spine1:     {device: spine1}
+
+  # Real switches over SSH (Cumulus here; any Linux-based NOS works for the
+  # ip/tc/vtysh faults). Commands run as `sudo -n sh -c …`.
+  dc1-fabric:
+    kind: fabric
+    nos: cumulus
+    transport: ssh
+    ssh:
+      user: cumulus
+      identity_file: ~/.ssh/lab_ed25519
+      hosts: {leaf1: 192.0.2.11, spine1: 192.0.2.1}
+    devices: [leaf1, spine1]
+    targets:
+      leaf1-swp51: {device: leaf1, interface: swp51, peer_device: spine1, peer_interface: swp1}

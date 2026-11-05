@@ -1,0 +1,12 @@
+id: jumbo-frames-broken
+title: One leaf port drops to MTU 1500 on a 9216 fabric
+fault: network/mtu-mismatch
+target: leaf1-swp1
+story: Pings pass, BGP stays up, RDMA and storage traffic stalls. A fault you only find by asking the
+  right question.
+episodes:
+- S2-10
+expect:
+  root_cause: MTU mismatch on leaf1 swp1
+  fix: set the MTU back
+  daalu_can_fix: false

@@ -1,0 +1,9 @@
+id: rogue-ssh-key
+title: A contractor's SSH key left on leaf1
+fault: network/rogue-ssh-key
+target: leaf1
+episodes:
+- S2-04
+expect:
+  root_cause: an unapproved key in authorized_keys
+  fix: approve the drift proposal that removes it

@@ -1,0 +1,19 @@
+id: sysctl-drift
+title: Change a kernel sysctl on a switch or server by hand (drift)
+scope: fabric
+blast: device
+nos: [linux]
+params:
+  device: {type: device}
+  key: {type: token, default: net.core.somaxconn}
+  value: {type: token, default: "128"}
+prepare:
+  - device: sysctl -n ${key}
+    capture: old_value
+inject:
+  - device: sysctl -w ${key}=${value}
+revert:
+  - device: sysctl -w ${key}=${old_value}
+expect:
+  root_cause: a sysctl was changed by hand
+  fix: the drift reconciler proposes the intended value; a human approves

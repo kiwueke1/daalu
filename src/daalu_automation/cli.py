@@ -32,6 +32,11 @@ app.add_typer(_eval_app, name="eval")
 from daalu_automation.core.aiops.runbooks_cli import app as _runbooks_app  # noqa: E402
 
 app.add_typer(_runbooks_app, name="runbooks")
+# Lab fault injection (docs/fault-injection.md). Local only: it runs with the
+# operator's own credentials and never calls the Daalu API.
+from daalu_automation.faults.cli import app as _fault_app  # noqa: E402
+
+app.add_typer(_fault_app, name="fault")
 
 
 @app.command(name="mcp")

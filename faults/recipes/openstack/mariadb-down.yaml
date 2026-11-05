@@ -1,0 +1,19 @@
+id: mariadb-down
+title: The OpenStack database is scaled to zero
+fault: kubernetes/scale-to-zero
+target: mariadb-server
+params:
+  kind: statefulset
+story: Every OpenStack API depends on MariaDB. Someone scales the StatefulSet to zero during a maintenance
+  window and forgets it. All APIs start returning 500s; nothing is crashing, so pod-level checks look
+  clean.
+episodes:
+- S1-02
+- S3-06
+expect:
+  symptoms:
+  - keystone/nova/neutron APIs return 500
+  - 'logs: Can''t connect to MySQL server'
+  - mariadb has 0 pods
+  root_cause: the mariadb-server StatefulSet was scaled to 0 replicas
+  fix: 'scale mariadb-server back to its replica count (rollback is wrong: the template didn''t change)'

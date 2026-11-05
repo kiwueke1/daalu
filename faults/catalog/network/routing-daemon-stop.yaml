@@ -1,0 +1,19 @@
+id: routing-daemon-stop
+title: Stop the routing daemon (every BGP session on the switch drops)
+scope: fabric
+blast: device
+nos: [cumulus, sonic, frr]
+params:
+  device: {type: device}
+inject:
+  - device: systemctl stop frr
+revert:
+  - device: systemctl start frr
+check:
+  device: systemctl is-active frr
+  match: "^active"
+expect:
+  symptoms: [all BGP sessions to the switch down, switch reachable on mgmt, traffic routed around it]
+  root_cause: FRR is stopped on the switch
+  fix: start FRR and find out why it stopped
+  daalu_can_fix: false
