@@ -23,7 +23,7 @@ and, page by page for operators, in the
 These are the AOMM equivalent of the DORA four keys. DORA measures delivery
 with two speed numbers and two stability numbers; AOMM measures AI operations
 with two speed numbers, two quality numbers, and one for autonomy.
-**TRACE** is their initials: **T**ime to triage, time to **R**esolve, **A**greement rate, **C**hange-failure rate, **E**scalation rate.
+**TRACE** is their initials: Time to **T**riage, time to **R**esolve, **A**greement rate, **C**hange-failure rate, **E**scalation rate.
 
 | Group | Metric | Question it answers | Better is | DORA counterpart |
 |---|---|---|---|---|

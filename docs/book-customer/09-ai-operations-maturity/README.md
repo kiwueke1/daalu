@@ -19,7 +19,7 @@ page it describes lives under the **AI Ops** section of the sidebar:
 
 DORA measures delivery with two speed numbers and two stability numbers.
 AOMM measures AI operations with two speed numbers, two quality numbers and
-one for autonomy. **TRACE** is their initials: **T**ime to triage, time to **R**esolve, **A**greement rate, **C**hange-failure rate, **E**scalation rate.
+one for autonomy. **TRACE** is their initials: Time to **T**riage, time to **R**esolve, **A**greement rate, **C**hange-failure rate, **E**scalation rate.
 
 | Group | Metric | Question it answers | Better is |
 |---|---|---|---|

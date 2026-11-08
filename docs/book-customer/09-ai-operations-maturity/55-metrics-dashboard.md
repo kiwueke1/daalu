@@ -5,7 +5,7 @@ time, change-failure rate and time to restore. AI operations need their own
 set. The AI-Ops Maturity Model leads with **five TRACE metrics**: two for speed
 (time to triage, time to resolve), two for quality (agreement rate,
 change-failure rate) and one for autonomy (escalation rate); the name is their
-initials (**T**ime to triage, time to **R**esolve, **A**greement, **C**hange failure,
+initials (Time to **T**riage, time to **R**esolve, **A**greement, **C**hange failure,
 **E**scalation). **Supporting
 metrics** explain them: how much of the alert load the AI sees, how much of
 its work you grade, how often you accept its fixes, and whether the learning

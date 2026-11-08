@@ -63,11 +63,11 @@ empty sets are `null`.
 DORA measures software delivery with two speed metrics (deployment frequency,
 lead time) and two stability metrics (change-failure rate, time to restore).
 AOMM measures AI operations the same way, and adds the one thing DORA has no
-need for: how much of the work still needs a human. **TRACE** is their initials: **T**ime to triage, time to **R**esolve, **A**greement rate, **C**hange-failure rate, **E**scalation rate.
+need for: how much of the work still needs a human. **TRACE** is their initials: Time to **T**riage, time to **R**esolve, **A**greement rate, **C**hange-failure rate, **E**scalation rate.
 
 | Group | TRACE metric (API field) | Question it answers | Better is | DORA counterpart |
 |---|---|---|---|---|
-| Speed | **T**ime to triage (`median_time_to_diagnosis_s`) | How long from an alert firing to the AI naming a root cause? | Lower | Lead time for changes |
+| Speed | Time to **T**riage (`median_time_to_diagnosis_s`) | How long from an alert firing to the AI naming a root cause? | Lower | Lead time for changes |
 | Speed | Time to **R**esolve (`median_time_to_resolve_s`) | How long from an alert firing to the incident being resolved? | Lower | Time to restore service |
 | Quality | **A**greement rate (`rca_agreement_rate`) | How often do humans agree with the AI's root cause? | Higher | — (is the AI right?) |
 | Quality | **C**hange-failure rate (`ai_change_failure_rate`) | Of the changes the AI made, how many failed verification? | Lower | Change-failure rate |

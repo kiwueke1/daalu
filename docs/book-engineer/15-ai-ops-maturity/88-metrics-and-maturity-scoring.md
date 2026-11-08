@@ -42,7 +42,7 @@ and the UI shows `—` for the second.
 
 | TRACE metric | API field | Group | Computation | DORA counterpart |
 |---|---|---|---|---|
-| **T**ime to triage | `median_time_to_diagnosis_s` | Speed | median of `diagnosed_at − alert.created_at` over diagnosed investigations | Lead time for changes |
+| Time to **T**riage | `median_time_to_diagnosis_s` | Speed | median of `diagnosed_at − alert.created_at` over diagnosed investigations | Lead time for changes |
 | Time to **R**esolve | `median_time_to_resolve_s` | Speed | median of `resolved_at − alert.created_at` over resolved investigations | Time to restore service |
 | **A**greement rate | `rca_agreement_rate` | Quality | `(correct + 0.5 · partial) / verdicts` | — |
 | **C**hange-failure rate | `ai_change_failure_rate` | Quality | `actions.failed_verification` / `actions.executed` | Change-failure rate |

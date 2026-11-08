@@ -26,11 +26,11 @@ chapter 88.
 
 ### The five TRACE metrics
 
-**TRACE** is their initials: **T**ime to triage, time to **R**esolve, **A**greement rate, **C**hange-failure rate, **E**scalation rate.
+**TRACE** is their initials: Time to **T**riage, time to **R**esolve, **A**greement rate, **C**hange-failure rate, **E**scalation rate.
 
 | Group | TRACE metric | Question it answers | Better is | API field | DORA counterpart |
 |---|---|---|---|---|---|
-| Speed | **T**ime to triage | How long from the alert firing to the AI naming a root cause? | Lower | `median_time_to_diagnosis_s` | Lead time for changes |
+| Speed | Time to **T**riage | How long from the alert firing to the AI naming a root cause? | Lower | `median_time_to_diagnosis_s` | Lead time for changes |
 | Speed | Time to **R**esolve | How long from the alert firing to the incident being resolved? | Lower | `median_time_to_resolve_s` | Time to restore service |
 | Quality | **A**greement rate | How often do humans agree with the AI's root cause (`partial` counts half)? | Higher | `rca_agreement_rate` | — (is the AI right?) |
 | Quality | **C**hange-failure rate | Of the AI writes that ran, how many failed verification? | Lower | `ai_change_failure_rate` | Change-failure rate |

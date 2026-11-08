@@ -18,12 +18,12 @@ those two and the code disagree, these chapters describe the code.
 ### The metrics
 
 Five TRACE metrics, computed by `core/aiops/metrics.py` (chapter 88).
-**TRACE** is their initials: **T**ime to triage, time to **R**esolve,
+**TRACE** is their initials: Time to **T**riage, time to **R**esolve,
 **A**greement rate, **C**hange-failure rate, **E**scalation rate.
 
 | Group | TRACE metric | Measures | API field | DORA counterpart |
 |---|---|---|---|---|
-| Speed | **T**ime to triage | Alert firing → AI names a root cause | `median_time_to_diagnosis_s` | Lead time for changes |
+| Speed | Time to **T**riage | Alert firing → AI names a root cause | `median_time_to_diagnosis_s` | Lead time for changes |
 | Speed | Time to **R**esolve | Alert firing → incident resolved | `median_time_to_resolve_s` | Time to restore service |
 | Quality | **A**greement rate | How often humans agree with the AI's root cause | `rca_agreement_rate` | — |
 | Quality | **C**hange-failure rate | Share of executed AI writes that failed verification | `ai_change_failure_rate` | Change-failure rate |

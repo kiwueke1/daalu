@@ -21,7 +21,7 @@ it starts with metrics. Daalu computes them from what actually happened in the
 last 30 days and places your team on one of six levels from them
 (**AI Ops → Maturity** in the UI).
 
-**Five TRACE metrics**, the AOMM counterpart of the DORA four keys. **TRACE** is their initials: **T**ime to triage, time to **R**esolve, **A**greement rate, **C**hange-failure rate, **E**scalation rate.
+**Five TRACE metrics**, the AOMM counterpart of the DORA four keys. **TRACE** is their initials: Time to **T**riage, time to **R**esolve, **A**greement rate, **C**hange-failure rate, **E**scalation rate.
 
 | Group | Metric | Question it answers | DORA counterpart |
 |---|---|---|---|

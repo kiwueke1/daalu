@@ -17,7 +17,7 @@ perform; the rest are supporting metrics that explain them (section 7, spec
 
 | Group | TRACE metric (API field) | DORA counterpart |
 |---|---|---|
-| Speed | **T**ime to triage (`median_time_to_diagnosis_s`) | Lead time for changes |
+| Speed | Time to **T**riage (`median_time_to_diagnosis_s`) | Lead time for changes |
 | Speed | Time to **R**esolve (`median_time_to_resolve_s`) | Time to restore service |
 | Quality | **A**greement rate (`rca_agreement_rate`) | — (is the AI right?) |
 | Quality | **C**hange-failure rate (`ai_change_failure_rate`) | Change-failure rate |
@@ -200,7 +200,7 @@ the level is derived from them.
 
 | TRACE metric | API field | Group | Definition |
 |---|---|---|---|
-| **T**ime to triage | `median_time_to_diagnosis_s` | Speed | `diagnosed_at − alert.created_at`, median |
+| Time to **T**riage | `median_time_to_diagnosis_s` | Speed | `diagnosed_at − alert.created_at`, median |
 | Time to **R**esolve | `median_time_to_resolve_s` | Speed | `resolved_at − alert.created_at`, median |
 | **A**greement rate | `rca_agreement_rate` | Quality | (`correct` + 0.5·`partial`) / verdicts |
 | **C**hange-failure rate | `ai_change_failure_rate` | Quality | Executed actions with `verified_resolved=false` / executed actions |
