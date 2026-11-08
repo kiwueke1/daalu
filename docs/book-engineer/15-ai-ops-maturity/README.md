@@ -17,18 +17,22 @@ those two and the code disagree, these chapters describe the code.
 
 ### The metrics
 
-Five key metrics, computed by `core/aiops/metrics.py` (chapter 88):
+Five TRACE metrics, computed by `core/aiops/metrics.py` (chapter 88).
+**TRACE** is their initials: **T**ime to triage, time to **R**esolve,
+**A**greement rate, **C**hange-failure rate, **E**scalation rate.
 
-| Group | Key metric | Measures | DORA counterpart |
-|---|---|---|---|
-| Speed | `median_time_to_diagnosis_s` | Alert firing → AI names a root cause | Lead time for changes |
-| Speed | `median_time_to_resolve_s` | Alert firing → incident resolved | Time to restore service |
-| Quality | `rca_agreement_rate` | How often humans agree with the AI's root cause | — |
-| Quality | `ai_change_failure_rate` | Share of executed AI writes that failed verification | Change failure rate |
-| Autonomy | `auto_resolution_rate` | Share of resolved incidents the AI fixed with no human | — |
+| Group | TRACE metric | Measures | API field | DORA counterpart |
+|---|---|---|---|---|
+| Speed | **T**ime to triage | Alert firing → AI names a root cause | `median_time_to_diagnosis_s` | Lead time for changes |
+| Speed | Time to **R**esolve | Alert firing → incident resolved | `median_time_to_resolve_s` | Time to restore service |
+| Quality | **A**greement rate | How often humans agree with the AI's root cause | `rca_agreement_rate` | — |
+| Quality | **C**hange-failure rate | Share of executed AI writes that failed verification | `ai_change_failure_rate` | Change-failure rate |
+| Autonomy | **E**scalation rate | Share of resolved incidents that still needed a human | `escalation_rate` | — |
+
+The API field names predate the TRACE names and are kept for compatibility.
 
 Supporting metrics explain them: `alerts_total` and `ai_triage_rate`
-(coverage), `verdict_coverage` (feedback, the sample behind RCA agreement),
+(coverage), `verdict_coverage` (feedback, the sample behind agreement rate),
 `proposal_approval_rate` (trust), runbook and eval counts (learning), and
 `audit_chain_ok` (integrity).
 
@@ -42,25 +46,25 @@ criteria table):
 | 0 | Ad hoc | Nothing: the starting point. |
 | 1 | Assisted | `alerts_total ≥ 5`, `ai_triage_rate ≥ 0.5` |
 | 2 | Proposing | ≥ 1 human-approved write executed, `proposal_approval_rate` known |
-| 3 | Trusted | `ai_change_failure_rate ≤ 0.15`, an `auto` rule saved, ≥ 1 automatic write executed |
+| 3 | Trusted | change-failure rate ≤ 0.15 (`ai_change_failure_rate`), an `auto` rule saved, ≥ 1 automatic write executed |
 | 4 | Learning | `verdict_coverage ≥ 0.3`, `runbooks_published ≥ 1`, `eval_runs ≥ 1` |
-| 5 | Autonomous | `auto_resolution_rate ≥ 0.5`, `rca_agreement_rate ≥ 0.8`, `audit_chain_ok`, guardrails saved |
+| 5 | Autonomous | escalation rate ≤ 0.5 (`escalation_rate`), agreement rate ≥ 0.8 (`rca_agreement_rate`), `audit_chain_ok`, guardrails saved |
 
-The two speed metrics gate no level, on purpose: they depend on each team's
+The two speed metrics (time to triage, time to resolve) gate no level, on purpose: they depend on each team's
 systems and alert mix. They are what climbing the levels should improve.
 
 ## Chapters
 
 | # | Chapter | What it covers |
 |---|---------|----------------|
-| 81 | [The maturity model](81-the-maturity-model.md) | The key and supporting metrics, how they map to the six levels, how the automatic level is computed, and a map of every Daalu feature (old and new) to the level it serves. |
+| 81 | [The maturity model](81-the-maturity-model.md) | The TRACE and supporting metrics, how they map to the six levels, how the automatic level is computed, and a map of every Daalu feature (old and new) to the level it serves. |
 | 82 | [Autonomy policy as code](82-autonomy-policy.md) | The policy schema, `decide()`, versioned storage, the API, and why the policy governs writes only. |
 | 83 | [Guardrails and automatic execution](83-guardrails-and-auto-execution.md) | `auto` / `auto_after_trust`, trust stats, kill switch, circuit breaker, freeze windows, hourly cap, multi-approver, and the background execute-then-verify path. |
 | 84 | [Investigations and verdicts](84-investigations-and-verdicts.md) | The per-alert investigation record, root-cause detection, outcome verification, `manual` resolution, verdicts, automatic investigation. |
 | 85 | [Runbooks as code](85-runbooks-as-code.md) | File format, matching, prompt injection, AI-drafted runbooks after a verified fix, the API and `daalu runbooks`. |
 | 86 | [Change context and previews](86-change-context-and-previews.md) | The `recent_changes` read tool and the blast-radius preview on every proposed write. |
 | 87 | [The audit log](87-audit-log.md) | The per-tenant hash chain, the advisory lock, event kinds, verification and its limits. |
-| 88 | [Metrics and maturity scoring](88-metrics-and-maturity-scoring.md) | The five key and the supporting metrics as computed, the automatic level derived from them, next steps, the self-assessment. |
+| 88 | [Metrics and maturity scoring](88-metrics-and-maturity-scoring.md) | The five TRACE and the supporting metrics as computed, the automatic level derived from them, next steps, the self-assessment. |
 | 89 | [The eval harness](89-eval-harness.md) | Scenario format, the runner, grading, the leaderboard, `daalu eval`. |
 | 90 | [The MCP server and open specs](90-mcp-server-and-open-specs.md) | MCP over HTTP and stdio, the tool surface, the external-agent rules, the laptop `daalu mcp`, and the `spec/` JSON Schemas. |
 
@@ -75,11 +79,11 @@ write back to the model, `approve` keeps the old behaviour (now with N
 distinct approvers), `auto` creates the action already approved and runs it
 through the same execute-then-verify path in the background. The outcome of
 each verification feeds back into the policy (trust stats, circuit breaker),
-into the per-alert **investigation** record (time to diagnosis, resolution,
+into the per-alert **investigation** record (time to triage, resolution,
 human verdict), and into **runbook** drafts. Everything is written to a
-per-tenant **hash-chained audit log**. **Metrics** over those records (five
-key ones: time to diagnosis, time to resolve, RCA agreement, AI change-failure
-rate, auto-resolution rate) say how well it is working, and thresholds on
+per-tenant **hash-chained audit log**. **Metrics** over those records (the five
+TRACE ones: time to triage, time to resolve, agreement rate, change-failure
+rate, escalation rate) say how well it is working, and thresholds on
 them compute the team's level. **Evals** benchmark the agent on scripted outages, and an
 **MCP server** opens the same tools and the same policy to external agents
 such as Claude Code and Cursor. With no saved policy, nothing changes: every

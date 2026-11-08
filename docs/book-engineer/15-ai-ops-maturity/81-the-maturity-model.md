@@ -19,28 +19,34 @@ The scoring code is `src/daalu_automation/core/aiops/maturity.py`.
 ## The metrics
 
 DORA measures delivery with two speed numbers (deployment frequency, lead
-time) and two stability numbers (change failure rate, time to restore). AOMM
+time) and two stability numbers (change-failure rate, time to restore). AOMM
 measures AI operations with two speed numbers, two quality numbers, and one
 for autonomy, which DORA has no need for. Exact computations are in
 chapter 88.
 
-### The five key metrics
+### The five TRACE metrics
 
-| Group | Metric | Question it answers | Better is | DORA counterpart |
-|---|---|---|---|---|
-| Speed | `median_time_to_diagnosis_s` | How long from the alert firing to the AI naming a root cause? | Lower | Lead time for changes |
-| Speed | `median_time_to_resolve_s` | How long from the alert firing to the incident being resolved? | Lower | Time to restore service |
-| Quality | `rca_agreement_rate` | How often do humans agree with the AI's root cause (`partial` counts half)? | Higher | — (is the AI right?) |
-| Quality | `ai_change_failure_rate` | Of the AI writes that ran, how many failed verification? | Lower | Change failure rate |
-| Autonomy | `auto_resolution_rate` | Of resolved incidents, how many did the AI fix with no human? | Higher | — (new to AI operations) |
+**TRACE** is their initials: **T**ime to triage, time to **R**esolve, **A**greement rate, **C**hange-failure rate, **E**scalation rate.
+
+| Group | TRACE metric | Question it answers | Better is | API field | DORA counterpart |
+|---|---|---|---|---|---|
+| Speed | **T**ime to triage | How long from the alert firing to the AI naming a root cause? | Lower | `median_time_to_diagnosis_s` | Lead time for changes |
+| Speed | Time to **R**esolve | How long from the alert firing to the incident being resolved? | Lower | `median_time_to_resolve_s` | Time to restore service |
+| Quality | **A**greement rate | How often do humans agree with the AI's root cause (`partial` counts half)? | Higher | `rca_agreement_rate` | — (is the AI right?) |
+| Quality | **C**hange-failure rate | Of the AI writes that ran, how many failed verification? | Lower | `ai_change_failure_rate` | Change-failure rate |
+| Autonomy | **E**scalation rate | Of resolved incidents, how many still needed a human? | Lower | `escalation_rate` | — (new to AI operations) |
+
+The API field names predate the TRACE names and are kept so existing
+clients keep working; the rest of this part uses the TRACE names in prose
+and the field names where it quotes code.
 
 They are read together, and that is the point of having five rather than
-one. A fast time to diagnosis with low RCA agreement is a fast wrong answer;
-a high auto-resolution rate with a high change-failure rate is unattended
+one. A fast time to triage with low agreement rate is a fast wrong answer;
+a low escalation rate with a high change-failure rate is unattended
 damage. A team is doing well when the two times fall while agreement stays
-high and change failures stay low, with auto-resolution rising on top. The
-Maturity page shows all five as headline tiles (as "Time to diagnosis",
-"RCA agreement", "AI change-failure rate", "Auto-resolution rate" and
+high and change failures stay low, with escalation rate falling on top. The
+Maturity page shows all five as headline tiles (as "Time to triage",
+"Agreement rate", "Change-failure rate", "Escalation rate" and
 "MTTR"), next to three supporting ones.
 
 ### Supporting metrics
@@ -48,13 +54,13 @@ Maturity page shows all five as headline tiles (as "Time to diagnosis",
 | Group | Metric | Why it matters |
 |---|---|---|
 | Coverage | `alerts_total`, `ai_triage_rate` | How much of the incident work the AI sees and investigates. |
-| Feedback | `verdict_coverage` | How much of the AI's work humans grade; the sample behind `rca_agreement_rate`. |
+| Feedback | `verdict_coverage` | How much of the AI's work humans grade; the sample behind agreement rate (`rca_agreement_rate`). |
 | Trust | `proposal_approval_rate` | How often humans accept the AI's proposed writes. |
 | Learning | `runbooks_published`, `runbooks_generated`, `eval_runs`, `eval_mean_score` | Whether each incident improves the next. |
 | Integrity | `audit_chain_ok` | Whether the record of what the AI did can be trusted. |
 
-Some supporting metrics are inputs to the key ones (no verdicts, no
-`rca_agreement_rate`); the rest count whether a practice is in use. Of them,
+Some supporting metrics are inputs to the TRACE ones (no verdicts, no
+agreement rate); the rest count whether a practice is in use. Of them,
 `ai_triage_rate`, `proposal_approval_rate` and `audit_chain_ok` are also
 tiles on the Maturity page.
 
@@ -110,7 +116,7 @@ criteria (`build_criteria`, `core/aiops/maturity.py:103`):
 | 4 | `verdict_coverage` | `verdict_coverage ≥ 0.3` |
 | 4 | `runbooks_published` | ≥ 1 published runbook |
 | 4 | `eval_runs` | ≥ 1 eval run started in the window |
-| 5 | `auto_resolution_rate` | `auto_resolution_rate ≥ 0.5` |
+| 5 | `escalation_rate` | `escalation_rate ≤ 0.5` |
 | 5 | `rca_agreement_rate` | `rca_agreement_rate ≥ 0.8` |
 | 5 | `audit_chain_ok` | the audit chain verifies |
 | 5 | `guardrails` | the saved policy has a `circuit_breaker` and a non-zero `max_auto_actions_per_hour` |
@@ -119,11 +125,11 @@ Read from the metric side:
 
 | Metric | Kind | Gates | Threshold |
 |---|---|---|---|
-| `median_time_to_diagnosis_s` | Key | — | none |
-| `median_time_to_resolve_s` | Key | — | none |
-| `ai_change_failure_rate` | Key | L3 | ≤ 0.15 |
-| `auto_resolution_rate` | Key | L5 | ≥ 0.5 |
-| `rca_agreement_rate` | Key | L5 | ≥ 0.8 |
+| Time to triage (`median_time_to_diagnosis_s`) | TRACE | — | none |
+| Time to resolve (`median_time_to_resolve_s`) | TRACE | — | none |
+| Change-failure rate (`ai_change_failure_rate`) | TRACE | L3 | ≤ 0.15 |
+| Escalation rate (`escalation_rate`) | TRACE | L5 | ≤ 0.5 |
+| Agreement rate (`rca_agreement_rate`) | TRACE | L5 | ≥ 0.8 |
 | `alerts_total` | Supporting | L1 | ≥ 5 |
 | `ai_triage_rate` | Supporting | L1 | ≥ 0.5 |
 | `proposal_approval_rate` | Supporting | L2 | not null |
@@ -137,7 +143,7 @@ The other four criteria are not metrics: `human_approved_executed` and
 (its `extras`), and `auto_rule` and `guardrails` are facts about the saved
 policy.
 
-**The speed metrics gate nothing, on purpose.** Time to diagnosis and time
+**The speed metrics gate nothing, on purpose.** Time to triage and time
 to resolve depend on a team's systems and alert mix: a fleet of stateless
 web services and a GPU cluster with slow-draining nodes should not share a
 threshold. They are the outcome climbing the levels is meant to improve, so
@@ -231,10 +237,10 @@ Levels 1 and 2 existed before the AOMM branch; Levels 3–5 are new.
 
 **Why metrics first, levels second.** DORA's lesson is that outcomes are
 what matter and that a ladder of practices, on its own, rewards box-ticking.
-So the five key metrics are the result AOMM asks a team to improve, and the
+So the five TRACE metrics are the result AOMM asks a team to improve, and the
 levels are a reading of those metrics plus the practices that produce them.
 A team that asks "what level are we?" gets a number; a team that asks "are
-we getting better?" looks at the key metrics over time.
+we getting better?" looks at the TRACE metrics over time.
 
 **Why levels at all, rather than a feature checklist.** A checklist
 rewards buying features. Levels describe a working relationship between

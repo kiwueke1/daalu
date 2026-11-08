@@ -25,7 +25,7 @@ import {
 /**
  * /maturity — where the team is on the AI-Ops Maturity Model (AOMM v0.1):
  * the automatic level computed from data, the ladder, the criteria behind
- * it, the key metrics, and the self-assessment for what data can't see.
+ * it, the TRACE metrics, and the self-assessment for what data can't see.
  */
 export default function MaturityPage() {
   const [days, setDays] = useState(30);
@@ -52,7 +52,7 @@ export default function MaturityPage() {
         }
       >
         How your team works with the AI SRE, measured from what actually
-        happened in the last {days} days: triage, approvals, auto-resolution,
+        happened in the last {days} days: triage, approvals, escalations,
         verdicts and runbooks.
       </PageHeader>
 
@@ -96,9 +96,9 @@ export default function MaturityPage() {
                 value={fmtRate(met.ai_triage_rate)}
                 hint={`${met.investigations_total} of ${met.alerts_total} alerts`}
               />
-              <StatTile label="Time to diagnosis" value={fmtDuration(met.median_time_to_diagnosis_s)} hint="median" />
+              <StatTile label="Time to triage" value={fmtDuration(met.median_time_to_diagnosis_s)} hint="median" />
               <StatTile
-                label="RCA agreement"
+                label="Agreement rate"
                 value={fmtRate(met.rca_agreement_rate)}
                 hint={`verdicts on ${fmtRate(met.verdict_coverage)} of investigations`}
               />
@@ -108,7 +108,7 @@ export default function MaturityPage() {
                 hint={`${met.actions.approved} approved · ${met.actions.rejected} rejected`}
               />
               <StatTile
-                label="AI change-failure rate"
+                label="Change-failure rate"
                 value={fmtRate(met.ai_change_failure_rate)}
                 hint={`${met.actions.failed_verification} of ${met.actions.executed} executed failed verification`}
                 tone={
@@ -118,9 +118,9 @@ export default function MaturityPage() {
                 }
               />
               <StatTile
-                label="Auto-resolution rate"
-                value={fmtRate(met.auto_resolution_rate)}
-                hint={`${met.resolutions.auto} auto-resolved`}
+                label="Escalation rate"
+                value={fmtRate(met.escalation_rate)}
+                hint={`${met.resolutions.approved + met.resolutions.manual} needed a human · ${met.resolutions.auto} auto-resolved`}
               />
               <StatTile label="MTTR" value={fmtDuration(met.median_time_to_resolve_s)} hint="median time to resolve" />
               <StatTile

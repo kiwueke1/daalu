@@ -32,7 +32,7 @@ be a mistake:
    platform being graded, the AI can learn the answer from it (a database row, an
    audit event, a "what changed" entry written by Daalu itself).
 3. **It would spoil the metrics.** Incidents that Daalu caused and Daalu then
-   resolved would inflate auto-resolution and time to resolve. That's the
+   resolved would flatter escalation rate and time to resolve. That's the
    opposite of what the AI Ops metrics are for.
 
 So `daalu fault` lives in the server CLI next to `daalu eval`. It runs on your

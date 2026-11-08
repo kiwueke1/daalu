@@ -12,7 +12,7 @@ from daalu_automation.core.aiops import maturity
 METRIC_KEYS = {
     "days", "alerts_total", "investigations_total", "ai_triage_rate",
     "median_time_to_diagnosis_s", "rca_agreement_rate", "verdict_coverage", "verdicts",
-    "proposal_approval_rate", "actions", "ai_change_failure_rate", "auto_resolution_rate",
+    "proposal_approval_rate", "actions", "ai_change_failure_rate", "escalation_rate", "auto_resolution_rate",
     "resolutions", "median_time_to_resolve_s", "runbooks_published", "runbooks_generated",
     "eval_runs", "eval_mean_score", "audit_chain_ok", "daily",
 }
@@ -120,6 +120,7 @@ async def test_metrics_and_levels(db, seeded):
     assert m["verdict_coverage"] == 0.75
     assert m["resolutions"] == {"auto": 1, "approved": 1, "manual": 1, "unresolved": 0, "open": 1}
     assert m["auto_resolution_rate"] == pytest.approx(1 / 3, abs=1e-4)
+    assert m["escalation_rate"] == pytest.approx(2 / 3, abs=1e-4)
     assert m["median_time_to_resolve_s"] == 300.0  # [120, 300, 600 (manual)]
     assert m["actions"] == {"proposed": 5, "approved": 2, "rejected": 1, "auto": 1,
                             "executed": 3, "failed_verification": 1}
@@ -166,7 +167,7 @@ async def test_metrics_and_levels(db, seeded):
     assert r["level"] == 4 and r["name"] == "Learning"
     crit = {c["id"]: c for c in r["criteria"]}
     assert crit["guardrails"]["met"] and crit["audit_chain_ok"]["met"]
-    assert not crit["auto_resolution_rate"]["met"] and not crit["rca_agreement_rate"]["met"]
+    assert not crit["escalation_rate"]["met"] and not crit["rca_agreement_rate"]["met"]
     assert r["next_steps"] and all(isinstance(s, str) for s in r["next_steps"])
 
 

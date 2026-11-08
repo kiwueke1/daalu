@@ -6,8 +6,8 @@ happened to each proposal, how the alert ended, and — once someone on your
 team has looked — whether the AI was right. That record is an
 **investigation**. Grading it is the single most useful thing you can do to
 move from Level 2 to Level 4: it's how "the AI is usually right" becomes a
-number instead of a feeling. That number is **RCA agreement**, one of the
-five key metrics (chapter 55).
+number instead of a feeling. That number is **agreement rate**, one of the
+five TRACE metrics (chapter 55).
 
 URL: `https://daalu.example.com/investigations` (sidebar: **AI Ops →
 Investigations**).
@@ -76,7 +76,7 @@ Opening a row slides in the detail drawer. You can also link straight to it:
 - The alert's severity, the resolution chip, and **fix verified** or **fix
   did not verify** when there's an outcome. **Open alert** jumps to the alert
   page.
-- **Alert fired**, **Time to diagnosis**, **Time to resolve**, and **Model**
+- **Alert fired**, **Time to triage**, **Time to resolve**, and **Model**
   (which model wrote the investigation).
 - **Root cause** — the AI's root-cause write-up, or "The AI hasn't named a
   root cause yet."
@@ -95,9 +95,9 @@ Press **Esc** or click outside to close it.
 
 The AI writes its findings with a **Root cause** section (the same text you
 see on the alert's **Root cause** tab). The first time it posts one, Daalu
-records the time — that's the diagnosis time — and keeps that text as the
+records the time — that's the triage time — and keeps that text as the
 investigation's root cause. Later messages don't overwrite it, so the
-time-to-diagnosis stays honest.
+time-to-triage stays honest.
 
 If the AI never writes a root cause, the investigation stays undiagnosed and
 there's nothing to grade.
@@ -127,7 +127,7 @@ Anyone on the team can give or change a verdict.
 
 ### How verdicts are counted
 
-- **RCA agreement** = (correct + half of partly right) ÷ all verdicts. Two
+- **Agreement rate** = (correct + half of partly right) ÷ all verdicts. Two
   correct and one partly right is 83%.
 - **Verdict coverage** = investigations with a verdict ÷ all investigations.
 
@@ -146,7 +146,7 @@ eval scenario (chapter 57) — that step isn't automatic.
 
 Every alert with an investigation shows an **Investigation record** panel
 under the **Root cause** tab: the resolution, **Fix verified** / **Fix did
-not verify**, time to diagnosis and resolve, the action counts, how many
+not verify**, time to triage and resolve, the action counts, how many
 runbooks were used, and the verdict buttons. **All investigations** opens the
 same record in the drawer here. Before the AI has named a root cause the
 panel says "You can grade the root cause once the AI has named one."
@@ -160,7 +160,7 @@ panel says "You can grade the root cause once the AI has named one."
    a verdict, add a note where it was wrong.
 3. Filter **Unresolved** and look at each failed fix — that's where policy
    rules should be narrowed (chapter 52).
-4. Check the **Maturity** page's RCA agreement and change-failure tiles.
+4. Check the **Maturity** page's agreement rate and change-failure tiles.
 
 ---
 

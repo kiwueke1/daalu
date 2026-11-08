@@ -58,7 +58,7 @@ are: a markdown heading of any level, a bold `**Root cause**`, or a
 answer format) or the end of the message, capped at 4000 characters.
 
 `diagnosed_at` is set once and never moved. A later, better diagnosis
-doesn't reset time-to-diagnosis; it is the time to the *first* stated root
+doesn't reset time-to-triage; it is the time to the *first* stated root
 cause, which is the number on-call actually experiences. The `model` is
 likewise the first model that answered.
 
@@ -161,7 +161,7 @@ should be reviewed and versioned with the rest of the policy.
   cause, verdict buttons and actions.
 * Alert page, Root cause tab: `AlertInvestigationPanel`
   (`frontend/components/aiops/investigation-panel.tsx`) with the resolution,
-  time to diagnosis/resolve, action counts, runbooks used, and the verdict
+  time to triage/resolve, action counts, runbooks used, and the verdict
   buttons (`frontend/components/aiops/verdict.tsx`).
 
 ---

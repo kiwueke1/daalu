@@ -3,7 +3,7 @@
 DevOps spread because it came with a handful of shared numbers (the DORA
 metrics) that told a team where it stood, and practices you could write down
 as code. The **AI-Ops Maturity Model (AOMM)** does the same for how an
-infrastructure team works with AI. It starts with **five key metrics** that
+infrastructure team works with AI. It starts with **five TRACE metrics** that
 Daalu measures for you from what actually happened, and uses thresholds on
 those metrics to place your team on **six levels**. Practices you keep as code
 (an autonomy policy, runbooks, eval scenarios) are how you move the numbers.
@@ -15,19 +15,19 @@ page it describes lives under the **AI Ops** section of the sidebar:
 
 ---
 
-## The five key metrics
+## The five TRACE metrics
 
 DORA measures delivery with two speed numbers and two stability numbers.
 AOMM measures AI operations with two speed numbers, two quality numbers and
-one for autonomy.
+one for autonomy. **TRACE** is their initials: **T**ime to triage, time to **R**esolve, **A**greement rate, **C**hange-failure rate, **E**scalation rate.
 
 | Group | Metric | Question it answers | Better is |
 |---|---|---|---|
-| Speed | **Time to diagnosis** | How long from the alert firing to the AI naming a root cause? | Lower |
+| Speed | **Time to triage** | How long from the alert firing to the AI naming a root cause? | Lower |
 | Speed | **Time to resolve** (MTTR) | How long from the alert firing to the incident being resolved? | Lower |
-| Quality | **RCA agreement** | How often does your team agree with the AI's root cause? | Higher |
-| Quality | **AI change-failure rate** | Of the AI fixes that ran, how many failed verification? | Lower |
-| Autonomy | **Auto-resolution rate** | Of resolved incidents, how many did the AI fix with no human? | Higher |
+| Quality | **Agreement rate** | How often does your team agree with the AI's root cause? | Higher |
+| Quality | **Change-failure rate** | Of the AI fixes that ran, how many failed verification? | Lower |
+| Autonomy | **Escalation rate** | Of resolved incidents, how many still needed a human? | Lower |
 
 Read them together: a fast diagnosis that is usually wrong doesn't help, and
 automatic fixes with a high failure rate are unattended damage. Supporting
@@ -43,12 +43,12 @@ audit chain) explain the key five. Chapter 55 covers every number.
 | 0 | Ad hoc | People paste logs into a chatbot. No shared context, no record. | — (the starting point) | — |
 | 1 | Assisted | The AI reads alerts, logs and metrics and explains them. Read-only. | Alerts in the window, AI triage rate | Automatic investigation of new alerts, read-only investigation tools, morning briefings |
 | 2 | Proposing | The AI names the root cause and proposes a fix; every change is approved by a human. | A human-approved fix ran; approval rate measured | Approve / reject cards on the alert, verification after every change |
-| 3 | Trusted | A policy lets low-risk, proven actions run on their own. | **AI change-failure rate**; an automatic rule and an automatic fix | The autonomy policy, trust thresholds, previews, multiple approvers |
+| 3 | Trusted | A policy lets low-risk, proven actions run on their own. | **Change-failure rate**; an automatic rule and an automatic fix | The autonomy policy, trust thresholds, previews, multiple approvers |
 | 4 | Learning | Every incident improves the next one. | Verdict coverage, published runbooks, eval runs | Investigations and verdicts, runbooks, evals, the metrics dashboard |
-| 5 | Autonomous | The AI resolves most routine incidents; humans own the policy and the exceptions. | **Auto-resolution rate**, **RCA agreement**, audit chain, guardrails | Guardrails (kill switch, circuit breaker, freeze windows, hourly cap), the audit log, MCP for any agent |
+| 5 | Autonomous | The AI resolves most routine incidents; humans own the policy and the exceptions. | **Escalation rate**, **agreement rate**, audit chain, guardrails | Guardrails (kill switch, circuit breaker, freeze windows, hourly cap), the audit log, MCP for any agent |
 
 Levels are cumulative: you are at the highest level whose criteria, and every
-lower level's criteria, are all met. Time to diagnosis and time to resolve
+lower level's criteria, are all met. Time to triage and time to resolve
 gate no level, on purpose: every team's systems and alert mix differ, so
 there's no fair single threshold. They are what climbing the levels should
 improve; compare them with your own history. Chapter 51 lists every
@@ -63,11 +63,11 @@ AOMM: every change the AI proposes waits for one human approval.
 
 | # | Chapter | What it covers |
 |---|---------|----------------|
-| 51 | [Where is your team?](51-where-is-your-team.md) | The key metrics, how their thresholds set your level, the **Maturity** page and the self-assessment. |
+| 51 | [Where is your team?](51-where-is-your-team.md) | The five TRACE metrics, how their thresholds set your level, the **Maturity** page and the self-assessment. |
 | 52 | [Setting your autonomy policy](52-setting-your-autonomy-policy.md) | Writing, testing and saving a policy; the three starter policies; the kill switch; what to do when the circuit breaker trips. |
 | 53 | [Investigations and verdicts](53-investigations-and-verdicts.md) | The **Investigations** page, what each resolution means, and grading the AI's root cause. |
 | 54 | [Runbooks](54-runbooks.md) | The runbook file format, how runbooks match alerts, publishing AI-drafted runbooks, importing a folder. |
-| 55 | [The metrics dashboard](55-metrics-dashboard.md) | Every metric in detail: the five key metrics, the supporting ones, what a healthy value is and which level each one gates. |
+| 55 | [The metrics dashboard](55-metrics-dashboard.md) | Every metric in detail: the five TRACE metrics, the supporting ones, what a healthy value is and which level each one gates. |
 | 56 | [The audit log](56-audit-log.md) | Reading, filtering and verifying the hash-chained log of everything the AI and your team did. |
 | 57 | [Running evals](57-running-evals.md) | Benchmarking your AI SRE on scripted outages, comparing models, reading the leaderboard. |
 | 58 | [Connect your agent with MCP](58-connect-your-agent-with-mcp.md) | Using Claude Code, Cursor or any MCP client against Daalu: `daalu login`, then `daalu mcp`. |

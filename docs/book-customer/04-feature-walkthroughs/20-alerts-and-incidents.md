@@ -102,7 +102,7 @@ and a **Re-triage** button to run a fresh pass.
 **Investigation record.** Under the **Root cause** tab, a panel shows the
 learning-loop record for this alert: a resolution chip ("Open",
 "Auto-resolved", "Resolved (approved fix)", "Resolved manually",
-"Unresolved"), **Fix verified** or **Fix did not verify**, time to diagnosis
+"Unresolved"), **Fix verified** or **Fix did not verify**, time to triage
 and time to resolve, the counts of fixes proposed / approved / rejected /
 auto, and how many runbooks the AI used. Once the AI has named a root cause
 you can grade it here — **Correct**, **Partly right** or **Wrong**, with an

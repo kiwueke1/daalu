@@ -1,9 +1,9 @@
 # 88. Metrics and maturity scoring
 
 DORA gave DevOps four numbers everyone could compute. AOMM's equivalent is
-five key metrics, computed in `core/aiops/metrics.py`: **time to diagnosis**
-and **time to resolve** (speed), **RCA agreement** and **AI change-failure
-rate** (quality), and **auto-resolution rate** (autonomy). Supporting metrics
+five TRACE metrics, computed in `core/aiops/metrics.py`: **time to triage**
+and **time to resolve** (speed), **agreement rate** and **change-failure
+rate** (quality), and **escalation rate** (autonomy). Supporting metrics
 around them say how much of the alert load the AI sees, how much of its work
 humans grade, how often its proposals are approved, and whether the learning
 and audit practices are in use. The maturity level (chapter 81) is a set of
@@ -38,15 +38,16 @@ and the UI shows `—` for the second.
 
 ## Definitions, as computed
 
-### Key metrics
+### TRACE metrics
 
-| Metric | Group | Computation | DORA counterpart |
-|---|---|---|---|
-| `median_time_to_diagnosis_s` | Speed | median of `diagnosed_at − alert.created_at` over diagnosed investigations | Lead time for changes |
-| `median_time_to_resolve_s` | Speed | median of `resolved_at − alert.created_at` over resolved investigations | Time to restore service |
-| `rca_agreement_rate` | Quality | `(correct + 0.5 · partial) / verdicts` | — |
-| `ai_change_failure_rate` | Quality | `actions.failed_verification` / `actions.executed` | Change failure rate |
-| `auto_resolution_rate` | Autonomy | `auto` / (`auto` + `approved` + `manual`) | — |
+| TRACE metric | API field | Group | Computation | DORA counterpart |
+|---|---|---|---|---|
+| **T**ime to triage | `median_time_to_diagnosis_s` | Speed | median of `diagnosed_at − alert.created_at` over diagnosed investigations | Lead time for changes |
+| Time to **R**esolve | `median_time_to_resolve_s` | Speed | median of `resolved_at − alert.created_at` over resolved investigations | Time to restore service |
+| **A**greement rate | `rca_agreement_rate` | Quality | `(correct + 0.5 · partial) / verdicts` | — |
+| **C**hange-failure rate | `ai_change_failure_rate` | Quality | `actions.failed_verification` / `actions.executed` | Change-failure rate |
+| **E**scalation rate | `escalation_rate` | Autonomy | (`approved` + `manual`) / (`auto` + `approved` + `manual`) | — |
+| (supporting) | `auto_resolution_rate` | Supporting | `auto` / (`auto` + `approved` + `manual`), i.e. `1 − escalation_rate` | — |
 
 ### Supporting metrics
 
@@ -76,25 +77,26 @@ and the UI shows `—` for the second.
 | `daily` | per UTC day, oldest first: `alerts`, `investigations` (by `started_at`), `auto_resolved`, `approved_resolved` (by resolution day) |
 
 Every metric is a top-level field of the response (only the counts
-`verdicts`, `actions` and `resolutions` are nested objects). The key /
+`verdicts`, `actions` and `resolutions` are nested objects). The TRACE /
 supporting split is how the spec (§3) and the docs group the fields, not a
 structure in the payload.
 
 Choices worth defending:
 
-* **Time to diagnosis is measured from the alert, not from the
+* **Time to triage is measured from the alert, not from the
   investigation start.** An AI that diagnoses in 30 s but only starts when
-  someone opens the alert two hours later has a two-hour time to diagnosis
+  someone opens the alert two hours later has a two-hour time to triage
   in any sense that matters to on-call. This is what makes
   `investigate_automatically` show up in the number.
-* **Change failure rate counts verification, not tool errors.** A write that
+* **Change-failure rate counts verification, not tool errors.** A write that
   ran cleanly and didn't fix anything is the failure that matters (the
   DORA "change failure" sense); a tool error also fails verification, so it
   is counted too.
-* **Auto-resolution rate's denominator includes manual resolutions.** The
-  question is "of everything that got resolved, how much did the AI fix
-  without a human", so alerts that cleared on their own or were fixed by
-  hand count against it.
+* **Escalation rate's numerator includes manual resolutions.** The
+  question is "of everything that got resolved, how much still needed a
+  human", so alerts that cleared on their own or were fixed by hand count
+  as escalations. It is exactly `1 − auto_resolution_rate`, which the API
+  still returns.
 * **The approval rate excludes automatic actions.** They were never put to
   a human; counting them as approvals would inflate the trust signal with
   the policy's own decisions.
@@ -118,10 +120,12 @@ Known inaccuracies:
 | 2 | `proposal_approval_rate` not null | ≥ 1 human-approved write executed |
 | 3 | `ai_change_failure_rate ≤ 0.15` | an `auto` / `auto_after_trust` rule saved; ≥ 1 automatic write executed |
 | 4 | `verdict_coverage ≥ 0.3`, `runbooks_published ≥ 1`, `eval_runs ≥ 1` | — |
-| 5 | `auto_resolution_rate ≥ 0.5`, `rca_agreement_rate ≥ 0.8`, `audit_chain_ok` | guardrails saved (circuit breaker + hourly cap) |
+| 5 | `escalation_rate ≤ 0.5`, `rca_agreement_rate ≥ 0.8`, `audit_chain_ok` | guardrails saved (circuit breaker + hourly cap) |
 
-Three of the five key metrics gate a level. `median_time_to_diagnosis_s`
-and `median_time_to_resolve_s` gate none (chapter 81 explains why); they are
+Three of the five TRACE metrics gate a level: change-failure rate (L3),
+escalation rate and agreement rate (L5). Time to triage
+(`median_time_to_diagnosis_s`) and time to resolve
+(`median_time_to_resolve_s`) gate none (chapter 81 explains why); they are
 returned in `metrics` and shown as tiles, and that is all.
 
 `maturity.compute` (`core/aiops/maturity.py:254`) returns:
@@ -159,7 +163,7 @@ They are v0.1 judgement calls, chosen so each level is reachable by a real
 team in weeks, not a benchmark: 50 % triage (half your alerts reach the AI),
 ≤ 15 % change failure (the upper bound of DORA's "high performer" band),
 30 % verdict coverage (a sample big enough to mean something without
-grading every alert), 80 % RCA agreement and 50 % auto-resolution for
+grading every alert), 80 % agreement rate and at most 50 % escalation rate for
 Level 5. They live in one function so that a v0.2 can change them in one
 place; the spec's versioning section (§7) lets pre-1.0 minor versions
 tighten them and says implementations should report the thresholds they

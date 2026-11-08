@@ -185,7 +185,7 @@ eyes. Use `approvers: 2` where you want two reviewers beyond the proposer.
 
 | File | Source |
 |---|---|
-| `spec/README.md` | AOMM v0.1: purpose, terms, metrics (five key, supporting, definitions), levels and how the metrics map to them, core practices, artefacts, versioning, conformance |
+| `spec/README.md` | AOMM v0.1: purpose, terms, metrics (five TRACE, supporting, definitions), levels and how the metrics map to them, core practices, artefacts, versioning, conformance |
 | `autonomy-policy.schema.json` | `policy.policy_json_schema()` (the validator's own model) |
 | `action-proposal.schema.json` | `specs.ActionProposal` (`core/aiops/specs.py:72`) |
 | `audit-event.schema.json` | `specs.AuditEvent` (`:102`), kind pattern built from `audit.KINDS` plus `x-` extensions |

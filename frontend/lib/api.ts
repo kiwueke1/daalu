@@ -1414,6 +1414,7 @@ export interface AiopsMetrics {
     failed_verification: number;
   };
   ai_change_failure_rate: Rate;
+  escalation_rate: Rate;
   auto_resolution_rate: Rate;
   resolutions: { auto: number; approved: number; manual: number; unresolved: number; open: number };
   median_time_to_resolve_s: number | null;

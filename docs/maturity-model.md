@@ -2,7 +2,7 @@
 
 DevOps gave teams four numbers (DORA) anyone could compute, and practices
 written as code. The AI-Ops Maturity Model does the same for how an
-infrastructure team works with AI. It starts with **five key metrics** that
+infrastructure team works with AI. It starts with **five TRACE metrics** that
 say how well the AI is doing, then uses thresholds on those metrics to place
 a team on **six levels**, so the level is measured, never claimed.
 
@@ -18,35 +18,36 @@ and, page by page for operators, in the
 
 ## The metrics
 
-### The five key metrics
+### The five TRACE metrics
 
 These are the AOMM equivalent of the DORA four keys. DORA measures delivery
 with two speed numbers and two stability numbers; AOMM measures AI operations
 with two speed numbers, two quality numbers, and one for autonomy.
+**TRACE** is their initials: **T**ime to triage, time to **R**esolve, **A**greement rate, **C**hange-failure rate, **E**scalation rate.
 
 | Group | Metric | Question it answers | Better is | DORA counterpart |
 |---|---|---|---|---|
-| Speed | Time to diagnosis | How long from the alert firing to the AI naming a root cause? | Lower | Lead time for changes |
+| Speed | Time to triage | How long from the alert firing to the AI naming a root cause? | Lower | Lead time for changes |
 | Speed | Time to resolve | How long from the alert firing to a verified fix (or resolution)? | Lower | Time to restore service |
-| Quality | RCA agreement | How often does the team agree with the AI's root cause (partly right counts half)? | Higher | — (is the AI right?) |
-| Quality | AI change-failure rate | Of the AI fixes that ran, how many didn't fix the problem? | Lower | Change failure rate |
-| Autonomy | Auto-resolution rate | Of resolved incidents, how many did the AI fix with no human? | Higher | — (new to AI operations) |
+| Quality | Agreement rate | How often does the team agree with the AI's root cause (partly right counts half)? | Higher | — (is the AI right?) |
+| Quality | Change-failure rate | Of the AI fixes that ran, how many didn't fix the problem? | Lower | Change-failure rate |
+| Autonomy | Escalation rate | Of resolved incidents, how many still needed a human? | Lower | — (new to AI operations) |
 
 Read them together. A fast diagnosis that is usually wrong is worse than a
-slow one that is right, and auto-resolution with a high change-failure rate is
+slow one that is right, and a low escalation rate with a high change-failure rate is
 unattended damage. A healthy team sees the two times fall while agreement
-stays high and change failures stay low, with auto-resolution rising on top.
+stays high and change failures stay low, with escalation rate falling on top.
 
 ### Supporting metrics
 
-These explain the key metrics and show whether the practices behind them are
+These explain the TRACE metrics and show whether the practices behind them are
 in place.
 
 | Metric | Question it answers | Healthy direction |
 |---|---|---|
 | Alerts in the window | Is real alert traffic reaching the AI? | Enough to measure: ≥ 5 |
 | AI triage rate | What share of alerts does the AI investigate? | Up |
-| Verdict coverage | What share of investigations has a human verdict? (The sample behind RCA agreement.) | Up |
+| Verdict coverage | What share of investigations has a human verdict? (The sample behind agreement rate.) | Up |
 | Approval rate | Of the fixes put to a human, how many were approved? | Up, but not 100 %: a team that never rejects isn't reading |
 | Runbooks published / drafted | Is knowledge being kept as code? | Up |
 | Eval runs and mean score | Is the AI benchmarked before models change? | Regular runs; score up |
@@ -87,13 +88,13 @@ about what ran and what the saved policy allows:
 |---|---|
 | 1 | Alerts in the window ≥ 5, and AI triage rate ≥ 50 %. |
 | 2 | At least one human-approved fix ran, and the approval rate is measured (at least one proposal approved or rejected). |
-| 3 | AI change-failure rate ≤ 15 %; your saved autonomy policy has at least one `auto` or `auto_after_trust` rule, and at least one automatic fix ran. |
+| 3 | Change-failure rate ≤ 15 %; your saved autonomy policy has at least one `auto` or `auto_after_trust` rule, and at least one automatic fix ran. |
 | 4 | Verdict coverage ≥ 30 %, at least one runbook published, and at least one eval run in the window. |
-| 5 | Auto-resolution rate ≥ 50 %, RCA agreement ≥ 80 %, the audit chain verifies, and the saved policy has a circuit breaker and an hourly cap on automatic actions. |
+| 5 | Escalation rate ≤ 50 %, agreement rate ≥ 80 %, the audit chain verifies, and the saved policy has a circuit breaker and an hourly cap on automatic actions. |
 
-Read from the metric side, three of the five key metrics gate a level:
-**AI change-failure rate** gates Level 3, and **auto-resolution rate** and
-**RCA agreement** gate Level 5. **Time to diagnosis** and **time to resolve**
+Read from the metric side, three of the five TRACE metrics gate a level:
+**Change-failure rate** gates Level 3, and **escalation rate** and
+**Agreement rate** gate Level 5. **Time to triage** and **time to resolve**
 gate nothing, on purpose: every team's systems and alert mix differ, so
 there is no fair single threshold. They are what climbing the levels is meant
 to improve; compare them against your own history.
@@ -166,7 +167,7 @@ and alerts flowing in.
 * Watch **Autonomy policy → Trust by rule** as rules earn automatic
   execution. Make sure everyone on call knows the **Pause all automation**
   kill switch; anyone can press it.
-* Keep the AI change-failure rate under 15 %. When the circuit breaker
+* Keep the change-failure rate under 15 %. When the circuit breaker
   trips, read the failed fix, narrow the rule, then reset it.
 * Re-run evals before any model change and compare labels on the
   leaderboard.

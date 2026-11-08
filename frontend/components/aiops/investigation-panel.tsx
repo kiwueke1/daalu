@@ -24,7 +24,7 @@ export const RESOLUTION_LABEL: Record<string, string> = {
 };
 
 /**
- * The learning-loop record for one alert: time to diagnosis, outcome, and
+ * The learning-loop record for one alert: time to triage, outcome, and
  * the verdict buttons. 404 = no investigation yet (the AI hasn't started).
  */
 export function AlertInvestigationPanel({ alertId }: { alertId: string }) {
@@ -81,7 +81,7 @@ export function AlertInvestigationPanel({ alertId }: { alertId: string }) {
       </div>
       <div className="flex flex-wrap gap-x-6 gap-y-1 text-[12px]">
         <span>
-          <span className="text-muted">Time to diagnosis </span>
+          <span className="text-muted">Time to triage </span>
           <span className="font-semibold tabular-nums">
             {diagnosed ? fmtDuration(inv.time_to_diagnosis_s) : "not diagnosed yet"}
           </span>

@@ -216,7 +216,9 @@ async def collect(db: AsyncSession, tenant_id: uuid.UUID, days: int = 30) -> tup
             "failed_verification": failed_verification,
         },
         "ai_change_failure_rate": _rate(failed_verification, len(executed)),
-        "auto_resolution_rate": _rate(resolutions["auto"], n_resolved),
+        # TRACE "E": resolved incidents that still needed a human (approved or manual).
+        "escalation_rate": _rate(n_resolved - resolutions["auto"], n_resolved),
+        "auto_resolution_rate": _rate(resolutions["auto"], n_resolved),  # = 1 - escalation_rate
         "resolutions": resolutions,
         "median_time_to_resolve_s": _median(ttr),
         "runbooks_published": runbooks_published,

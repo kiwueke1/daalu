@@ -1,10 +1,12 @@
 # 55. The metrics dashboard
 
 DevOps teams measure delivery with four numbers: deployment frequency, lead
-time, change failure rate and time to restore. AI operations need their own
-set. The AI-Ops Maturity Model leads with **five key metrics**: two for speed
-(time to diagnosis, time to resolve), two for quality (RCA agreement, AI
-change-failure rate) and one for autonomy (auto-resolution rate). **Supporting
+time, change-failure rate and time to restore. AI operations need their own
+set. The AI-Ops Maturity Model leads with **five TRACE metrics**: two for speed
+(time to triage, time to resolve), two for quality (agreement rate,
+change-failure rate) and one for autonomy (escalation rate); the name is their
+initials (**T**ime to triage, time to **R**esolve, **A**greement, **C**hange failure,
+**E**scalation). **Supporting
 metrics** explain them: how much of the alert load the AI sees, how much of
 its work you grade, how often you accept its fixes, and whether the learning
 practices and the audit record are in place. Daalu computes all of them from
@@ -34,18 +36,18 @@ approval rate before anyone has approved or rejected anything. "—" means
 
 ---
 
-## The five key metrics
+## The five TRACE metrics
 
 Read them together. A fast diagnosis that is usually wrong doesn't help, and
 automatic fixes with a high failure rate are unattended damage. A healthy
-team sees the two times fall while RCA agreement stays high and the
-change-failure rate stays low, with auto-resolution rising on top.
+team sees the two times fall while agreement rate stays high and the
+change-failure rate stays low, with escalation rate falling on top.
 
-### Time to diagnosis
+### Time to triage
 
 **What:** the median time from an alert firing to the AI posting its root
 cause. Undiagnosed alerts aren't included.
-**Tile:** **Time to diagnosis** (median).
+**Tile:** **Time to triage** (median).
 **Read it:** seconds to a few minutes is normal with automatic investigation.
 Long times usually mean the alert sat unopened before anyone triggered the
 AI.
@@ -61,35 +63,36 @@ because it cleared).
 as more fixes are proposed, approved and, later, run automatically.
 **Gates:** no level. It is tracked, not thresholded (see below).
 
-### RCA agreement
+### Agreement rate
 
 **What:** how often your team agreed with the AI's root cause: (correct + half
 of partly right) ÷ all verdicts.
-**Tile:** **RCA agreement**, with verdict coverage underneath.
+**Tile:** **Agreement rate**, with verdict coverage underneath.
 **Healthy:** Level 5 needs 80% or more. It only means something once you have
 a reasonable number of verdicts — see verdict coverage below.
 
-### AI change-failure rate
+### Change-failure rate
 
 **What:** of the fixes that ran (automatic or approved), the share that
 failed verification — the workload didn't come back.
-**Tile:** **AI change-failure rate**, with "*n* of *m* executed failed
+**Tile:** **Change-failure rate**, with "*n* of *m* executed failed
 verification". It turns red above 15%.
 **Healthy:** Level 3 needs 15% or less. This is the number to watch when you
 widen automatic rules.
 
-### Auto-resolution rate
+### Escalation rate
 
 **What:** of the investigations that ended resolved (automatically, by an
-approved fix, or manually), the share resolved automatically.
-**Tile:** **Auto-resolution rate**, with the auto-resolved count.
-**Healthy:** Level 5 needs 50% or more.
+approved fix, or manually), the share that needed a human: approved or
+resolved manually. It's the inverse of the share resolved automatically.
+**Tile:** **Escalation rate**, with the auto-resolved count.
+**Healthy:** Level 5 needs 50% or less.
 
 ---
 
 ## Supporting metrics
 
-These explain the key metrics and show whether the practices behind them are
+These explain the TRACE metrics and show whether the practices behind them are
 in place.
 
 ### AI triage rate
@@ -104,7 +107,7 @@ is off.
 ### Verdict coverage
 
 **What:** investigations with a verdict ÷ all investigations.
-**Shown:** under the RCA agreement tile and in the criteria table.
+**Shown:** under the agreement rate tile and in the criteria table.
 **Healthy:** Level 4 needs 30% or more.
 
 ### Approval rate
@@ -146,11 +149,11 @@ From the metric side:
 
 | Metric | Kind | Gates | Threshold |
 |---|---|---|---|
-| Time to diagnosis | Key | — | Tracked at every level |
+| Time to triage | Key | — | Tracked at every level |
 | Time to resolve (MTTR) | Key | — | Tracked at every level |
-| AI change-failure rate | Key | Level 3 | 15% or less |
-| Auto-resolution rate | Key | Level 5 | 50% or more |
-| RCA agreement | Key | Level 5 | 80% or more |
+| Change-failure rate | Key | Level 3 | 15% or less |
+| Escalation rate | Key | Level 5 | 50% or less |
+| Agreement rate | Key | Level 5 | 80% or more |
 | Alerts in the window | Supporting | Level 1 | 5 or more |
 | AI triage rate | Supporting | Level 1 | 50% or more |
 | Approval rate | Supporting | Level 2 | Known (at least one decision) |
@@ -211,7 +214,7 @@ rejected in the window.
 
 **An alert cleared by itself — does that count against the AI?** It counts as
 "Resolved manually". It doesn't affect the change-failure rate, but it does
-pull the auto-resolution rate down because it's a resolution the AI didn't
+push the escalation rate up because it's a resolution the AI didn't
 make.
 
 ---

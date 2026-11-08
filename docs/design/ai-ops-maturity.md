@@ -11,17 +11,17 @@ DevOps spread because it came with shared metrics (DORA), a picture of what
 good looks like, and practices expressed as code. AOMM is the same thing for
 how infrastructure teams work with AI, and it leads with the numbers.
 
-**Metrics first.** Five key metrics say how well a team's AI operations
+**Metrics first.** Five TRACE metrics (time to **T**riage, time to **R**esolve, **A**greement rate, **C**hange-failure rate, **E**scalation rate) say how well a team's AI operations
 perform; the rest are supporting metrics that explain them (section 7, spec
 §3):
 
-| Group | Key metric | DORA counterpart |
+| Group | TRACE metric (API field) | DORA counterpart |
 |---|---|---|
-| Speed | `median_time_to_diagnosis_s` | Lead time for changes |
-| Speed | `median_time_to_resolve_s` | Time to restore service |
-| Quality | `rca_agreement_rate` | — (is the AI right?) |
-| Quality | `ai_change_failure_rate` | Change failure rate |
-| Autonomy | `auto_resolution_rate` | — (new to AI operations) |
+| Speed | **T**ime to triage (`median_time_to_diagnosis_s`) | Lead time for changes |
+| Speed | Time to **R**esolve (`median_time_to_resolve_s`) | Time to restore service |
+| Quality | **A**greement rate (`rca_agreement_rate`) | — (is the AI right?) |
+| Quality | **C**hange-failure rate (`ai_change_failure_rate`) | Change-failure rate |
+| Autonomy | **E**scalation rate (`escalation_rate`) | — (new to AI operations) |
 
 Supporting: `alerts_total`, `ai_triage_rate` (coverage), `verdict_coverage`
 (feedback), `proposal_approval_rate` (trust), `runbooks_published`,
@@ -40,9 +40,9 @@ Supporting: `alerts_total`, `ai_triage_rate` (coverage), `verdict_coverage`
 | 5 | Autonomous | AI resolves most routine incidents; humans own policy and exceptions. | Auto-execution with guardrails (kill switch, circuit breaker, freeze windows, rate limit), audit chain, exception queue, MCP for any agent |
 
 The level a team is *at* is the highest level whose criteria are all met
-(section 7). Levels are cumulative. Three key metrics gate a level
-(`ai_change_failure_rate` → L3; `auto_resolution_rate`, `rca_agreement_rate`
-→ L5); the two speed metrics gate none, on purpose, and are tracked against
+(section 7). Levels are cumulative. Three TRACE metrics gate a level
+(change-failure rate `ai_change_failure_rate` → L3; escalation rate
+`escalation_rate` and agreement rate `rca_agreement_rate` → L5); the two speed metrics gate none, on purpose, and are tracked against
 the team's own history.
 
 ## 2. Data model (`src/daalu_automation/models/aiops.py`, migration `0034_aiops_maturity`)
@@ -196,15 +196,15 @@ allowed_actions: [rollout_undo, restart_deployment]
 `GET /aiops/metrics?days=30` returns the metrics below. They come first;
 the level is derived from them.
 
-**Key metrics** (spec §3.1), reported together for the same window:
+**TRACE metrics** (spec §3.1), reported together for the same window:
 
-| Metric | Group | Definition |
-|---|---|---|
-| `median_time_to_diagnosis_s` | Speed | `diagnosed_at − alert.created_at`, median |
-| `median_time_to_resolve_s` | Speed | `resolved_at − alert.created_at`, median |
-| `rca_agreement_rate` | Quality | (`correct` + 0.5·`partial`) / verdicts |
-| `ai_change_failure_rate` | Quality | Executed actions with `verified_resolved=false` / executed actions |
-| `auto_resolution_rate` | Autonomy | Investigations resolved `auto` / resolved investigations |
+| TRACE metric | API field | Group | Definition |
+|---|---|---|---|
+| **T**ime to triage | `median_time_to_diagnosis_s` | Speed | `diagnosed_at − alert.created_at`, median |
+| Time to **R**esolve | `median_time_to_resolve_s` | Speed | `resolved_at − alert.created_at`, median |
+| **A**greement rate | `rca_agreement_rate` | Quality | (`correct` + 0.5·`partial`) / verdicts |
+| **C**hange-failure rate | `ai_change_failure_rate` | Quality | Executed actions with `verified_resolved=false` / executed actions |
+| **E**scalation rate | `escalation_rate` | Autonomy | Investigations resolved `approved` or `manual` / resolved investigations (`1 − auto_resolution_rate`) |
 
 **Supporting metrics** (spec §3.2):
 
@@ -225,9 +225,10 @@ level below:
 * **L2**: ≥ 1 human-approved action executed and `proposal_approval_rate` known.
 * **L3**: `ai_change_failure_rate ≤ 0.15`, active policy with at least one `auto`/`auto_after_trust` rule, ≥ 1 auto action executed.
 * **L4**: `verdict_coverage ≥ 0.3`, `runbooks_published ≥ 1`, `eval_runs ≥ 1` in the window.
-* **L5**: `auto_resolution_rate ≥ 0.5`, `rca_agreement_rate ≥ 0.8`, `audit_chain_ok`, guardrails configured (circuit breaker + rate limit).
+* **L5**: `escalation_rate ≤ 0.5`, `rca_agreement_rate ≥ 0.8`, `audit_chain_ok`, guardrails configured (circuit breaker + rate limit).
 
-`median_time_to_diagnosis_s` and `median_time_to_resolve_s` gate no level:
+Time to triage (`median_time_to_diagnosis_s`) and time to resolve
+(`median_time_to_resolve_s`) gate no level:
 they depend on each team's systems and alert mix, so no single threshold is
 fair. They are the outcome the levels are meant to improve.
 
@@ -328,7 +329,7 @@ Rates are floats in 0..1, or `null` when the denominator is 0.
   `{title, body, match, allowed_actions, slug?, status?}` or `{markdown}` (a whole
   runbook file with frontmatter); `POST /{id}/publish`; `DELETE /{id}`;
   `GET /aiops/runbooks/match?alert_id=` → `RunbookOut[]`.
-* `GET /aiops/metrics?days=30` → `{days, alerts_total, investigations_total, ai_triage_rate, median_time_to_diagnosis_s, rca_agreement_rate, verdict_coverage, verdicts: {correct, partial, wrong}, proposal_approval_rate, actions: {proposed, approved, rejected, auto, executed, failed_verification}, ai_change_failure_rate, auto_resolution_rate, resolutions: {auto, approved, manual, unresolved, open}, median_time_to_resolve_s, runbooks_published, runbooks_generated, eval_runs, eval_mean_score, audit_chain_ok, daily: [{date, alerts, investigations, auto_resolved, approved_resolved}]}`.
+* `GET /aiops/metrics?days=30` → `{days, alerts_total, investigations_total, ai_triage_rate, median_time_to_diagnosis_s, rca_agreement_rate, verdict_coverage, verdicts: {correct, partial, wrong}, proposal_approval_rate, actions: {proposed, approved, rejected, auto, executed, failed_verification}, ai_change_failure_rate, escalation_rate, auto_resolution_rate, resolutions: {auto, approved, manual, unresolved, open}, median_time_to_resolve_s, runbooks_published, runbooks_generated, eval_runs, eval_mean_score, audit_chain_ok, daily: [{date, alerts, investigations, auto_resolved, approved_resolved}]}`.
 * `GET /aiops/maturity?days=30` → `{level, name, levels: [{level, name, description, met}], criteria: [{level, id, label, met, value, target}], next_steps: [str], metrics: {…as above}, assessment: {level, answers, created_at, created_by} | null, questions: [{id, level, text}]}`.
   `POST /aiops/maturity/assessment` `{answers: {question_id: bool}}` → the assessment.
 * `GET /aiops/evals/scenarios` → `[{id, title, description, namespace, alert, expect}]`;

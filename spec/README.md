@@ -15,7 +15,7 @@ the fact.
 AOMM is a vendor-neutral model of how infrastructure teams work with AI. It
 starts from numbers, the way DORA does:
 
-* **Metrics** (section 3): five key metrics that say how well a team's AI
+* **Metrics** (section 3): five TRACE metrics that say how well a team's AI
   operations perform, plus supporting metrics that explain them. Every one
   has an exact definition, so any implementation computes the same value.
 * **Levels** (section 4): where a team is and what the next step is. Each
@@ -58,35 +58,35 @@ All metrics are computed over a window of `days` days (default 30) ending now.
 Rates are numbers in `[0, 1]`, or `null` when the denominator is 0. Medians of
 empty sets are `null`.
 
-### 3.1 The five key metrics
+### 3.1 The five TRACE metrics
 
 DORA measures software delivery with two speed metrics (deployment frequency,
-lead time) and two stability metrics (change failure rate, time to restore).
+lead time) and two stability metrics (change-failure rate, time to restore).
 AOMM measures AI operations the same way, and adds the one thing DORA has no
-need for: how much of the work runs without a human.
+need for: how much of the work still needs a human. **TRACE** is their initials: **T**ime to triage, time to **R**esolve, **A**greement rate, **C**hange-failure rate, **E**scalation rate.
 
-| Group | Key metric | Question it answers | Better is | DORA counterpart |
+| Group | TRACE metric (API field) | Question it answers | Better is | DORA counterpart |
 |---|---|---|---|---|
-| Speed | `median_time_to_diagnosis_s` | How long from an alert firing to the AI naming a root cause? | Lower | Lead time for changes |
-| Speed | `median_time_to_resolve_s` | How long from an alert firing to the incident being resolved? | Lower | Time to restore service |
-| Quality | `rca_agreement_rate` | How often do humans agree with the AI's root cause? | Higher | — (is the AI right?) |
-| Quality | `ai_change_failure_rate` | Of the changes the AI made, how many failed verification? | Lower | Change failure rate |
-| Autonomy | `auto_resolution_rate` | Of resolved incidents, how many did the AI fix with no human? | Higher | — (new to AI operations) |
+| Speed | **T**ime to triage (`median_time_to_diagnosis_s`) | How long from an alert firing to the AI naming a root cause? | Lower | Lead time for changes |
+| Speed | Time to **R**esolve (`median_time_to_resolve_s`) | How long from an alert firing to the incident being resolved? | Lower | Time to restore service |
+| Quality | **A**greement rate (`rca_agreement_rate`) | How often do humans agree with the AI's root cause? | Higher | — (is the AI right?) |
+| Quality | **C**hange-failure rate (`ai_change_failure_rate`) | Of the changes the AI made, how many failed verification? | Lower | Change-failure rate |
+| Autonomy | **E**scalation rate (`escalation_rate`) | Of resolved incidents, how many still needed a human? | Lower | — (new to AI operations) |
 
-Read the key metrics together. Speed with poor quality is a fast wrong answer.
-Autonomy with a high change failure rate is unattended damage. A team is doing
-well when time to diagnosis and time to resolve fall while root-cause
-agreement stays high and the change failure rate stays low, and
-auto-resolution rises on top of that.
+Read the TRACE metrics together. Speed with poor quality is a fast wrong answer.
+Autonomy with a high change-failure rate is unattended damage. A team is doing
+well when time to triage and time to resolve fall while agreement rate
+stays high and the change-failure rate stays low, and
+escalation rate falls on top of that.
 
-Implementations claiming AOMM conformance MUST report the five key metrics
+Implementations claiming AOMM conformance MUST report the five TRACE metrics
 together, for the same window.
 
 ### 3.2 Supporting metrics
 
-Supporting metrics explain the key metrics and show whether the practices
-behind them are in place. Some are inputs to the key metrics (no verdicts
-means no `rca_agreement_rate`); others count adoption of a practice.
+Supporting metrics explain the TRACE metrics and show whether the practices
+behind them are in place. Some are inputs to the TRACE metrics (no verdicts
+means no agreement rate, `rca_agreement_rate`); others count adoption of a practice.
 
 | Group | Metric | Why it matters |
 |---|---|---|
@@ -104,7 +104,8 @@ means no `rca_agreement_rate`); others count adoption of a practice.
 | `median_time_to_resolve_s` | Key | Median of `resolved_at − alert.created_at` (seconds) over resolved investigations. |
 | `rca_agreement_rate` | Key | (`correct` + 0.5 × `partial`) ÷ investigations with a verdict. |
 | `ai_change_failure_rate` | Key | Executed write actions with `verified_resolved = false` ÷ executed write actions. |
-| `auto_resolution_rate` | Key | Investigations resolved `auto` ÷ resolved investigations (`auto`, `approved`, `manual`). |
+| `escalation_rate` | Key | Investigations resolved `approved` or `manual` ÷ resolved investigations (`auto`, `approved`, `manual`): the share that needed a human. |
+| `auto_resolution_rate` | Supporting | Investigations resolved `auto` ÷ resolved investigations; `1 − escalation_rate`, kept for compatibility. |
 | `alerts_total` | Supporting | Alerts created in the window. |
 | `ai_triage_rate` | Supporting | Alerts in the window that have an investigation ÷ `alerts_total`. |
 | `verdict_coverage` | Supporting | Investigations with a verdict ÷ investigations. |
@@ -151,7 +152,7 @@ exceptions" at level 5), the self-assessment in section 4.3 covers it.
 | L2 · Proposing | At least one human-approved write action executed, and `proposal_approval_rate` is defined (at least one human decision recorded). |
 | L3 · Trusted | An active autonomy policy with at least one rule (or the default mode) set to `auto` or `auto_after_trust`; at least one automatic action executed; `ai_change_failure_rate ≤ 0.15`. |
 | L4 · Learning | `verdict_coverage ≥ 0.3`; `runbooks_published ≥ 1`; `eval_runs ≥ 1`. |
-| L5 · Autonomous | `auto_resolution_rate ≥ 0.5`; `rca_agreement_rate ≥ 0.8`; `audit_chain_ok` is true; guardrails configured (a circuit breaker and an hourly rate limit on automatic actions). |
+| L5 · Autonomous | `escalation_rate ≤ 0.5`; `rca_agreement_rate ≥ 0.8`; `audit_chain_ok` is true; guardrails configured (a circuit breaker and an hourly rate limit on automatic actions). |
 
 The same mapping, read from the metric side:
 
@@ -160,7 +161,7 @@ The same mapping, read from the metric side:
 | `median_time_to_diagnosis_s` | Key | — | Tracked at every level; no threshold |
 | `median_time_to_resolve_s` | Key | — | Tracked at every level; no threshold |
 | `ai_change_failure_rate` | Key | L3 | ≤ 0.15 |
-| `auto_resolution_rate` | Key | L5 | ≥ 0.5 |
+| `escalation_rate` | Key | L5 | ≤ 0.5 |
 | `rca_agreement_rate` | Key | L5 | ≥ 0.8 |
 | `alerts_total` | Supporting | L1 | ≥ 5 |
 | `ai_triage_rate` | Supporting | L1 | ≥ 0.5 |
@@ -355,7 +356,7 @@ Notes:
 
 An implementation conforms to AOMM 0.1 at level *N* when it supports the
 practices in section 5 that levels 1..*N* rely on, computes the metrics in
-section 3 with the definitions given (reporting the five key metrics
+section 3 with the definitions given (reporting the five TRACE metrics
 together), and can import and export the
 artefacts in section 6 in the published formats.
 

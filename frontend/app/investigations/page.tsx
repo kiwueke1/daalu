@@ -62,7 +62,7 @@ function InvestigationsInner() {
     <div className="space-y-6 max-w-[1200px]">
       <PageHeader icon={SearchCheck} title="Investigations">
         Every alert the AI SRE investigated. Grade its root cause — correct,
-        partly right or wrong — so RCA agreement is measured, not guessed.
+        partly right or wrong — so the agreement rate is measured, not guessed.
       </PageHeader>
 
       <div className="flex flex-wrap items-center gap-2">

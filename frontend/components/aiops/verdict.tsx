@@ -20,7 +20,7 @@ export function VerdictChip({ verdict }: { verdict: Verdict | null }) {
 
 /**
  * Grade the AI's root cause: correct / partly right / wrong, with an optional
- * note. The verdict is the ground truth behind RCA agreement and evals.
+ * note. The verdict is the ground truth behind agreement rate and evals.
  */
 export function VerdictButtons({
   investigation,

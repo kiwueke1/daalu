@@ -70,7 +70,7 @@ export function InvestigationDrawer({ id, onClose }: { id: string; onClose: () =
                   <dd>{fmtDateTime(inv.alert_created_at)}</dd>
                 </div>
                 <div>
-                  <dt className="text-muted">Time to diagnosis</dt>
+                  <dt className="text-muted">Time to triage</dt>
                   <dd className="tabular-nums">{fmtDuration(inv.time_to_diagnosis_s)}</dd>
                 </div>
                 <div>

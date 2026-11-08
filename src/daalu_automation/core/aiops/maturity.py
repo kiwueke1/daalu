@@ -69,7 +69,7 @@ QUESTIONS: list[dict[str, Any]] = [
     {"id": "evals_before_change", "level": 4,
      "text": "Model or prompt changes are evaluated against the scenario suite before rollout."},
     {"id": "metrics_reviewed", "level": 4,
-     "text": "AI-Ops metrics (agreement, change failure, auto-resolution) are reviewed on a regular cadence."},
+     "text": "AI-Ops metrics (agreement, change failure, escalation rate) are reviewed on a regular cadence."},
     # L5 — Autonomous
     {"id": "page_on_exceptions", "level": 5,
      "text": "Humans are paged only for exceptions the policy can't handle."},
@@ -112,7 +112,7 @@ def build_criteria(m: dict[str, Any], ex: dict[str, Any], pol: dict[str, Any]) -
     par = m["proposal_approval_rate"]
     cfr = m["ai_change_failure_rate"]
     vc = m["verdict_coverage"]
-    arr = m["auto_resolution_rate"]
+    esc = m["escalation_rate"]
     rca = m["rca_agreement_rate"]
     return [
         c(1, "triage_rate", "Alerts investigated by the AI", tr is not None and tr >= 0.5, tr, "≥ 50%",
@@ -136,9 +136,9 @@ def build_criteria(m: dict[str, Any], ex: dict[str, Any], pol: dict[str, Any]) -
           ex["auto_executed"] >= 1, ex["auto_executed"], "≥ 1",
           "No automatic action has run yet. Check Autonomy policy → Trust: an "
           "`auto_after_trust` rule turns automatic once it has enough verified successes."),
-        c(3, "change_failure_rate", "AI change failure rate",
+        c(3, "change_failure_rate", "Change-failure rate",
           cfr is not None and cfr <= 0.15, cfr, "≤ 15%",
-          f"AI change failure rate is {_fmt(cfr)}. Investigations → review the fixes that "
+          f"Change-failure rate is {_fmt(cfr)}. Investigations → review the fixes that "
           "failed verification; narrow or demote the rules that produced them."),
         c(4, "verdict_coverage", "Investigations with a human verdict",
           vc is not None and vc >= 0.3, vc, "≥ 30%",
@@ -151,13 +151,13 @@ def build_criteria(m: dict[str, Any], ex: dict[str, Any], pol: dict[str, Any]) -
         c(4, "eval_runs", "Eval runs in the window", m["eval_runs"] >= 1, m["eval_runs"], "≥ 1",
           "Evals → run a scenario: `daalu eval run dummy-app-bad-image --label <model>` "
           "against a test cluster."),
-        c(5, "auto_resolution_rate", "Resolved automatically",
-          arr is not None and arr >= 0.5, arr, "≥ 50%",
-          f"{_fmt(arr)} of resolved incidents were fixed automatically. Autonomy policy → "
+        c(5, "escalation_rate", "Escalation rate",
+          esc is not None and esc <= 0.5, esc, "≤ 50%",
+          f"{_fmt(esc)} of resolved incidents still needed a human. Autonomy policy → "
           "extend auto / auto_after_trust rules to your most frequent proven fixes."),
-        c(5, "rca_agreement_rate", "Root-cause agreement",
+        c(5, "rca_agreement_rate", "Agreement rate",
           rca is not None and rca >= 0.8, rca, "≥ 80%",
-          f"Root-cause agreement is {_fmt(rca)}. Runbooks → add runbooks for the alerts the "
+          f"Agreement rate is {_fmt(rca)}. Runbooks → add runbooks for the alerts the "
           "AI gets wrong, and use Evals to compare models before switching."),
         c(5, "audit_chain_ok", "Audit chain verifies", m["audit_chain_ok"], m["audit_chain_ok"], "verifies",
           "Audit log → Verify: the hash chain is broken; investigate who edited audit rows."),
