@@ -30,15 +30,11 @@ chapter 88.
 
 | Group | TRACE metric | Question it answers | Better is | API field | DORA counterpart |
 |---|---|---|---|---|---|
-| Speed | Time to **T**riage | How long from the alert firing to the AI naming a root cause? | Lower | `median_time_to_diagnosis_s` | Lead time for changes |
+| Speed | Time to **T**riage | How long from the alert firing to the AI naming a root cause? | Lower | `median_time_to_triage_s` | Lead time for changes |
 | Speed | Time to **R**esolve | How long from the alert firing to the incident being resolved? | Lower | `median_time_to_resolve_s` | Time to restore service |
-| Quality | **A**greement rate | How often do humans agree with the AI's root cause (`partial` counts half)? | Higher | `rca_agreement_rate` | — (is the AI right?) |
-| Quality | **C**hange-failure rate | Of the AI writes that ran, how many failed verification? | Lower | `ai_change_failure_rate` | Change-failure rate |
+| Quality | **A**greement rate | How often do humans agree with the AI's root cause (`partial` counts half)? | Higher | `agreement_rate` | — (is the AI right?) |
+| Quality | **C**hange-failure rate | Of the AI writes that ran, how many failed verification? | Lower | `change_failure_rate` | Change-failure rate |
 | Autonomy | **E**scalation rate | Of resolved incidents, how many still needed a human? | Lower | `escalation_rate` | — (new to AI operations) |
-
-The API field names predate the TRACE names and are kept so existing
-clients keep working; the rest of this part uses the TRACE names in prose
-and the field names where it quotes code.
 
 They are read together, and that is the point of having five rather than
 one. A fast time to triage with low agreement rate is a fast wrong answer;
@@ -54,7 +50,7 @@ Maturity page shows all five as headline tiles (as "Time to triage",
 | Group | Metric | Why it matters |
 |---|---|---|
 | Coverage | `alerts_total`, `ai_triage_rate` | How much of the incident work the AI sees and investigates. |
-| Feedback | `verdict_coverage` | How much of the AI's work humans grade; the sample behind agreement rate (`rca_agreement_rate`). |
+| Feedback | `verdict_coverage` | How much of the AI's work humans grade; the sample behind agreement rate (`agreement_rate`). |
 | Trust | `proposal_approval_rate` | How often humans accept the AI's proposed writes. |
 | Learning | `runbooks_published`, `runbooks_generated`, `eval_runs`, `eval_mean_score` | Whether each incident improves the next. |
 | Integrity | `audit_chain_ok` | Whether the record of what the AI did can be trusted. |
@@ -112,12 +108,12 @@ criteria (`build_criteria`, `core/aiops/maturity.py:103`):
 | 2 | `approval_rate_known` | `proposal_approval_rate` is not null (at least one approve or reject) |
 | 3 | `auto_rule` | the saved policy has ≥ 1 rule in `auto` / `auto_after_trust` (a `defaults.mode` of `auto`/`auto_after_trust` counts as one) |
 | 3 | `auto_executed` | at least one automatic write executed |
-| 3 | `change_failure_rate` | `ai_change_failure_rate ≤ 0.15` |
+| 3 | `change_failure_rate` | `change_failure_rate ≤ 0.15` |
 | 4 | `verdict_coverage` | `verdict_coverage ≥ 0.3` |
 | 4 | `runbooks_published` | ≥ 1 published runbook |
 | 4 | `eval_runs` | ≥ 1 eval run started in the window |
 | 5 | `escalation_rate` | `escalation_rate ≤ 0.5` |
-| 5 | `rca_agreement_rate` | `rca_agreement_rate ≥ 0.8` |
+| 5 | `agreement_rate` | `agreement_rate ≥ 0.8` |
 | 5 | `audit_chain_ok` | the audit chain verifies |
 | 5 | `guardrails` | the saved policy has a `circuit_breaker` and a non-zero `max_auto_actions_per_hour` |
 
@@ -125,11 +121,11 @@ Read from the metric side:
 
 | Metric | Kind | Gates | Threshold |
 |---|---|---|---|
-| Time to triage (`median_time_to_diagnosis_s`) | TRACE | — | none |
+| Time to triage (`median_time_to_triage_s`) | TRACE | — | none |
 | Time to resolve (`median_time_to_resolve_s`) | TRACE | — | none |
-| Change-failure rate (`ai_change_failure_rate`) | TRACE | L3 | ≤ 0.15 |
+| Change-failure rate (`change_failure_rate`) | TRACE | L3 | ≤ 0.15 |
 | Escalation rate (`escalation_rate`) | TRACE | L5 | ≤ 0.5 |
-| Agreement rate (`rca_agreement_rate`) | TRACE | L5 | ≥ 0.8 |
+| Agreement rate (`agreement_rate`) | TRACE | L5 | ≥ 0.8 |
 | `alerts_total` | Supporting | L1 | ≥ 5 |
 | `ai_triage_rate` | Supporting | L1 | ≥ 0.5 |
 | `proposal_approval_rate` | Supporting | L2 | not null |

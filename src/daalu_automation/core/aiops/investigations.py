@@ -3,13 +3,13 @@
 One row per alert. The alert chat loop keeps it current:
 
 * :func:`ensure` when the agent first answers,
-* :func:`note_answer` on every assistant message (sets ``diagnosed_at`` and
+* :func:`note_answer` on every assistant message (sets ``triaged_at`` and
   ``root_cause`` from the first ``## Root cause`` section),
 * :func:`bump` as actions are proposed / approved / rejected / auto-run,
 * :func:`note_outcome` after verification.
 
 Humans then grade it with a verdict, which is what turns the record into
-RCA-accuracy metrics and eval material.
+the agreement rate and eval material.
 """
 
 from __future__ import annotations
@@ -65,12 +65,12 @@ async def ensure(db: AsyncSession, *, tenant_id: uuid.UUID, alert_id: uuid.UUID)
 def note_answer(inv: Any, text: str, *, model: str = "") -> None:
     if model and not inv.model:
         inv.model = model[:128]
-    if inv.diagnosed_at is not None:
+    if inv.triaged_at is not None:
         return
     rc = extract_root_cause(text)
     if rc:
         inv.root_cause = rc
-        inv.diagnosed_at = datetime.now(tz=timezone.utc)
+        inv.triaged_at = datetime.now(tz=timezone.utc)
 
 
 def bump(inv: Any, field: str, by: int = 1) -> None:

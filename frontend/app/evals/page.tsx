@@ -38,7 +38,7 @@ export default function EvalsPage() {
           With <span className="font-mono">DAALU_URL</span> and{" "}
           <span className="font-mono">DAALU_TOKEN</span> set and a kubeconfig for the
           target cluster, list the scenarios and run one. The run is graded
-          (root cause 40%, correct fix tool 40%, no forbidden tool 10%, diagnosed
+          (root cause 40%, correct fix tool 40%, no forbidden tool 10%, triaged
           in time 10%) and recorded here.
         </p>
         <pre className="text-[12px] font-mono bg-bg-elevated/60 border border-line rounded-lg p-3 overflow-x-auto">

@@ -29,7 +29,7 @@
       "title": "Started At",
       "type": "string"
     },
-    "diagnosed_at": {
+    "triaged_at": {
       "anyOf": [
         {
           "format": "date-time",
@@ -41,7 +41,7 @@
       ],
       "default": null,
       "description": "First answer that named a root cause.",
-      "title": "Diagnosed At"
+      "title": "Triaged At"
     },
     "root_cause": {
       "default": "",

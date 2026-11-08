@@ -19,7 +19,7 @@ the DORA metrics do for software delivery:
 |---|---|---|---|
 | Speed | Time to triage | **Time to triage** | Lower |
 | Speed | Time to resolve | **MTTR** | Lower |
-| Quality | Root-cause (RCA) agreement | **Agreement rate** | Higher |
+| Quality | Agreement rate | **Agreement rate** | Higher |
 | Quality | Change-failure rate | **Change-failure rate** | Lower |
 | Autonomy | Escalation rate | **Escalation rate** | Lower |
 
@@ -74,7 +74,7 @@ every level below it is met too. Levels are cumulative: if you meet Level
 
 Read from the metric side: of the five TRACE metrics, change-failure rate
 gates Level 3, and escalation rate and agreement rate gate Level 5. Time
-to diagnosis and time to resolve gate no level, on purpose. Every team's
+to triage and time to resolve gate no level, on purpose. Every team's
 systems and alert mix differ, so there is no fair single threshold; they are
 what climbing the levels should improve. Watch them against your own
 history, for example by comparing the 30-day and 90-day windows.

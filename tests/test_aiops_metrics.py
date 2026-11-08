@@ -11,8 +11,8 @@ from daalu_automation.core.aiops import maturity
 
 METRIC_KEYS = {
     "days", "alerts_total", "investigations_total", "ai_triage_rate",
-    "median_time_to_diagnosis_s", "rca_agreement_rate", "verdict_coverage", "verdicts",
-    "proposal_approval_rate", "actions", "ai_change_failure_rate", "escalation_rate", "auto_resolution_rate",
+    "median_time_to_triage_s", "agreement_rate", "verdict_coverage", "verdicts",
+    "proposal_approval_rate", "actions", "change_failure_rate", "escalation_rate",
     "resolutions", "median_time_to_resolve_s", "runbooks_published", "runbooks_generated",
     "eval_runs", "eval_mean_score", "audit_chain_ok", "daily",
 }
@@ -59,12 +59,12 @@ async def _seed(db, tenant_id, other_tenant_id):
         return Investigation(tenant_id=tenant_id, alert_id=a.id, started_at=t0 + timedelta(seconds=5), **kw)
 
     db.add_all([
-        inv(alerts[0], diagnosed_at=t0 + timedelta(seconds=60), verdict="correct",
+        inv(alerts[0], triaged_at=t0 + timedelta(seconds=60), verdict="correct",
             resolution="auto", resolved_at=t0 + timedelta(seconds=120)),
-        inv(alerts[1], diagnosed_at=t0 + timedelta(seconds=120), verdict="partial",
+        inv(alerts[1], triaged_at=t0 + timedelta(seconds=120), verdict="partial",
             resolution="approved", resolved_at=t0 + timedelta(seconds=300)),
         # resolved alert, investigation still open -> manual
-        inv(alerts[2], diagnosed_at=t0 + timedelta(seconds=180), verdict="wrong"),
+        inv(alerts[2], triaged_at=t0 + timedelta(seconds=180), verdict="wrong"),
         inv(alerts[3]),
         # out of window / other tenant: ignored
         inv(old, resolution="auto", resolved_at=now - timedelta(days=39)),
@@ -114,18 +114,17 @@ async def test_metrics_and_levels(db, seeded):
     assert m["alerts_total"] == 6
     assert m["investigations_total"] == 4
     assert m["ai_triage_rate"] == pytest.approx(4 / 6, abs=1e-4)
-    assert m["median_time_to_diagnosis_s"] == 120.0
+    assert m["median_time_to_triage_s"] == 120.0
     assert m["verdicts"] == {"correct": 1, "partial": 1, "wrong": 1}
-    assert m["rca_agreement_rate"] == 0.5
+    assert m["agreement_rate"] == 0.5
     assert m["verdict_coverage"] == 0.75
     assert m["resolutions"] == {"auto": 1, "approved": 1, "manual": 1, "unresolved": 0, "open": 1}
-    assert m["auto_resolution_rate"] == pytest.approx(1 / 3, abs=1e-4)
     assert m["escalation_rate"] == pytest.approx(2 / 3, abs=1e-4)
     assert m["median_time_to_resolve_s"] == 300.0  # [120, 300, 600 (manual)]
     assert m["actions"] == {"proposed": 5, "approved": 2, "rejected": 1, "auto": 1,
                             "executed": 3, "failed_verification": 1}
     assert m["proposal_approval_rate"] == pytest.approx(2 / 3, abs=1e-4)
-    assert m["ai_change_failure_rate"] == pytest.approx(1 / 3, abs=1e-4)
+    assert m["change_failure_rate"] == pytest.approx(1 / 3, abs=1e-4)
     assert m["runbooks_published"] == 1 and m["runbooks_generated"] == 1
     assert m["eval_runs"] == 1 and m["eval_mean_score"] == 0.8
     assert m["audit_chain_ok"] is True
@@ -159,7 +158,7 @@ async def test_metrics_and_levels(db, seeded):
     assert not crit["change_failure_rate"]["met"]
     assert r["level"] == 2
 
-    # Fix the failure → L3 met → L4 (already met) counts. L5 not (auto-resolution 33%).
+    # Fix the failure → L3 met → L4 (already met) counts. L5 not (escalation rate 67%).
     await db.execute(update(AlertAction).where(AlertAction.tool_call_id == "t4")
                      .values(verified_resolved=True))
     await db.commit()
@@ -167,7 +166,7 @@ async def test_metrics_and_levels(db, seeded):
     assert r["level"] == 4 and r["name"] == "Learning"
     crit = {c["id"]: c for c in r["criteria"]}
     assert crit["guardrails"]["met"] and crit["audit_chain_ok"]["met"]
-    assert not crit["escalation_rate"]["met"] and not crit["rca_agreement_rate"]["met"]
+    assert not crit["escalation_rate"]["met"] and not crit["agreement_rate"]["met"]
     assert r["next_steps"] and all(isinstance(s, str) for s in r["next_steps"])
 
 
@@ -177,7 +176,7 @@ async def test_empty_tenant_is_level_0(db, seeded):
 
     m = await metrics.compute_metrics(db, seeded.tenant_a_id, days=7)
     assert m["alerts_total"] == 0 and m["ai_triage_rate"] is None
-    assert m["rca_agreement_rate"] is None and m["ai_change_failure_rate"] is None
+    assert m["agreement_rate"] is None and m["change_failure_rate"] is None
     assert len(m["daily"]) == 7
     r = await maturity.compute(db, seeded.tenant_a_id, days=7)
     assert r["level"] == 0 and r["name"] == "Ad hoc"

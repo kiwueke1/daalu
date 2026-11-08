@@ -2,7 +2,7 @@
   "id": "c4d5e6f7-0a1b-4c2d-9e3f-4a5b6c7d8e9f",
   "alert_id": "0d7a3c9e-6b1f-4e2a-8c5d-1f2e3a4b5c6d",
   "started_at": "2026-10-30T13:58:02+00:00",
-  "diagnosed_at": "2026-10-30T13:59:47+00:00",
+  "triaged_at": "2026-10-30T13:59:47+00:00",
   "root_cause": "Revision 4 of deployment prod-shop/checkout points at image shop/checkout:2.8.0, which exits on start (missing PAYMENT_URL). Pods are in CrashLoopBackOff.",
   "actions_proposed": 1,
   "actions_approved": 1,

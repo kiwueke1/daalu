@@ -122,7 +122,7 @@ async def test_auto_policy_runs_and_verifies_without_a_human(db, seeded, monkeyp
         Investigation.alert_id == alert_id))).scalar_one()
     assert inv.resolution == "auto" and inv.actions_auto == 1 and inv.verified is True
     assert inv.root_cause.startswith("Bad image tag")
-    assert inv.diagnosed_at is not None
+    assert inv.triaged_at is not None
 
     events = (await audit.verify_chain(db, seeded.tenant_a_id))
     assert events["ok"] and events["checked"] == 3  # proposed, auto_executed, verified

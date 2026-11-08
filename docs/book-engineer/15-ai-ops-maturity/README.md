@@ -23,13 +23,11 @@ Five TRACE metrics, computed by `core/aiops/metrics.py` (chapter 88).
 
 | Group | TRACE metric | Measures | API field | DORA counterpart |
 |---|---|---|---|---|
-| Speed | Time to **T**riage | Alert firing → AI names a root cause | `median_time_to_diagnosis_s` | Lead time for changes |
+| Speed | Time to **T**riage | Alert firing → AI names a root cause | `median_time_to_triage_s` | Lead time for changes |
 | Speed | Time to **R**esolve | Alert firing → incident resolved | `median_time_to_resolve_s` | Time to restore service |
-| Quality | **A**greement rate | How often humans agree with the AI's root cause | `rca_agreement_rate` | — |
-| Quality | **C**hange-failure rate | Share of executed AI writes that failed verification | `ai_change_failure_rate` | Change-failure rate |
+| Quality | **A**greement rate | How often humans agree with the AI's root cause | `agreement_rate` | — |
+| Quality | **C**hange-failure rate | Share of executed AI writes that failed verification | `change_failure_rate` | Change-failure rate |
 | Autonomy | **E**scalation rate | Share of resolved incidents that still needed a human | `escalation_rate` | — |
-
-The API field names predate the TRACE names and are kept for compatibility.
 
 Supporting metrics explain them: `alerts_total` and `ai_triage_rate`
 (coverage), `verdict_coverage` (feedback, the sample behind agreement rate),
@@ -46,9 +44,9 @@ criteria table):
 | 0 | Ad hoc | Nothing: the starting point. |
 | 1 | Assisted | `alerts_total ≥ 5`, `ai_triage_rate ≥ 0.5` |
 | 2 | Proposing | ≥ 1 human-approved write executed, `proposal_approval_rate` known |
-| 3 | Trusted | change-failure rate ≤ 0.15 (`ai_change_failure_rate`), an `auto` rule saved, ≥ 1 automatic write executed |
+| 3 | Trusted | change-failure rate ≤ 0.15 (`change_failure_rate`), an `auto` rule saved, ≥ 1 automatic write executed |
 | 4 | Learning | `verdict_coverage ≥ 0.3`, `runbooks_published ≥ 1`, `eval_runs ≥ 1` |
-| 5 | Autonomous | escalation rate ≤ 0.5 (`escalation_rate`), agreement rate ≥ 0.8 (`rca_agreement_rate`), `audit_chain_ok`, guardrails saved |
+| 5 | Autonomous | escalation rate ≤ 0.5 (`escalation_rate`), agreement rate ≥ 0.8 (`agreement_rate`), `audit_chain_ok`, guardrails saved |
 
 The two speed metrics (time to triage, time to resolve) gate no level, on purpose: they depend on each team's
 systems and alert mix. They are what climbing the levels should improve.

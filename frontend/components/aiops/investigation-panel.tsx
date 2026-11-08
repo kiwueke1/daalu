@@ -61,7 +61,7 @@ export function AlertInvestigationPanel({ alertId }: { alertId: string }) {
   }
 
   const inv = q.data;
-  const diagnosed = !!inv.diagnosed_at;
+  const triaged = !!inv.triaged_at;
   return (
     <section className="surface p-5 space-y-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -83,7 +83,7 @@ export function AlertInvestigationPanel({ alertId }: { alertId: string }) {
         <span>
           <span className="text-muted">Time to triage </span>
           <span className="font-semibold tabular-nums">
-            {diagnosed ? fmtDuration(inv.time_to_diagnosis_s) : "not diagnosed yet"}
+            {triaged ? fmtDuration(inv.time_to_triage_s) : "not triaged yet"}
           </span>
         </span>
         {inv.time_to_resolve_s !== null && (
@@ -102,7 +102,7 @@ export function AlertInvestigationPanel({ alertId }: { alertId: string }) {
           </span>
         )}
       </div>
-      {diagnosed ? (
+      {triaged ? (
         <VerdictButtons investigation={inv} />
       ) : (
         <div className="text-[12px] text-muted">

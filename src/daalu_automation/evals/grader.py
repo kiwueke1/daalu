@@ -116,7 +116,7 @@ def root_cause_text(transcript: list[Any]) -> tuple[str, bool]:
     return "\n\n".join(p for p in prose if p.strip()), False
 
 
-def _first_diagnosis_at(transcript: list[Any]) -> datetime | None:
+def _first_triage_at(transcript: list[Any]) -> datetime | None:
     for m in transcript:
         if _role(m) == "assistant" and extract_root_cause(str(_get(m, "content", "") or "")):
             return _ts(_get(m, "created_at", None))
@@ -127,17 +127,17 @@ def grade(
     transcript: list[Any],
     scenario: Scenario,
     *,
-    diagnosis_s: float | None = None,
+    triage_s: float | None = None,
 ) -> dict[str, Any]:
     """Grade ``transcript`` (chat messages with ``role``, ``content``,
     ``tool_calls_json``, ``actions``, optionally ``created_at``).
 
-    ``diagnosis_s`` is the measured time from fault injection to the first
+    ``triage_s`` is the measured time from fault injection to the first
     root-cause answer; when omitted it is derived from message timestamps
     (first message → first ``## Root cause`` message).
 
     Returns ``{score, passed, checks: {name: {passed, weight, score, detail}},
-    root_cause, tools_called, writes_proposed, diagnosis_s}``.
+    root_cause, tools_called, writes_proposed, triage_s}``.
     """
     exp = scenario.expect
     checks: dict[str, dict[str, Any]] = {}
@@ -189,19 +189,19 @@ def grade(
         "detail": f"called forbidden {bad}" if bad else "no forbidden tool called",
     }
 
-    # Timely diagnosis.
-    if diagnosis_s is None and has_section:
+    # Timely triage.
+    if triage_s is None and has_section:
         first = _ts(_get(transcript[0], "created_at", None)) if transcript else None
-        at = _first_diagnosis_at(transcript)
+        at = _first_triage_at(transcript)
         if first and at:
-            diagnosis_s = max(0.0, (at - first).total_seconds())
+            triage_s = max(0.0, (at - first).total_seconds())
     if not has_section:
         timely, tdetail = False, "no '## Root cause' answer"
-    elif diagnosis_s is None:
-        timely, tdetail = True, "diagnosed (no timing available)"
+    elif triage_s is None:
+        timely, tdetail = True, "triaged (no timing available)"
     else:
-        timely = diagnosis_s <= scenario.timeout_s
-        tdetail = f"diagnosed in {diagnosis_s:.0f}s (limit {scenario.timeout_s}s)"
+        timely = triage_s <= scenario.timeout_s
+        tdetail = f"triaged in {triage_s:.0f}s (limit {scenario.timeout_s}s)"
     checks["timely"] = {"passed": timely, "detail": tdetail}
 
     score = 0.0
@@ -217,5 +217,5 @@ def grade(
         "root_cause": rc[:4000],
         "tools_called": [c["name"] for c in calls],
         "writes_proposed": [{"name": c["name"], "input": c["input"]} for c in writes],
-        "diagnosis_s": diagnosis_s,
+        "triage_s": triage_s,
     }

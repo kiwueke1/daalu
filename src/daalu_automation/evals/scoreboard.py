@@ -3,7 +3,7 @@
 One row per model ``label``: how many runs, mean score, pass rate, how many
 distinct scenarios it was run on, plus a per-scenario breakdown (so a
 scoreboard can show exactly which outage a model lost on) and the median
-time to diagnosis. Sorted best first.
+time to triage. Sorted best first.
 """
 
 from __future__ import annotations
@@ -25,20 +25,20 @@ def _summ(runs: list[Any]) -> dict[str, Any]:
     ttd = []
     for r in runs:
         d = _get(r, "details", None) or {}
-        v = d.get("diagnosis_s") if isinstance(d, dict) else None
+        v = d.get("triage_s") if isinstance(d, dict) else None
         if isinstance(v, (int, float)):
             ttd.append(float(v))
     return {
         "runs": n,
         "mean_score": round(sum(scores) / n, 4) if n else None,
         "pass_rate": round(passed / n, 4) if n else None,
-        "median_time_to_diagnosis_s": median(ttd) if ttd else None,
+        "median_time_to_triage_s": median(ttd) if ttd else None,
     }
 
 
 def leaderboard(runs: list[Any]) -> list[dict[str, Any]]:
     """``[{label, runs, mean_score, pass_rate, scenarios, per_scenario,
-    median_time_to_diagnosis_s}]``. Runs whose ``details.invalid`` is true
+    median_time_to_triage_s}]``. Runs whose ``details.invalid`` is true
     (e.g. answered by the wrong model) are excluded."""
     by_label: dict[str, list[Any]] = {}
     for r in runs:

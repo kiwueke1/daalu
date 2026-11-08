@@ -251,7 +251,7 @@ async def tool_list_alerts(ctx: CallContext, args: dict[str, Any]) -> dict[str, 
             "namespace": md.get("namespace") or labels.get("namespace"),
             "investigation": None if inv is None else {
                 "resolution": inv.resolution,
-                "diagnosed": inv.diagnosed_at is not None,
+                "triaged": inv.triaged_at is not None,
                 "verdict": inv.verdict,
             },
         })

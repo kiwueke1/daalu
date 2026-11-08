@@ -45,7 +45,7 @@ Columns:
 |---|---|
 | **Alert** | The alert's title, with its severity underneath. |
 | **Started** | When the AI started investigating. |
-| **To diagnosis** | Time from the alert firing to the AI's root cause; "—" if it hasn't named one. |
+| **To triage** | Time from the alert firing to the AI's root cause; "—" if it hasn't named one. |
 | **Actions P / A / R / Auto** | Fixes the AI **P**roposed, that people **A**pproved, that people **R**ejected, and that ran **Auto**matically. |
 | **Resolution** | How the alert ended (below). |
 | **Verdict** | Your team's grade, a "needs verdict" chip if it's waiting for one, or "—" if there's nothing to grade yet. |
@@ -91,7 +91,7 @@ Press **Esc** or click outside to close it.
 
 ---
 
-## How Daalu knows the AI has "diagnosed"
+## How Daalu knows the AI has triaged an alert
 
 The AI writes its findings with a **Root cause** section (the same text you
 see on the alert's **Root cause** tab). The first time it posts one, Daalu
@@ -99,7 +99,7 @@ records the time — that's the triage time — and keeps that text as the
 investigation's root cause. Later messages don't overwrite it, so the
 time-to-triage stays honest.
 
-If the AI never writes a root cause, the investigation stays undiagnosed and
+If the AI never writes a root cause, the investigation stays untriaged and
 there's nothing to grade.
 
 ---
@@ -108,7 +108,7 @@ there's nothing to grade.
 
 In the drawer, or on the alert page itself:
 
-> Was the AI's root cause right? Your answer feeds the RCA-agreement metric
+> Was the AI's root cause right? Your answer feeds the agreement-rate metric
 > on the Maturity page.
 
 Click one of:

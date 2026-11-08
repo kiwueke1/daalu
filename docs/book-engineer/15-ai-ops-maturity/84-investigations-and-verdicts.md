@@ -22,7 +22,7 @@ row per alert: `alert_id` is unique and cascades on alert delete.
 | Column | Meaning |
 |---|---|
 | `started_at` | When the record was created (first triage turn) |
-| `diagnosed_at`, `root_cause` | Set once, from the first assistant message containing a root-cause section |
+| `triaged_at`, `root_cause` | Set once, from the first assistant message containing a root-cause section |
 | `actions_proposed`, `actions_approved`, `actions_rejected`, `actions_auto` | Counters bumped as writes move |
 | `resolution` | `open` (default) · `auto` · `approved` · `manual` · `unresolved` |
 | `resolved_at`, `verified` | Outcome of the last verified write |
@@ -49,7 +49,7 @@ is a small set of pure-ish helpers.
 
 ### Root-cause detection
 
-`note_answer` sets `diagnosed_at` and `root_cause` the first time
+`note_answer` sets `triaged_at` and `root_cause` the first time
 `extract_root_cause` (`investigations.py:34`) finds a root-cause section.
 The regex (`_ROOT_CAUSE_RE`, `:27`) is lenient about form, because models
 are: a markdown heading of any level, a bold `**Root cause**`, or a
@@ -57,7 +57,7 @@ are: a markdown heading of any level, a bold `**Root cause**`, or a
 `Background` or `Remediation plan` heading (the alert chat's three-section
 answer format) or the end of the message, capped at 4000 characters.
 
-`diagnosed_at` is set once and never moved. A later, better diagnosis
+`triaged_at` is set once and never moved. A later, better diagnosis
 doesn't reset time-to-triage; it is the time to the *first* stated root
 cause, which is the number on-call actually experiences. The `model` is
 likewise the first model that answered.
@@ -105,7 +105,7 @@ POST /api/v1/aiops/investigations/{id}/verdict   {verdict: correct|partial|wrong
 overwrites the earlier one (the audit log keeps both). The MCP
 `submit_verdict` tool calls the same function with the token's user.
 
-Verdicts are the ground truth for `rca_agreement_rate`
+Verdicts are the ground truth for `agreement_rate`
 (`(correct + 0.5 · partial) / verdicts`) and `verdict_coverage`
 (chapter 88). Partial counts half because "right component, wrong cause" is
 common and worth something; counting it as wrong would make the metric
@@ -145,7 +145,7 @@ should be reviewed and versioned with the rest of the policy.
 
 | Method | Path | Line | Notes |
 |---|---|---|---|
-| GET | `/aiops/investigations?days=&resolution=&needs_verdict=&limit=` | `aiops_investigations.py:95` | Newest first; `needs_verdict` = diagnosed and no verdict. Each row carries the alert title/severity/status and computed `time_to_diagnosis_s`, `time_to_resolve_s` (both from `alert.created_at`). |
+| GET | `/aiops/investigations?days=&resolution=&needs_verdict=&limit=` | `aiops_investigations.py:95` | Newest first; `needs_verdict` = triaged and no verdict. Each row carries the alert title/severity/status and computed `time_to_triage_s`, `time_to_resolve_s` (both from `alert.created_at`). |
 | GET | `/aiops/investigations/{id}` | `:158` | Plus `actions`: every write action on the alert with policy mode/rule, `auto_executed`, `verified_resolved`, approvals, actor. |
 | GET | `/aiops/investigations/by-alert/{alert_id}` | `:136` | Same, keyed by alert. Used by the alert page panel, the eval runner and MCP. Not in the design doc's API table. |
 | POST | `/aiops/investigations/{id}/verdict` | `:187` | See above. |
@@ -155,7 +155,7 @@ should be reviewed and versioned with the rest of the policy.
 ## UI
 
 * `/investigations` (`frontend/app/investigations/page.tsx`): window,
-  resolution filter, "Needs a verdict"; columns Alert, Started, To diagnosis,
+  resolution filter, "Needs a verdict"; columns Alert, Started, To triage,
   Actions P / A / R / Auto, Resolution, Verdict. `?open=<id>` opens the
   drawer (`frontend/components/aiops/investigation-drawer.tsx`) with the root
   cause, verdict buttons and actions.
@@ -171,7 +171,7 @@ should be reviewed and versioned with the rest of the policy.
 | Symptom | Cause |
 |---|---|
 | "No investigation record yet" on an alert | Nobody opened it and `investigate_automatically` is off, or auto-investigation failed (`alert_chat.auto_investigate_failed` in the API logs). |
-| `diagnosed_at` null although the chat clearly explains the cause | The model never wrote a root-cause heading or `Root cause:` line. Re-triage; the alert chat's summary nudge asks for the three-section answer. |
+| `triaged_at` null although the chat clearly explains the cause | The model never wrote a root-cause heading or `Root cause:` line. Re-triage; the alert chat's summary nudge asks for the three-section answer. |
 | Resolution `manual` though Daalu ran the fix | The alert cleared before verification finished; `note_outcome` overwrites `manual` with `approved`/`auto` once verification reports success. |
 | Resolution stays `unresolved` after a later fix worked | It doesn't: a later verified success sets `approved`/`auto`. A later *failure* never overwrites a success. |
 

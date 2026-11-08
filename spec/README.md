@@ -67,10 +67,10 @@ need for: how much of the work still needs a human. **TRACE** is their initials:
 
 | Group | TRACE metric (API field) | Question it answers | Better is | DORA counterpart |
 |---|---|---|---|---|
-| Speed | Time to **T**riage (`median_time_to_diagnosis_s`) | How long from an alert firing to the AI naming a root cause? | Lower | Lead time for changes |
+| Speed | Time to **T**riage (`median_time_to_triage_s`) | How long from an alert firing to the AI naming a root cause? | Lower | Lead time for changes |
 | Speed | Time to **R**esolve (`median_time_to_resolve_s`) | How long from an alert firing to the incident being resolved? | Lower | Time to restore service |
-| Quality | **A**greement rate (`rca_agreement_rate`) | How often do humans agree with the AI's root cause? | Higher | — (is the AI right?) |
-| Quality | **C**hange-failure rate (`ai_change_failure_rate`) | Of the changes the AI made, how many failed verification? | Lower | Change-failure rate |
+| Quality | **A**greement rate (`agreement_rate`) | How often do humans agree with the AI's root cause? | Higher | — (is the AI right?) |
+| Quality | **C**hange-failure rate (`change_failure_rate`) | Of the changes the AI made, how many failed verification? | Lower | Change-failure rate |
 | Autonomy | **E**scalation rate (`escalation_rate`) | Of resolved incidents, how many still needed a human? | Lower | — (new to AI operations) |
 
 Read the TRACE metrics together. Speed with poor quality is a fast wrong answer.
@@ -86,12 +86,12 @@ together, for the same window.
 
 Supporting metrics explain the TRACE metrics and show whether the practices
 behind them are in place. Some are inputs to the TRACE metrics (no verdicts
-means no agreement rate, `rca_agreement_rate`); others count adoption of a practice.
+means no agreement rate, `agreement_rate`); others count adoption of a practice.
 
 | Group | Metric | Why it matters |
 |---|---|---|
 | Coverage | `alerts_total`, `ai_triage_rate` | How much of the incident work the AI sees and investigates. |
-| Feedback | `verdict_coverage` | How much of the AI's work humans grade; the sample behind `rca_agreement_rate`. |
+| Feedback | `verdict_coverage` | How much of the AI's work humans grade; the sample behind `agreement_rate`. |
 | Trust | `proposal_approval_rate` | How often humans accept the AI's proposed changes. |
 | Learning | `runbooks_published`, `runbooks_generated`, `eval_runs`, `eval_mean_score` | Whether each incident improves the next. |
 | Integrity | `audit_chain_ok` | Whether the record of what the AI did can be trusted. |
@@ -100,12 +100,11 @@ means no agreement rate, `rca_agreement_rate`); others count adoption of a pract
 
 | Metric | Kind | Definition |
 |---|---|---|
-| `median_time_to_diagnosis_s` | Key | Median of `diagnosed_at − alert.created_at` (seconds) over investigations with a diagnosis. |
+| `median_time_to_triage_s` | Key | Median of `triaged_at − alert.created_at` (seconds) over investigations that named a root cause. |
 | `median_time_to_resolve_s` | Key | Median of `resolved_at − alert.created_at` (seconds) over resolved investigations. |
-| `rca_agreement_rate` | Key | (`correct` + 0.5 × `partial`) ÷ investigations with a verdict. |
-| `ai_change_failure_rate` | Key | Executed write actions with `verified_resolved = false` ÷ executed write actions. |
+| `agreement_rate` | Key | (`correct` + 0.5 × `partial`) ÷ investigations with a verdict. |
+| `change_failure_rate` | Key | Executed write actions with `verified_resolved = false` ÷ executed write actions. |
 | `escalation_rate` | Key | Investigations resolved `approved` or `manual` ÷ resolved investigations (`auto`, `approved`, `manual`): the share that needed a human. |
-| `auto_resolution_rate` | Supporting | Investigations resolved `auto` ÷ resolved investigations; `1 − escalation_rate`, kept for compatibility. |
 | `alerts_total` | Supporting | Alerts created in the window. |
 | `ai_triage_rate` | Supporting | Alerts in the window that have an investigation ÷ `alerts_total`. |
 | `verdict_coverage` | Supporting | Investigations with a verdict ÷ investigations. |
@@ -150,19 +149,19 @@ exceptions" at level 5), the self-assessment in section 4.3 covers it.
 | L0 · Ad hoc | None. Level 0 is the starting point, not something a team reaches. |
 | L1 · Assisted | `alerts_total ≥ 5` and `ai_triage_rate ≥ 0.5`. |
 | L2 · Proposing | At least one human-approved write action executed, and `proposal_approval_rate` is defined (at least one human decision recorded). |
-| L3 · Trusted | An active autonomy policy with at least one rule (or the default mode) set to `auto` or `auto_after_trust`; at least one automatic action executed; `ai_change_failure_rate ≤ 0.15`. |
+| L3 · Trusted | An active autonomy policy with at least one rule (or the default mode) set to `auto` or `auto_after_trust`; at least one automatic action executed; `change_failure_rate ≤ 0.15`. |
 | L4 · Learning | `verdict_coverage ≥ 0.3`; `runbooks_published ≥ 1`; `eval_runs ≥ 1`. |
-| L5 · Autonomous | `escalation_rate ≤ 0.5`; `rca_agreement_rate ≥ 0.8`; `audit_chain_ok` is true; guardrails configured (a circuit breaker and an hourly rate limit on automatic actions). |
+| L5 · Autonomous | `escalation_rate ≤ 0.5`; `agreement_rate ≥ 0.8`; `audit_chain_ok` is true; guardrails configured (a circuit breaker and an hourly rate limit on automatic actions). |
 
 The same mapping, read from the metric side:
 
 | Metric | Kind | Gates | Threshold |
 |---|---|---|---|
-| `median_time_to_diagnosis_s` | Key | — | Tracked at every level; no threshold |
+| `median_time_to_triage_s` | Key | — | Tracked at every level; no threshold |
 | `median_time_to_resolve_s` | Key | — | Tracked at every level; no threshold |
-| `ai_change_failure_rate` | Key | L3 | ≤ 0.15 |
+| `change_failure_rate` | Key | L3 | ≤ 0.15 |
 | `escalation_rate` | Key | L5 | ≤ 0.5 |
-| `rca_agreement_rate` | Key | L5 | ≥ 0.8 |
+| `agreement_rate` | Key | L5 | ≥ 0.8 |
 | `alerts_total` | Supporting | L1 | ≥ 5 |
 | `ai_triage_rate` | Supporting | L1 | ≥ 0.5 |
 | `proposal_approval_rate` | Supporting | L2 | Defined |
@@ -249,7 +248,7 @@ in the investigation transcript.
   it started, when it first named a root cause, the root cause text, the
   proposals it led to and how the incident was resolved.
 * Humans grade the root cause with a **verdict**: `correct`, `partial` or
-  `wrong`. Verdicts are the ground truth behind `rca_agreement_rate`.
+  `wrong`. Verdicts are the ground truth behind `agreement_rate`.
 
 ### 5.5 Runbooks as code (L4)
 * Operational knowledge MUST be stored as runbook files: YAML frontmatter

@@ -42,12 +42,11 @@ and the UI shows `—` for the second.
 
 | TRACE metric | API field | Group | Computation | DORA counterpart |
 |---|---|---|---|---|
-| Time to **T**riage | `median_time_to_diagnosis_s` | Speed | median of `diagnosed_at − alert.created_at` over diagnosed investigations | Lead time for changes |
+| Time to **T**riage | `median_time_to_triage_s` | Speed | median of `triaged_at − alert.created_at` over triaged investigations | Lead time for changes |
 | Time to **R**esolve | `median_time_to_resolve_s` | Speed | median of `resolved_at − alert.created_at` over resolved investigations | Time to restore service |
-| **A**greement rate | `rca_agreement_rate` | Quality | `(correct + 0.5 · partial) / verdicts` | — |
-| **C**hange-failure rate | `ai_change_failure_rate` | Quality | `actions.failed_verification` / `actions.executed` | Change-failure rate |
+| **A**greement rate | `agreement_rate` | Quality | `(correct + 0.5 · partial) / verdicts` | — |
+| **C**hange-failure rate | `change_failure_rate` | Quality | `actions.failed_verification` / `actions.executed` | Change-failure rate |
 | **E**scalation rate | `escalation_rate` | Autonomy | (`approved` + `manual`) / (`auto` + `approved` + `manual`) | — |
-| (supporting) | `auto_resolution_rate` | Supporting | `auto` / (`auto` + `approved` + `manual`), i.e. `1 − escalation_rate` | — |
 
 ### Supporting metrics
 
@@ -95,8 +94,8 @@ Choices worth defending:
 * **Escalation rate's numerator includes manual resolutions.** The
   question is "of everything that got resolved, how much still needed a
   human", so alerts that cleared on their own or were fixed by hand count
-  as escalations. It is exactly `1 − auto_resolution_rate`, which the API
-  still returns.
+  as escalations. Its complement, the share resolved automatically, is
+  not reported separately: it is `1 − escalation_rate`.
 * **The approval rate excludes automatic actions.** They were never put to
   a human; counting them as approvals would inflate the trust signal with
   the policy's own decisions.
@@ -118,13 +117,13 @@ Known inaccuracies:
 |---|---|---|
 | 1 | `alerts_total ≥ 5`, `ai_triage_rate ≥ 0.5` | — |
 | 2 | `proposal_approval_rate` not null | ≥ 1 human-approved write executed |
-| 3 | `ai_change_failure_rate ≤ 0.15` | an `auto` / `auto_after_trust` rule saved; ≥ 1 automatic write executed |
+| 3 | `change_failure_rate ≤ 0.15` | an `auto` / `auto_after_trust` rule saved; ≥ 1 automatic write executed |
 | 4 | `verdict_coverage ≥ 0.3`, `runbooks_published ≥ 1`, `eval_runs ≥ 1` | — |
-| 5 | `escalation_rate ≤ 0.5`, `rca_agreement_rate ≥ 0.8`, `audit_chain_ok` | guardrails saved (circuit breaker + hourly cap) |
+| 5 | `escalation_rate ≤ 0.5`, `agreement_rate ≥ 0.8`, `audit_chain_ok` | guardrails saved (circuit breaker + hourly cap) |
 
 Three of the five TRACE metrics gate a level: change-failure rate (L3),
 escalation rate and agreement rate (L5). Time to triage
-(`median_time_to_diagnosis_s`) and time to resolve
+(`median_time_to_triage_s`) and time to resolve
 (`median_time_to_resolve_s`) gate none (chapter 81 explains why); they are
 returned in `metrics` and shown as tiles, and that is all.
 

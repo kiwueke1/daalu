@@ -29,8 +29,8 @@ class InvestigationOut(BaseModel):
     alert_status: str
     alert_created_at: datetime
     started_at: datetime
-    diagnosed_at: datetime | None
-    time_to_diagnosis_s: float | None
+    triaged_at: datetime | None
+    time_to_triage_s: float | None
     root_cause: str
     actions_proposed: int
     actions_approved: int
@@ -72,8 +72,8 @@ def _out(inv: Investigation, alert: Alert) -> dict[str, Any]:
         "alert_status": alert.status.value,
         "alert_created_at": alert.created_at,
         "started_at": inv.started_at,
-        "diagnosed_at": inv.diagnosed_at,
-        "time_to_diagnosis_s": _secs(inv.diagnosed_at, alert.created_at),
+        "triaged_at": inv.triaged_at,
+        "time_to_triage_s": _secs(inv.triaged_at, alert.created_at),
         "root_cause": inv.root_cause,
         "actions_proposed": inv.actions_proposed,
         "actions_approved": inv.actions_approved,
@@ -110,7 +110,7 @@ async def list_investigations(
     if resolution:
         q = q.where(Investigation.resolution == resolution)
     if needs_verdict:
-        q = q.where(Investigation.verdict.is_(None), Investigation.diagnosed_at.is_not(None))
+        q = q.where(Investigation.verdict.is_(None), Investigation.triaged_at.is_not(None))
     q = q.order_by(Investigation.started_at.desc()).limit(max(1, min(limit, 1000)))
     rows = (await db.execute(q)).all()
     return [_out(i, a) for i, a in rows]
@@ -193,7 +193,7 @@ async def submit_verdict(
     user: User = Depends(current_user),
 ):
     """Grade the AI's root cause: correct / partial / wrong. This is the
-    ground truth behind RCA-agreement rate and the eval material."""
+    ground truth behind the agreement rate and the eval material."""
     inv, alert = await _get(db, tenant_id, inv_id)
     inv_mod.set_verdict(inv, body.verdict, by=user.email, note=body.note)
     await audit.record(

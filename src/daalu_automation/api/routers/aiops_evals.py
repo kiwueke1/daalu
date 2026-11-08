@@ -87,7 +87,7 @@ async def get_leaderboard(
     tenant_id=Depends(current_tenant_id),
 ) -> list[dict[str, Any]]:
     """``[{label, runs, mean_score, pass_rate, scenarios, per_scenario,
-    median_time_to_diagnosis_s}]``, best first. Runs flagged invalid (answered
+    median_time_to_triage_s}]``, best first. Runs flagged invalid (answered
     by the wrong model) are excluded."""
     q = select(EvalRun).where(EvalRun.tenant_id == tenant_id)
     if days:

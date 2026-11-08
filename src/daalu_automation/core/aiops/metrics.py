@@ -1,8 +1,8 @@
 """AI-Ops metrics (docs/design/ai-ops-maturity.md §7, shape in §13).
 
 The DORA-style numbers behind the maturity level: how much of the alert load
-the AI triages, how fast and how correctly it diagnoses, how often its changes
-are approved and how often they fail, how much resolves without a human.
+the AI triages, how fast it triages, how often humans agree with it, how often its changes
+are approved and how often they fail, how much still needs a human.
 
 Window: alerts created in the last ``days`` days; investigations of those
 alerts; write actions proposed in the window; eval runs started in the window.
@@ -92,8 +92,8 @@ async def collect(db: AsyncSession, tenant_id: uuid.UUID, days: int = 30) -> tup
         )
     ).all()
 
-    # Diagnosis, verdicts, resolutions.
-    ttd: list[float] = []
+    # Triage, verdicts, resolutions.
+    ttt: list[float] = []
     ttr: list[float] = []
     verdicts = {"correct": 0, "partial": 0, "wrong": 0}
     resolutions = dict.fromkeys(RESOLUTIONS, 0)
@@ -106,10 +106,10 @@ async def collect(db: AsyncSession, tenant_id: uuid.UUID, days: int = 30) -> tup
         d = _day(inv.started_at)
         if d:
             daily_inv[d] = daily_inv.get(d, 0) + 1
-        if inv.diagnosed_at is not None:
-            s = _secs(inv.diagnosed_at, alert.created_at)
+        if inv.triaged_at is not None:
+            s = _secs(inv.triaged_at, alert.created_at)
             if s is not None:
-                ttd.append(s)
+                ttt.append(s)
         if inv.verdict in verdicts:
             verdicts[inv.verdict] += 1
         res, at = effective_resolution(inv, alert)
@@ -202,8 +202,8 @@ async def collect(db: AsyncSession, tenant_id: uuid.UUID, days: int = 30) -> tup
         "alerts_total": len(alerts),
         "investigations_total": investigations_total,
         "ai_triage_rate": _rate(len(triaged_alerts & alerts_by_id.keys()), len(alerts)),
-        "median_time_to_diagnosis_s": _median(ttd),
-        "rca_agreement_rate": _rate(verdicts["correct"] + 0.5 * verdicts["partial"], n_verdicts),
+        "median_time_to_triage_s": _median(ttt),
+        "agreement_rate": _rate(verdicts["correct"] + 0.5 * verdicts["partial"], n_verdicts),
         "verdict_coverage": _rate(n_verdicts, investigations_total),
         "verdicts": verdicts,
         "proposal_approval_rate": _rate(approved, approved + rejected),
@@ -215,10 +215,9 @@ async def collect(db: AsyncSession, tenant_id: uuid.UUID, days: int = 30) -> tup
             "executed": len(executed),
             "failed_verification": failed_verification,
         },
-        "ai_change_failure_rate": _rate(failed_verification, len(executed)),
+        "change_failure_rate": _rate(failed_verification, len(executed)),
         # TRACE "E": resolved incidents that still needed a human (approved or manual).
         "escalation_rate": _rate(n_resolved - resolutions["auto"], n_resolved),
-        "auto_resolution_rate": _rate(resolutions["auto"], n_resolved),  # = 1 - escalation_rate
         "resolutions": resolutions,
         "median_time_to_resolve_s": _median(ttr),
         "runbooks_published": runbooks_published,

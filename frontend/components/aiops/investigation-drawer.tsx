@@ -71,7 +71,7 @@ export function InvestigationDrawer({ id, onClose }: { id: string; onClose: () =
                 </div>
                 <div>
                   <dt className="text-muted">Time to triage</dt>
-                  <dd className="tabular-nums">{fmtDuration(inv.time_to_diagnosis_s)}</dd>
+                  <dd className="tabular-nums">{fmtDuration(inv.time_to_triage_s)}</dd>
                 </div>
                 <div>
                   <dt className="text-muted">Time to resolve</dt>
@@ -94,7 +94,7 @@ export function InvestigationDrawer({ id, onClose }: { id: string; onClose: () =
                 )}
               </section>
 
-              {inv.diagnosed_at && (
+              {inv.triaged_at && (
                 <section className="surface p-4">
                   <VerdictButtons investigation={inv} />
                 </section>

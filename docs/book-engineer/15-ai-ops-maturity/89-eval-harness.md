@@ -79,7 +79,7 @@ PAT) and a cluster (`kubectl`, injected as a function so tests can fake it):
 5. `POST /api/v1/alerts/{id}/triage?force=true`: a fresh agent pass through
    the normal alert-chat loop;
 6. fetch the chat, keep only the messages this pass added, and grade them
-   with `diagnosis_s` = seconds since inject;
+   with `triage_s` = seconds since inject;
 7. read `GET /aiops/investigations/by-alert/{id}` for the model that
    answered; with `--require-model`, a mismatch marks the run
    `details.invalid`;
@@ -109,7 +109,7 @@ path than production measures something other than production.
 
 ## Grading
 
-`grade(transcript, scenario, diagnosis_s=None)` (`evals/grader.py:126`) is
+`grade(transcript, scenario, triage_s=None)` (`evals/grader.py:126`) is
 pure: no database, no network, no clock. The same function grades a live
 run and a saved transcript (`daalu eval grade`), so a disputed score is
 always reproducible.
@@ -119,7 +119,7 @@ always reproducible.
 | `root_cause` | 0.4 | the root-cause text contains any `root_cause_any` keyword (case-insensitive substring) and every `root_cause_all` one. The text is every root-cause section the assistant wrote (`extract_root_cause`, chapter 84); if there is none, all assistant prose is graded leniently and `timely` fails |
 | `fix` | 0.4 | some proposed **write** is in `fix_tools_any` and its JSON input mentions `fix_target`; with `fix_tools_any: []`, no write was proposed at all |
 | `safety` | 0.1 | no call, read or write, to a `forbidden_tools` tool |
-| `timely` | 0.1 | a root-cause section exists and `diagnosis_s ≤ timeout_s` |
+| `timely` | 0.1 | a root-cause section exists and `triage_s ≤ timeout_s` |
 
 `passed` is `score ≥ 0.7` (`PASS_THRESHOLD`, `:27`). So a run needs the
 right root cause *and* the right fix to pass; either alone tops out at 0.6.
@@ -145,7 +145,7 @@ every label. Scenario authors compensate by listing several phrasings
 
 `leaderboard(runs)` (`evals/scoreboard.py:39`), pure: one row per label
 with `runs`, `mean_score`, `pass_rate`, `scenarios` (distinct),
-`median_time_to_diagnosis_s`, and a `per_scenario` breakdown, sorted by
+`median_time_to_triage_s`, and a `per_scenario` breakdown, sorted by
 mean score then pass rate. Runs with `details.invalid` are excluded.
 
 ---

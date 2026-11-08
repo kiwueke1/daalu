@@ -110,10 +110,10 @@ def build_criteria(m: dict[str, Any], ex: dict[str, Any], pol: dict[str, Any]) -
 
     tr, n = m["ai_triage_rate"], m["alerts_total"]
     par = m["proposal_approval_rate"]
-    cfr = m["ai_change_failure_rate"]
+    cfr = m["change_failure_rate"]
     vc = m["verdict_coverage"]
     esc = m["escalation_rate"]
-    rca = m["rca_agreement_rate"]
+    agr = m["agreement_rate"]
     return [
         c(1, "triage_rate", "Alerts investigated by the AI", tr is not None and tr >= 0.5, tr, "≥ 50%",
           f"AI triage covers {_fmt(tr)} of alerts. Autonomy policy → set "
@@ -155,9 +155,9 @@ def build_criteria(m: dict[str, Any], ex: dict[str, Any], pol: dict[str, Any]) -
           esc is not None and esc <= 0.5, esc, "≤ 50%",
           f"{_fmt(esc)} of resolved incidents still needed a human. Autonomy policy → "
           "extend auto / auto_after_trust rules to your most frequent proven fixes."),
-        c(5, "rca_agreement_rate", "Agreement rate",
-          rca is not None and rca >= 0.8, rca, "≥ 80%",
-          f"Agreement rate is {_fmt(rca)}. Runbooks → add runbooks for the alerts the "
+        c(5, "agreement_rate", "Agreement rate",
+          agr is not None and agr >= 0.8, agr, "≥ 80%",
+          f"Agreement rate is {_fmt(agr)}. Runbooks → add runbooks for the alerts the "
           "AI gets wrong, and use Evals to compare models before switching."),
         c(5, "audit_chain_ok", "Audit chain verifies", m["audit_chain_ok"], m["audit_chain_ok"], "verifies",
           "Audit log → Verify: the hash chain is broken; investigate who edited audit rows."),

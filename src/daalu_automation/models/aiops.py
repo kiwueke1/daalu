@@ -5,7 +5,7 @@ See ``docs/design/ai-ops-maturity.md`` for the contract these back:
 * :class:`AutonomyPolicy` — versioned policy-as-code YAML per tenant.
 * :class:`AIOpsTenantState` — kill switch + circuit-breaker state.
 * :class:`Investigation` — one AI investigation per alert; the learning-loop
-  record (time to diagnosis, outcome, human verdict).
+  record (time to triage, outcome, human verdict).
 * :class:`AuditEvent` — append-only, per-tenant hash chain.
 * :class:`Runbook` — runbook-as-code the agent reads and drafts.
 * :class:`EvalRun` — one eval-harness scenario run.
@@ -79,7 +79,7 @@ class Investigation(UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin, Base
         index=True,
     )
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    diagnosed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    triaged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     root_cause: Mapped[str] = mapped_column(Text, default="", nullable=False)
     actions_proposed: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     actions_approved: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

@@ -46,7 +46,7 @@ change-failure rate stays low, with escalation rate falling on top.
 ### Time to triage
 
 **What:** the median time from an alert firing to the AI posting its root
-cause. Undiagnosed alerts aren't included.
+cause. Alerts the AI hasn't triaged aren't included.
 **Tile:** **Time to triage** (median).
 **Read it:** seconds to a few minutes is normal with automatic investigation.
 Long times usually mean the alert sat unopened before anyone triggered the

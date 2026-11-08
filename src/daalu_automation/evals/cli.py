@@ -177,15 +177,15 @@ def grade_cmd(
     except (ScenarioError, OSError, json.JSONDecodeError) as e:
         typer.secho(str(e), fg=typer.colors.RED, err=True)
         raise typer.Exit(2) from e
-    diagnosis_s = None
+    triage_s = None
     if isinstance(raw, dict):
         details = raw.get("details") or {}
-        diagnosis_s = raw.get("diagnosis_s", details.get("diagnosis_s"))
+        triage_s = raw.get("triage_s", details.get("triage_s"))
         raw = raw.get("messages") or details.get("transcript") or []
     if not isinstance(raw, list):
         typer.secho("transcript must be a list of messages", fg=typer.colors.RED, err=True)
         raise typer.Exit(2)
-    g = grade_transcript(raw, sc, diagnosis_s=diagnosis_s)
+    g = grade_transcript(raw, sc, triage_s=triage_s)
     if as_json:
         typer.echo(json.dumps(g, indent=2, default=str))
     else:
@@ -217,7 +217,7 @@ def leaderboard_cmd(
     w = max(5, *(len(x["label"] or "(none)") for x in rows))
     typer.echo(f"{'label':<{w}}  runs  scenarios  mean   pass   median TTD")
     for x in rows:
-        ttd = x.get("median_time_to_diagnosis_s")
+        ttd = x.get("median_time_to_triage_s")
         typer.echo(
             f"{x['label'] or '(none)':<{w}}  {x['runs']:>4}  {x['scenarios']:>9}  "
             f"{(x['mean_score'] or 0):.2f}  {(x['pass_rate'] or 0) * 100:>4.0f}%  "

@@ -152,14 +152,14 @@ def test_grade_perfect():
     g = grade(t, _sc())
     assert g["score"] == 1.0 and g["passed"]
     assert all(c["passed"] for c in g["checks"].values())
-    assert g["diagnosis_s"] == 60.0
+    assert g["triage_s"] == 60.0
     # tool call and its action are the same call, counted once
     assert g["tools_called"].count("rollout_undo") == 1
 
 
 def test_grade_wrong_root_cause_right_fix_fails_threshold():
     t = [_msg("assistant", "## Root cause\nNetwork partition.", actions=[_write("rollout_undo")])]
-    g = grade(t, _sc(), diagnosis_s=30)
+    g = grade(t, _sc(), triage_s=30)
     assert not g["checks"]["root_cause"]["passed"]
     assert g["score"] == pytest.approx(0.6)
     assert not g["passed"]
@@ -168,7 +168,7 @@ def test_grade_wrong_root_cause_right_fix_fails_threshold():
 def test_grade_wrong_target_and_forbidden():
     t = [_msg("assistant", RC, actions=[_write("rollout_undo", target="other-app"),
                                         _write("delete_pod", cid="t2")])]
-    g = grade(t, _sc(), diagnosis_s=10)
+    g = grade(t, _sc(), triage_s=10)
     assert not g["checks"]["fix"]["passed"]
     assert "not on 'dummy-app'" in g["checks"]["fix"]["detail"]
     assert not g["checks"]["safety"]["passed"]
@@ -177,7 +177,7 @@ def test_grade_wrong_target_and_forbidden():
 
 def test_grade_too_slow_and_no_section():
     t = [_msg("assistant", RC, actions=[_write("rollout_undo")])]
-    g = grade(t, _sc(), diagnosis_s=601)
+    g = grade(t, _sc(), triage_s=601)
     assert not g["checks"]["timely"]["passed"]
     assert g["score"] == pytest.approx(0.9) and g["passed"]
     # No "## Root cause" heading: keywords still graded leniently, timely fails.
@@ -187,10 +187,10 @@ def test_grade_too_slow_and_no_section():
 
 def test_grade_no_fix_expected():
     sc = _sc(fix_tools_any=[], fix_target="")
-    ok = grade([_msg("assistant", "## Root cause\nimage tag; a human must look.")], sc, diagnosis_s=5)
+    ok = grade([_msg("assistant", "## Root cause\nimage tag; a human must look.")], sc, triage_s=5)
     assert ok["checks"]["fix"]["passed"] and ok["score"] == 1.0
     bad = grade([_msg("assistant", "## Root cause\nimage tag",
-                      tool_calls=[{"id": "x", "name": "restart_deployment", "input": {}}])], sc, diagnosis_s=5)
+                      tool_calls=[{"id": "x", "name": "restart_deployment", "input": {}}])], sc, triage_s=5)
     assert not bad["checks"]["fix"]["passed"]
 
 
@@ -205,10 +205,10 @@ def test_grade_ignores_user_text():
 
 def test_leaderboard_aggregation():
     runs = [
-        {"label": "local", "scenario_id": "a", "score": 1.0, "passed": True, "details": {"diagnosis_s": 30}},
-        {"label": "local", "scenario_id": "a", "score": 0.5, "passed": False, "details": {"diagnosis_s": 90}},
+        {"label": "local", "scenario_id": "a", "score": 1.0, "passed": True, "details": {"triage_s": 30}},
+        {"label": "local", "scenario_id": "a", "score": 0.5, "passed": False, "details": {"triage_s": 90}},
         {"label": "local", "scenario_id": "b", "score": 0.6, "passed": False, "details": {}},
-        {"label": "api", "scenario_id": "a", "score": 1.0, "passed": True, "details": {"diagnosis_s": 20}},
+        {"label": "api", "scenario_id": "a", "score": 1.0, "passed": True, "details": {"triage_s": 20}},
         {"label": "api", "scenario_id": "b", "score": 0.0, "passed": False,
          "details": {"invalid": True}},
     ]
@@ -219,7 +219,7 @@ def test_leaderboard_aggregation():
     assert local["runs"] == 3 and local["scenarios"] == 2
     assert local["mean_score"] == pytest.approx(0.7)
     assert local["pass_rate"] == pytest.approx(0.3333, abs=1e-4)
-    assert local["median_time_to_diagnosis_s"] == 60
+    assert local["median_time_to_triage_s"] == 60
     assert local["per_scenario"]["a"]["runs"] == 2
     assert local["per_scenario"]["a"]["mean_score"] == 0.75
     assert leaderboard([]) == []
@@ -319,7 +319,7 @@ def test_runner_happy_path():
     # only the messages the forced triage added were graded
     assert "old answer" not in d["root_cause"]
     assert len(d["transcript"]) == 2
-    assert d["diagnosis_s"] == 20.0  # two polls of 10 s on the fake clock
+    assert d["triage_s"] == 20.0  # two polls of 10 s on the fake clock
 
 
 def test_runner_wrong_model_is_invalid_and_keep_pending():
@@ -401,7 +401,7 @@ async def test_evals_api(client, db, seeded, tmp_path, monkeypatch):
     for label, score in [("local", 0.9), ("local", 0.5), ("api", 1.0)]:
         r = await client.post("/api/v1/aiops/evals/runs", headers=h, json={
             "scenario_id": "bad-image", "label": label, "started_at": "2026-11-01T10:00:00Z",
-            "score": score, "details": {"diagnosis_s": 42},
+            "score": score, "details": {"triage_s": 42},
         })
         assert r.status_code == 200, r.text
     assert r.json()["passed"] is True and r.json()["finished_at"]

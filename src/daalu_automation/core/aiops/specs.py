@@ -128,7 +128,7 @@ class Investigation(_Strict):
     id: uuid.UUID | None = None
     alert_id: uuid.UUID
     started_at: datetime
-    diagnosed_at: datetime | None = Field(
+    triaged_at: datetime | None = Field(
         default=None, description="First answer that named a root cause.")
     root_cause: str = ""
     actions_proposed: int = Field(default=0, ge=0)

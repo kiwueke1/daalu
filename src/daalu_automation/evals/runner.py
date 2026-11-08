@@ -234,7 +234,7 @@ class EvalRunner:
             r.raise_for_status()
             elapsed = round(self.clock() - t0, 1)
             transcript = self._chat(alert_id)[n_before:]
-            result_grade = grade(transcript, scenario, diagnosis_s=elapsed)
+            result_grade = grade(transcript, scenario, triage_s=elapsed)
             details["transcript"] = _compact(transcript)
 
             # Which model actually answered (contamination check).
@@ -268,7 +268,7 @@ class EvalRunner:
                 "root_cause": result_grade["root_cause"],
                 "tools_called": result_grade["tools_called"],
                 "writes_proposed": result_grade["writes_proposed"],
-                "diagnosis_s": result_grade["diagnosis_s"],
+                "triage_s": result_grade["triage_s"],
             })
         score = result_grade["score"] if result_grade else 0.0
         passed = bool(result_grade and result_grade["passed"]) and not details.get("invalid")

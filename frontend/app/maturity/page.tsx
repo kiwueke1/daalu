@@ -96,10 +96,10 @@ export default function MaturityPage() {
                 value={fmtRate(met.ai_triage_rate)}
                 hint={`${met.investigations_total} of ${met.alerts_total} alerts`}
               />
-              <StatTile label="Time to triage" value={fmtDuration(met.median_time_to_diagnosis_s)} hint="median" />
+              <StatTile label="Time to triage" value={fmtDuration(met.median_time_to_triage_s)} hint="median" />
               <StatTile
                 label="Agreement rate"
-                value={fmtRate(met.rca_agreement_rate)}
+                value={fmtRate(met.agreement_rate)}
                 hint={`verdicts on ${fmtRate(met.verdict_coverage)} of investigations`}
               />
               <StatTile
@@ -109,10 +109,10 @@ export default function MaturityPage() {
               />
               <StatTile
                 label="Change-failure rate"
-                value={fmtRate(met.ai_change_failure_rate)}
+                value={fmtRate(met.change_failure_rate)}
                 hint={`${met.actions.failed_verification} of ${met.actions.executed} executed failed verification`}
                 tone={
-                  met.ai_change_failure_rate !== null && met.ai_change_failure_rate > 0.15
+                  met.change_failure_rate !== null && met.change_failure_rate > 0.15
                     ? "critical"
                     : undefined
                 }

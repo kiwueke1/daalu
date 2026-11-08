@@ -99,7 +99,7 @@ function InvestigationsInner() {
               <tr>
                 <th className="text-left px-4 py-2.5">Alert</th>
                 <th className="text-left px-4 py-2.5">Started</th>
-                <th className="text-right px-4 py-2.5">To diagnosis</th>
+                <th className="text-right px-4 py-2.5">To triage</th>
                 <th className="text-left px-4 py-2.5" title="proposed / approved / rejected / auto">
                   Actions P / A / R / Auto
                 </th>
@@ -126,7 +126,7 @@ function InvestigationsInner() {
                   </td>
                   <td className="px-4 py-2.5 text-muted whitespace-nowrap">{formatRelative(r.started_at)}</td>
                   <td className="px-4 py-2.5 text-right tabular-nums">
-                    {r.diagnosed_at ? fmtDuration(r.time_to_diagnosis_s) : <span className="text-muted">—</span>}
+                    {r.triaged_at ? fmtDuration(r.time_to_triage_s) : <span className="text-muted">—</span>}
                   </td>
                   <td className="px-4 py-2.5 tabular-nums text-muted whitespace-nowrap">
                     {r.actions_proposed} / {r.actions_approved} / {r.actions_rejected} /{" "}
@@ -140,7 +140,7 @@ function InvestigationsInner() {
                   <td className="px-4 py-2.5">
                     {r.verdict ? (
                       <VerdictChip verdict={r.verdict} />
-                    ) : r.diagnosed_at ? (
+                    ) : r.triaged_at ? (
                       <Chip tone="accent" solid>needs verdict</Chip>
                     ) : (
                       <span className="text-muted text-xs">—</span>

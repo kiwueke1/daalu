@@ -77,7 +77,7 @@ export function VerdictButtons({
   return (
     <div className="space-y-2">
       <div className="text-xs text-muted">
-        Was the AI&apos;s root cause right? Your answer feeds the RCA-agreement
+        Was the AI&apos;s root cause right? Your answer feeds the agreement-rate
         metric on the Maturity page.
       </div>
       <div className="flex flex-wrap items-center gap-2">

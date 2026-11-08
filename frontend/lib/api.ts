@@ -1306,8 +1306,8 @@ export interface Investigation {
   alert_status: string;
   alert_created_at: string;
   started_at: string;
-  diagnosed_at: string | null;
-  time_to_diagnosis_s: number | null;
+  triaged_at: string | null;
+  time_to_triage_s: number | null;
   root_cause: string;
   actions_proposed: number;
   actions_approved: number;
@@ -1400,8 +1400,8 @@ export interface AiopsMetrics {
   alerts_total: number;
   investigations_total: number;
   ai_triage_rate: Rate;
-  median_time_to_diagnosis_s: number | null;
-  rca_agreement_rate: Rate;
+  median_time_to_triage_s: number | null;
+  agreement_rate: Rate;
   verdict_coverage: Rate;
   verdicts: { correct: number; partial: number; wrong: number };
   proposal_approval_rate: Rate;
@@ -1413,9 +1413,8 @@ export interface AiopsMetrics {
     executed: number;
     failed_verification: number;
   };
-  ai_change_failure_rate: Rate;
+  change_failure_rate: Rate;
   escalation_rate: Rate;
-  auto_resolution_rate: Rate;
   resolutions: { auto: number; approved: number; manual: number; unresolved: number; open: number };
   median_time_to_resolve_s: number | null;
   runbooks_published: number;
