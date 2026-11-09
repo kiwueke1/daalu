@@ -1,7 +1,7 @@
 # 31. The LLM router
 
 `core/llm_router.py`. Decides for each inference call where
-to send it. Chapter 36 of the customer book covers the
+to send it. Chapter 36 of the user guide covers the
 user-visible behaviour; this chapter is the implementation.
 
 ---

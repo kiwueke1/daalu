@@ -1,6 +1,6 @@
 # 28. Daalu Private
 
-Customer-facing chapter: book-customer §44.
+Customer-facing chapter: user guide §44.
 
 This chapter is the engineer's view of the tier. Where the
 edge-side agent loop runs, how the hub keeps from running the same
@@ -190,8 +190,8 @@ through the right chokepoint.
 
 ## See also
 
-* Chapter 34 (customer book) — daalu-edge install (the chart that
+* Chapter 34 (user guide) — daalu-edge install (the chart that
   now hosts the edge agents)
-* Chapter 39 (customer book) — Daalu Private buyer-facing
-* Chapter 18 (customer book) — Change proposals (the agent's only
+* Chapter 39 (user guide) — Daalu Private buyer-facing
+* Chapter 18 (user guide) — Change proposals (the agent's only
   path to changing customer infrastructure, regardless of tier)

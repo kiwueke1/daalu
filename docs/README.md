@@ -26,7 +26,7 @@ Start here:
 Books and feature guides:
 
 - **[book-engineer/](book-engineer/README.md)** — the engineering handbook.
-- **[book-customer/](book-customer/README.md)** — the user handbook.
+- **[user-guide/](user-guide/README.md)** — the user handbook.
 - **[cluster-tunnel-feature.md](cluster-tunnel-feature.md)** — WireGuard
   cluster federation (hub + daalu-edge).
 - **[cloud-onboarding.md](cloud-onboarding.md)** and

@@ -1,6 +1,6 @@
 # Daalu Automation — Engineering & Operations Manual
 
-The internal companion to the customer-facing *Operator's Handbook*. This
+The internal companion to the customer-facing *User Guide*. This
 manual is for the people who build, deploy, and operate Daalu Automation
 itself.
 

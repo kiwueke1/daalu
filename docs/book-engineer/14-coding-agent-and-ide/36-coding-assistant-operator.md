@@ -6,7 +6,7 @@ users, in the order it needs to happen. If you're standing up the
 feature for the first time, or onboarding a new tenant to use it, this
 is your checklist.
 
-Customer-facing walkthrough: book-customer/26.
+Customer-facing walkthrough: user-guide/26.
 
 > **Note.** The "wire the gateway" step here assumes the
 > in-hub inference-gateway, which is optional. Without it, wire
@@ -616,4 +616,4 @@ backup, etc.
 * Chapter 34 — inference-gateway (the LLM backend for both the
   activity-bar panel and ``daalu chat``).
 * Chapter 57 — tenant-isolation patterns.
-* Customer-facing walkthrough: book-customer chapter 56.
+* Customer-facing walkthrough: user-guide chapter 56.

@@ -11,13 +11,13 @@ Daalu. A proposal only runs automatically if the matching policy rule sets
 
 Every call is recorded in the audit log as `mcp.call`, under your email.
 Background: [engineer book ch. 90](book-engineer/15-ai-ops-maturity/90-mcp-server-and-open-specs.md),
-[customer book ch. 58](book-customer/09-ai-operations-maturity/58-connect-your-agent-with-mcp.md).
+[user guide ch. 58](user-guide/09-ai-operations-maturity/58-connect-your-agent-with-mcp.md).
 
 ## 1. Quick start: the laptop CLI
 
 Install the `daalu` CLI on the machine where your agent runs (the same CLI
 as the terminal coding agent, see the
-[CLI chapter](book-customer/04-feature-walkthroughs/47-daalu-cli-terminal.md)):
+[CLI chapter](user-guide/04-feature-walkthroughs/47-daalu-cli-terminal.md)):
 
 ```bash
 curl -fsSL https://get.daalu.io/install.sh | sh     # or: brew install daalu-io/tap/daalu

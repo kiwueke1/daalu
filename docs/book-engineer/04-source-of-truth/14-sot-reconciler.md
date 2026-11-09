@@ -160,7 +160,7 @@ class ReconcileRun(UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin, Base)
 ```
 
 This backs the *Routine runs* tab on the Operations page
-(Chapter 18 of the customer book).
+(Chapter 18 of the user guide).
 
 ---
 

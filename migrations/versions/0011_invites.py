@@ -4,7 +4,7 @@ Revision ID: 0011_invites
 Revises: 0010_edge_data_plane
 Create Date: 2026-05-25
 
-Implements the Team-tab feature spec'd in book-customer §6. One row
+Implements the Team-tab feature spec'd in user guide §6. One row
 per outstanding or historical invite. The cleartext token is shown
 to the inviter exactly once (embedded in the invite URL); only the
 sha256 is persisted so a DB leak doesn't yield usable invite

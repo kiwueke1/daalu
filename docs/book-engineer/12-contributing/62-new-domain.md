@@ -195,7 +195,7 @@ a specific queue (executor, agents, etc.).
 
 ## 8. Document
 
-- Update the customer book's chapter list if the module is
+- Update the user guide's chapter list if the module is
   user-facing.
 - Add to the engineer book's Part II Chapter 8 if it
   changes the module catalog.

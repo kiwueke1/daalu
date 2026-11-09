@@ -216,7 +216,7 @@ Top-level:
 - `deploy/argocd/` — ArgoCD application manifests.
 - `deploy/scripts/install.sh` — manual rollout script.
 - `migrations/` — Alembic migration scripts.
-- `docs/` — this manual and the customer handbook.
+- `docs/` — this manual and the user guide.
 - `dev/` — local-dev helpers.
 - `tests/` — pytest test suite.
 - `scripts/` — assorted operational scripts.

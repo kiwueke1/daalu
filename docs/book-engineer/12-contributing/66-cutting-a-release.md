@@ -172,4 +172,4 @@ it current is everyone's job.
 End of the *Engineering & Operations Manual*.
 
 For the customer-facing companion, see the *Operator's
-Handbook* in the sibling `docs/book-customer/` directory.
+Handbook* in the sibling `docs/user-guide/` directory.

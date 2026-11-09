@@ -47,8 +47,8 @@ behalf (chapter 77).
 
 ## Related reading
 
-- Customer-facing walkthrough: `docs/book-customer/04-feature-walkthroughs/26-coding-assistant.md`
-- Customer-facing CLI how-to: `docs/book-customer/04-feature-walkthroughs/47-daalu-cli-terminal.md`
+- Customer-facing walkthrough: `docs/user-guide/04-feature-walkthroughs/26-coding-assistant.md`
+- Customer-facing CLI how-to: `docs/user-guide/04-feature-walkthroughs/47-daalu-cli-terminal.md`
 - The CLI source: `cli/`
 - The inference backend: [Part VI, ch. 34 — inference-gateway](../06-gpu-and-llm-serving/34-inference-gateway.md)
 - Cluster federation / the tunnel these prompts ride: [Part V](../05-cluster-federation/)

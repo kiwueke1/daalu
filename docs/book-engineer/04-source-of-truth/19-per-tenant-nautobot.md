@@ -28,7 +28,7 @@ silent data-isolation failure on every upgrade.
 Per-tenant Nautobot eliminates this class of bug structurally: there
 is nothing to constrain because there is nothing shared.
 
-Customer-facing walkthrough: book-customer/30.
+Customer-facing walkthrough: user-guide/30.
 Engineer architecture cross-references: chapter 14 (reconciler),
 chapter 15 (Nautobot adapter), chapter 17 (executor identity), chapter
 18 (the prior shared-Nautobot operator runbook — now deprecated).

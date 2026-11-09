@@ -269,7 +269,7 @@ See Chapter 21.
 
 ---
 
-End of the Operator's Handbook.
+End of the User Guide.
 
 For the engineering / operations companion, see the
 *Engineering & Operations Manual* in the sibling

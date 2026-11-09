@@ -15,14 +15,14 @@ policy, and per-tenant config:
   the URL in ``settings.llm_local_base_url`` directly; multi-tenant
   hub deployments go through the ``inference-gateway`` Service
   (``settings.daalu_hosted_gateway_url``) which enforces per-tenant
-  quotas, rate limits, and metering. The *customer book* calls this
+  quotas, rate limits, and metering. The *user guide* calls this
   the "daalu-hosted" tier.
 * **EXTERNAL_CLASSIFIER** — third-party OpenAI-compatible endpoint
   (DeepSeek/Together/etc.).
 * **EXTERNAL_QUALITY** — Anthropic Claude.
 
 **Terminology note.** The code's ``LOCAL`` tier means *operator-
-hosted*. The customer book uses "local" to mean *customer-hosted*.
+hosted*. The user guide uses "local" to mean *customer-hosted*.
 The two senses are inverted because the code predates the
 multi-tenant pivot. To avoid confusion in writing always say
 "daalu-hosted" for code's LOCAL and "the customer's federated GPU"
@@ -521,7 +521,7 @@ async def _resolve_plan(
     # override the SKU's prefers_local heuristic and always include
     # LOCAL when reachable, because the only legal cascade for coding
     # is local/sovereign — falling through to cloud would break the
-    # privacy promise in book-customer §43.
+    # privacy promise in user guide §43.
     want_local = coding_constrained or (allows_local(policy) and prefers_local(policy, tier))
     local_direct_ok = bool(settings.llm_local_base_url) and await _local_is_healthy()
     local_via_gateway_ok = bool(settings.daalu_hosted_gateway_url) and tenant_cfg.daalu_hosted_enabled

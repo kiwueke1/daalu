@@ -201,4 +201,4 @@ introducing a second model.
 * Chapter 35 — coding-assistant architecture.
 * Chapter 36 — operator runbook (deploying the coder, the 502 fix).
 * Chapter 30 — vLLM deployment fundamentals.
-* Customer book chapter 26 — the model-picker UX.
+* User guide chapter 26 — the model-picker UX.

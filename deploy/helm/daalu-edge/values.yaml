@@ -234,7 +234,7 @@ serviceProxyDefaults:
 # Settings page issues the `serviceToken` cleartext + `tenantId`
 # you paste below.
 #
-# See docs/design/edge-data-plane.md and book-customer §44.
+# See docs/design/edge-data-plane.md and user guide §44.
 tenantData:
   enabled: false
   # Same image as the hub's daalu-api, different entrypoint

@@ -1,6 +1,6 @@
 # 29. The edge data plane
 
-Customer-facing chapter: book-customer §44 (the "Private (full)"
+Customer-facing chapter: user guide §44 (the "Private (full)"
 column).
 
 This chapter is for engineers who'll change the hub-side forwarder,
@@ -219,8 +219,8 @@ without spilling user data.
 
 ## See also
 
-* Chapter 39 (customer book) — buyer-facing tier story
+* Chapter 39 (user guide) — buyer-facing tier story
 * Chapter 28 — Daalu Private (edge-agents tier; this chapter is
   the next step beyond it)
 * Chapter 57 (engineer book) — tenant isolation
-* Chapter 34 (customer book) — installing daalu-edge
+* Chapter 34 (user guide) — installing daalu-edge

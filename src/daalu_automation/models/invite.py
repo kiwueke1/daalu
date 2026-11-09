@@ -1,6 +1,6 @@
 """Single-use invite tokens for adding users to a tenant.
 
-Spec'd in book-customer §6 ("Inviting your team"). One row per
+Spec'd in user guide §6 ("Inviting your team"). One row per
 invite. Lifecycle derived from the timestamp + revoked_at columns:
 
   pending  → accepted_at IS NULL AND revoked_at IS NULL AND expires_at > now()

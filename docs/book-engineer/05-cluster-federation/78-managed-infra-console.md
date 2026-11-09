@@ -1,6 +1,6 @@
 # 78. The managed-infra console pattern
 
-Customer-facing chapter: book-customer §17 ("Managed Infrastructure" →
+Customer-facing chapter: user guide §17 ("Managed Infrastructure" →
 *The cluster detail page* / *Running kubectl commands on a cluster*).
 
 This chapter documents the per-cluster console — the page at

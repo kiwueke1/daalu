@@ -12,7 +12,7 @@ to do next: the metrics first, then how they map to the levels. The standard its
 documented in the
 [engineering manual, Part XV](book-engineer/15-ai-ops-maturity/README.md)
 and, page by page for operators, in the
-[Operator's Handbook, Part IX](book-customer/09-ai-operations-maturity/README.md).
+[User Guide, Part IX](user-guide/09-ai-operations-maturity/README.md).
 
 ---
 
@@ -58,7 +58,7 @@ also available), or "—" when there is nothing to measure yet.
 
 Engineering detail on each definition:
 [ch. 88](book-engineer/15-ai-ops-maturity/88-metrics-and-maturity-scoring.md).
-For operators: [ch. 55](book-customer/09-ai-operations-maturity/55-metrics-dashboard.md).
+For operators: [ch. 55](user-guide/09-ai-operations-maturity/55-metrics-dashboard.md).
 
 ---
 
@@ -185,7 +185,7 @@ their time on the policy and the exceptions.
 
 * The standard: [`spec/README.md`](../spec/README.md)
 * Engineering manual: [Part XV — The AI-Ops Maturity Model](book-engineer/15-ai-ops-maturity/README.md)
-* Operator's Handbook: [Part IX — AI Operations Maturity](book-customer/09-ai-operations-maturity/README.md)
+* User Guide: [Part IX — AI Operations Maturity](user-guide/09-ai-operations-maturity/README.md)
 * Connect Claude Code or Cursor: [`docs/mcp.md`](mcp.md)
 * Eval scenarios: [`evals/README.md`](../evals/README.md)
 * Design contract: [`docs/design/ai-ops-maturity.md`](design/ai-ops-maturity.md)

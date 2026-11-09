@@ -1,4 +1,4 @@
-"""Team invites — admin-only CRUD spec'd in book-customer §6.
+"""Team invites — admin-only CRUD spec'd in user guide §6.
 
 Endpoints:
 

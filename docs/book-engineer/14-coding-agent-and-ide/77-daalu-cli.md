@@ -9,7 +9,7 @@ the GitHub CLI), logs into from the terminal, and runs against *any* local
 codebase. The browser IDE stays; the CLI runs where the user's code already is.
 
 > Customer-facing how-to:
-> `docs/book-customer/04-feature-walkthroughs/47-daalu-cli-terminal.md`.
+> `docs/user-guide/04-feature-walkthroughs/47-daalu-cli-terminal.md`.
 
 ## Why a laptop can't reuse the in-pod path
 

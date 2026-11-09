@@ -28,7 +28,7 @@ to put both on your clipboard.
 
 Links to:
 
-- The *Operator's Handbook* (this book).
+- The *User Guide* (this book).
 - Per-feature quickstarts.
 - The integrations catalog.
 - The API reference.

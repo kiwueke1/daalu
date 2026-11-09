@@ -270,5 +270,5 @@ adapter splice raw TCP through the edge's HTTP `CONNECT` support
 ## What's next
 
 Chapter 19 picks up the parallel story for the SoT
-integrations (Nautobot); chapter 39 in the customer book is
+integrations (Nautobot); chapter 39 in the user guide is
 the user-facing version of this onboarding flow.

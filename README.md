@@ -56,7 +56,7 @@ approval, exactly as before AOMM.
 - Team-facing summary and a 90-day plan: [docs/maturity-model.md](docs/maturity-model.md)
 - The standard and JSON Schemas: [spec/](spec/README.md)
 - Engineering manual, Part XV: [docs/book-engineer/15-ai-ops-maturity/](docs/book-engineer/15-ai-ops-maturity/README.md)
-- Operator's Handbook, Part IX: [docs/book-customer/09-ai-operations-maturity/](docs/book-customer/09-ai-operations-maturity/README.md)
+- User Guide, Part IX: [docs/user-guide/09-ai-operations-maturity/](docs/user-guide/09-ai-operations-maturity/README.md)
 - Connect Claude Code or Cursor over MCP: [docs/mcp.md](docs/mcp.md)
 - Benchmark your AI SRE: [evals/](evals/README.md)
 
@@ -217,7 +217,7 @@ helm install daalu-edge deploy/helm/daalu-edge -n daalu-edge --create-namespace 
 - [docs/extending.md](docs/extending.md): adding a domain module
 - [docs/cluster-tunnel-feature.md](docs/cluster-tunnel-feature.md): the WireGuard federation design
 - [docs/sot-device-management/](docs/sot-device-management/): Nautobot source of truth and device onboarding
-- [docs/book-customer/](docs/book-customer/README.md): the user handbook (features, integrations, troubleshooting)
+- [docs/user-guide/](docs/user-guide/README.md): the user handbook (features, integrations, troubleshooting)
 - [docs/book-engineer/](docs/book-engineer/README.md): the contributor handbook (backend, frontend, federation, GPU, security, testing)
 - [docs/runbooks/](docs/runbooks/README.md): runbooks linked from the shipped alert rules
 - [docs/maturity-model.md](docs/maturity-model.md): the AI-Ops Maturity Model for your team, and [spec/](spec/README.md): the standard itself

@@ -3,7 +3,7 @@
 /**
  * /operations — the Source of Truth hub.
  *
- * Tabbed layout matches docs/book-customer/03-core-concepts/12-source-of-truth.md
+ * Tabbed layout matches docs/user-guide/03-core-concepts/12-source-of-truth.md
  * and the chapter-17 walkthrough. Sub-pages (/devices, /proposals) used
  * to be separate sidebar entries; they now redirect here and the tabs
  * own the surface area.

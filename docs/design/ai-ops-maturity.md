@@ -3,7 +3,7 @@
 Status: implemented on branch `feat/ai-ops-maturity` (2026-11). This is the
 contract every piece of the feature was built against. The narrative
 versions live in the engineer book, Part XV (chapters 81–90), and the
-customer book, Part IX (chapters 51–58).
+user guide, Part IX (chapters 51–58).
 
 ## 1. The standard: AI-Ops Maturity Model (AOMM) v0.1
 
@@ -362,7 +362,7 @@ Engineer book, Part XV `docs/book-engineer/15-ai-ops-maturity/`:
 | 89 | `89-eval-harness.md` | Scenarios, runner, grading, leaderboard |
 | 90 | `90-mcp-server-and-open-specs.md` | MCP transports and tools, `spec/` schemas |
 
-Customer book, Part IX `docs/book-customer/09-ai-operations-maturity/`:
+User guide, Part IX `docs/user-guide/09-ai-operations-maturity/`:
 
 | Ch. | File | Topic |
 |---|---|---|

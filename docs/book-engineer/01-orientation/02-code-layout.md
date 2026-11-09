@@ -16,7 +16,7 @@ daalu-automation/
 ├── frontend/                # Next.js operator UI
 ├── deploy/                  # Helm charts, k8s manifests, scripts
 ├── migrations/              # Alembic migrations
-├── docs/                    # this manual + customer handbook + design docs
+├── docs/                    # this manual + user guide + design docs
 ├── dev/                     # local-dev helpers (docker-compose, env templates)
 ├── tests/                   # pytest suite
 ├── scripts/                 # operational scripts (one-offs)

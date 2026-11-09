@@ -337,4 +337,4 @@ workflow's `perform_configuration_diff` stage.
 - [Chapter 97 — Config backups and diffs](97-config-backups-and-diffs.md): the `backup` file type and drift.
 - [Chapter 98 — Cable validation and ZTP](98-cable-validation-and-ztp.md): the `boot-script` output in use.
 - [Chapter 68 — NV-CM tool SSO through the hub](../13-auth-integrations/68-nvcm-tool-sso-through-the-hub.md): how the Rendering console is reached.
-- Customer view: [Customer ch. 27 — Network & server management](../../book-customer/04-feature-walkthroughs/27-network-and-server-management.md).
+- Customer view: [User guide ch. 27 — Network & server management](../../user-guide/04-feature-walkthroughs/27-network-and-server-management.md).

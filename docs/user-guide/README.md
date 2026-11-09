@@ -1,4 +1,4 @@
-# Daalu Automation — The Operator's Handbook
+# Daalu Automation — User Guide
 
 A complete reference for using Daalu Automation. Start at the beginning if
 you're new; jump to any chapter if you're looking for one specific feature.

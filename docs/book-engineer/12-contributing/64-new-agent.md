@@ -7,7 +7,7 @@ cost-anomaly, cert-expiry.
 
 This chapter walks through adding a new shipped agent.
 For *customer-authored* automations (workflows), see Chapter
-21 of the customer book.
+21 of the user guide.
 
 ---
 
@@ -164,7 +164,7 @@ Cover:
 
 ## 7. Document
 
-- Add a section to Chapter 19 of the customer book.
+- Add a section to Chapter 19 of the user guide.
 - Add to the shipped-agents list in the customer's onboarding
   if user-visible.
 
@@ -178,7 +178,7 @@ Checklist:
 - Registry entry.
 - AgentConfig row default if needed.
 - Tests.
-- Documentation in customer book.
+- Documentation in user guide.
 
 ---
 

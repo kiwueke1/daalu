@@ -1,6 +1,6 @@
 # 35. Coding Assistant architecture
 
-Customer-facing chapter: book-customer/26.
+Customer-facing chapter: user-guide/26.
 
 This chapter is the engineer's tour: how the browser, daalu-api,
 workspace-controller, code-server pod, and inference path fit
@@ -318,5 +318,5 @@ Still on the runway (Phase 2):
 ## See also
 
 * Chapter 34 — inference-gateway (the LLM backend)
-* Chapter 18 (customer book) — change proposals (the path edits take)
+* Chapter 18 (user guide) — change proposals (the path edits take)
 * Chapter 57 — Tenant isolation (the NetworkPolicy + RBAC pattern this chapter uses)

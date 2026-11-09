@@ -261,7 +261,7 @@ Two separate alert stacks:
   Slack + PagerDuty.
 - **Tenant alerts** — fired *for* a specific customer's
   tenant. Routed via the tenant's configured notification
-  channels (Chapter 29 of the customer book).
+  channels (Chapter 29 of the user guide).
 
 The two stacks share infrastructure (Prometheus,
 Alertmanager) but use different routing rules.

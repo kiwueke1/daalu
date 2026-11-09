@@ -189,7 +189,7 @@ didn't author. Admins included.
 
 If you wanted stricter rules (specific approvers, two
 approvers, ticket integration), the place to enforce them is
-the workflow layer (Chapter 21 of the customer book) — the
+the workflow layer (Chapter 21 of the user guide) — the
 proposal API itself stays simple.
 
 ---

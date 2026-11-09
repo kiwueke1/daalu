@@ -182,7 +182,7 @@ def github_mock(respx_mock):
 
 ## 8. Documentation
 
-- New chapter in the customer book's Part V (Integrations
+- New chapter in the user guide's Part V (Integrations
   Catalog), Chapter 33–42 range.
 - Mention in this chapter's running example list.
 
@@ -197,7 +197,7 @@ PR checklist:
 - Registry entry.
 - Migration for enum value.
 - Tests including error modes.
-- Customer-book chapter.
+- User guide chapter.
 
 A reviewer will check: HTTP retries are correct, secrets
 aren't logged, rate-limit handling matches the external

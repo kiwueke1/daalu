@@ -128,7 +128,7 @@ write needs one approval, exactly as before.
 
 ## Related reading
 
-- Customer-facing walkthrough: [Part IX of the Operator's Handbook](../../book-customer/09-ai-operations-maturity/README.md)
+- Customer-facing walkthrough: [Part IX of the User Guide](../../user-guide/09-ai-operations-maturity/README.md)
 - Team-facing summary: [`docs/maturity-model.md`](../../maturity-model.md)
 - Connecting an external agent: [`docs/mcp.md`](../../mcp.md)
 - The standard: [`spec/README.md`](../../../spec/README.md)
