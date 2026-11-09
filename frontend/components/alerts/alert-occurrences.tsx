@@ -38,7 +38,7 @@ export function AlertOccurrences({
       <summary className="cursor-pointer text-[11px] uppercase tracking-wider text-muted flex items-center gap-2">
         <Clock className="h-3 w-3" />
         Fire history
-        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md border border-line text-fg/80 normal-case tracking-normal">
+        <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-md border border-line text-fg/80 normal-case tracking-normal">
           ×{occurrenceCount}
         </span>
       </summary>

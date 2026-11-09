@@ -20,7 +20,7 @@ export function EventFeedCard({ module, max }: { module?: string; max?: number }
           <span className="text-sm font-medium">Live operational feed</span>
         </div>
         <span
-          className="text-[10px] uppercase tracking-[0.18em] animate-shimmer"
+          className="text-[11px] uppercase tracking-[0.18em] animate-shimmer"
           style={{ color: "var(--accent)" }}
         >
           listening
@@ -31,7 +31,7 @@ export function EventFeedCard({ module, max }: { module?: string; max?: number }
         className="pointer-events-none absolute inset-x-0 top-[44px] h-px"
         style={{
           background:
-            "linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent)",
+            "linear-gradient(90deg, transparent, var(--hairline-strong), transparent)",
         }}
       />
       <div className="max-h-[440px] overflow-auto scrollbar-thin">
@@ -54,7 +54,7 @@ export function EventFeedCard({ module, max }: { module?: string; max?: number }
                 className="pointer-events-none absolute inset-x-2 bottom-0 h-px"
                 style={{
                   background:
-                    "linear-gradient(90deg, transparent, rgba(255,255,255,0.04), transparent)",
+                    "linear-gradient(90deg, transparent, var(--hairline), transparent)",
                 }}
               />
               <div className="pt-1.5">
@@ -78,7 +78,7 @@ export function EventFeedCard({ module, max }: { module?: string; max?: number }
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-[13px] leading-snug truncate">{e.summary}</div>
-                <div className="text-[10px] mt-0.5 text-muted flex items-center gap-2">
+                <div className="text-xs mt-0.5 text-muted flex items-center gap-2">
                   <span className="uppercase tracking-wider">{e.module}</span>
                   <span>·</span>
                   <span>{e.source}</span>

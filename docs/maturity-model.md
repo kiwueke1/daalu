@@ -103,7 +103,7 @@ to improve; compare them against your own history.
 
 ## How to tell where you are
 
-Open **AI Ops → Maturity** in Daalu. The headline tiles show the metrics for
+Open **Insights → Maturity** in Daalu. The headline tiles show the metrics for
 the window; the big number is the level those metrics put you at. Below
 them, every criterion is listed with its current value and its target.
 
@@ -121,11 +121,11 @@ measured level, never instead of it.
 
 | Practice | Artefact | In Daalu |
 |---|---|---|
-| Autonomy policy | YAML: which writes are denied, need N approvers, or run automatically; guardrails (kill switch, circuit breaker, freeze windows, hourly cap) | **AI Ops → Autonomy policy** |
-| Investigation record | One per alert: root cause, actions, outcome, verdict | **AI Ops → Investigations** |
-| Runbooks | Markdown with frontmatter, matched to alerts, injected into the AI's triage | **AI Ops → Runbooks**, `daalu runbooks import` |
-| Evals | YAML scenarios: break something, grade the AI against an answer key | **AI Ops → Evals**, `daalu eval` ([`evals/`](../evals/README.md)) |
-| Audit chain | Append-only, hash-chained log of every read, proposal, approval and policy change | **AI Ops → Audit log** |
+| Autonomy policy | YAML: which writes are denied, need N approvers, or run automatically; guardrails (kill switch, circuit breaker, freeze windows, hourly cap) | **Automate → Autonomy policy** |
+| Investigation record | One per alert: root cause, actions, outcome, verdict | **Respond → Investigations** |
+| Runbooks | Markdown with frontmatter, matched to alerts, injected into the AI's triage | **Automate → Runbooks**, `daalu runbooks import` |
+| Evals | YAML scenarios: break something, grade the AI against an answer key | **Insights → Evals**, `daalu eval` ([`evals/`](../evals/README.md)) |
+| Audit chain | Append-only, hash-chained log of every read, proposal, approval and policy change | **Insights → Audit log** |
 | Open tool protocol | Any agent uses the same tools under the same policy | MCP: [`docs/mcp.md`](mcp.md) |
 
 With no saved policy, Daalu behaves exactly as before AOMM: every change the

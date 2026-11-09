@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { ChevronRight, GitPullRequest, Sparkles, AlertOctagon, UserCheck } from "lucide-react";
 import type { ChangeProposal, ChangeProposalKind, ChangeProposalStatus } from "@/lib/api";
-import { formatRelative } from "@/lib/utils";
+import { cn, formatRelative } from "@/lib/utils";
+import { buttonClass } from "@/components/ui/button";
 
 /**
  * Compact list-row for a ChangeProposal. Modeled on AlertTile so the
@@ -20,18 +21,18 @@ const STATUS_STRIPE: Record<ChangeProposalStatus, string> = {
   pending: "var(--warning)",   // operator action required
   approved: "var(--info)",     // in motion (executor will pick up)
   executed: "var(--accent)",   // success
-  rejected: "var(--muted)",
+  rejected: "var(--text-muted)",
   failed: "var(--critical)",
-  stale: "var(--muted)",
+  stale: "var(--text-muted)",
 };
 
-const STATUS_GLOW: Record<ChangeProposalStatus, string> = {
-  pending: "rgba(245,158,11,0.40)",
-  approved: "rgba(var(--accent-rgb),0.30)",
-  executed: "rgba(var(--accent-rgb),0.45)",
-  rejected: "rgba(148,163,184,0.20)",
-  failed: "rgba(239,68,68,0.45)",
-  stale: "rgba(148,163,184,0.20)",
+const STATUS_LABEL: Record<ChangeProposalStatus, string> = {
+  pending: "Needs approval",
+  approved: "Approved",
+  executed: "Applied",
+  rejected: "Rejected",
+  failed: "Failed",
+  stale: "Stale",
 };
 
 const KIND_ICON: Record<ChangeProposalKind, typeof Sparkles> = {
@@ -46,123 +47,135 @@ const KIND_LABEL: Record<ChangeProposalKind, string> = {
   intended_change: "intent",
 };
 
+const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+
+/** A device's name when the evidence carries one, else null. */
+export function proposalDeviceName(p: ChangeProposal): string | null {
+  const e = p.evidence ?? {};
+  return str(e.device_name) ?? str(e.hostname) ?? str(e.device);
+}
+
+/**
+ * The device as a title: its name, or "Unnamed device" with the short id in
+ * muted mono — never a bare hash as the title.
+ */
+export function ProposalDeviceLabel({ proposal }: { proposal: ChangeProposal }) {
+  const name = proposalDeviceName(proposal);
+  if (name) return <>{name}</>;
+  const id = proposal.device_id;
+  return (
+    <>
+      Unnamed device{" "}
+      <span className="font-mono text-xs font-normal text-muted" title={id}>
+        {id.length > 12 ? id.slice(0, 8) : id}
+      </span>
+    </>
+  );
+}
+
+/** One line saying why this proposal exists, never a raw diff header. */
+export function proposalReason(p: ChangeProposal): string {
+  const reasoning = str(p.evidence?.llm_reasoning) ?? str(p.evidence?.reason);
+  if (reasoning) {
+    const first = reasoning.split(/(?<=[.!?])\s|\n/)[0].trim();
+    return first.length > 160 ? first.slice(0, 157).trimEnd() + "…" : first;
+  }
+  const changed = (p.diff || "")
+    .split("\n")
+    .filter((l) => /^[+-]/.test(l) && !/^(\+\+\+|---)/.test(l)).length;
+  const lines = changed ? ` (${changed} line${changed === 1 ? "" : "s"} differ)` : "";
+  if (p.kind === "drift") return `The running config drifted from the intended config${lines}.`;
+  if (p.kind === "intended_change") return `The intended config changed and needs pushing to the device${lines}.`;
+  return `A manual config change was proposed${lines}.`;
+}
+
 interface ProposalTileProps {
   proposal: ChangeProposal;
 }
 
 export function ProposalTile({ proposal }: ProposalTileProps) {
-  const stripe = STATUS_STRIPE[proposal.status] ?? "var(--muted)";
-  const glow = STATUS_GLOW[proposal.status] ?? "rgba(148,163,184,0.20)";
+  const stripe = STATUS_STRIPE[proposal.status] ?? "var(--text-muted)";
   const KindIcon = KIND_ICON[proposal.kind] ?? Sparkles;
   const kindLabel = KIND_LABEL[proposal.kind] ?? proposal.kind;
-
-  // Try to surface the LLM's reasoning as the body preview when it's
-  // there — it's the most operator-relevant single string on the
-  // proposal. Fall back to the first chunk of the diff.
-  const reasoning =
-    typeof proposal.evidence?.llm_reasoning === "string"
-      ? (proposal.evidence.llm_reasoning as string)
-      : null;
-  const triggeredBy =
-    typeof proposal.evidence?.triggered_by === "string"
-      ? (proposal.evidence.triggered_by as string)
-      : null;
-  const previewSource = reasoning || proposal.diff || proposal.intended_config || "(no preview)";
-  const preview =
-    previewSource.length > 240
-      ? previewSource.slice(0, 240).trimEnd() + "…"
-      : previewSource;
+  const triggeredBy = str(proposal.evidence?.triggered_by);
+  const pending = proposal.status === "pending";
 
   return (
-    <Link
-      href={`/proposals/${proposal.id}`}
-      className="proposal-tile group relative block w-full text-left rounded-2xl overflow-hidden"
+    <article
+      className="motion-enter relative rounded-2xl overflow-hidden transition-colors hover:border-[color:var(--line-strong)]"
       style={{
         background: "var(--bg-card)",
         border: "1px solid var(--line)",
-        boxShadow: `
-          inset 0 1px 0 rgba(255,255,255,0.06),
-          inset 5px 0 0 ${stripe},
-          inset 6px 0 12px -6px ${glow},
-          0 1px 0 rgba(0,0,0,0.25),
-          0 8px 24px -12px rgba(0,0,0,0.55),
-          -2px 0 18px -8px ${glow}
-        `,
-        transition: "transform 180ms ease, box-shadow 180ms ease",
+        boxShadow: `inset 4px 0 0 ${stripe}`,
       }}
     >
       <div className="relative pl-6 pr-4 py-3.5">
-        <div className="flex items-center gap-2 mb-1.5">
+        <div className="flex flex-wrap items-center gap-2 mb-1.5">
           <span
-            className="text-[10px] uppercase tracking-wider font-semibold"
-            style={{ color: stripe }}
+            className={cn(
+              "text-[11px] uppercase tracking-wider font-semibold rounded-full px-2 py-0.5",
+              pending && "motion-attention"
+            )}
+            style={{
+              color: stripe,
+              background: `color-mix(in srgb, ${stripe} 12%, transparent)`,
+            }}
           >
-            {proposal.status}
+            {STATUS_LABEL[proposal.status] ?? proposal.status}
           </span>
-          <span className="text-[10px] uppercase tracking-wider text-muted inline-flex items-center gap-1">
-            <KindIcon className="h-3 w-3" /> {kindLabel}
+          <span className="text-[11px] uppercase tracking-wider text-muted inline-flex items-center gap-1">
+            <KindIcon className="h-3 w-3" aria-hidden /> {kindLabel}
           </span>
           {triggeredBy && triggeredBy !== "user" && (
             <span
-              className="text-[10px] uppercase tracking-wider font-medium px-1.5 py-0.5 rounded-md border border-line text-fg/80"
+              className="text-[11px] uppercase tracking-wider font-medium px-1.5 py-0.5 rounded-md border border-line text-muted"
               title="Who created this proposal"
             >
               by {triggeredBy}
             </span>
           )}
-          <span className="text-[10px] text-muted ml-auto">
+          <span className="text-xs text-muted ml-auto">
             {formatRelative(proposal.created_at)}
           </span>
         </div>
 
-        <h3 className="font-medium text-[13.5px] leading-snug text-[color:var(--text)] line-clamp-1">
-          Device <span className="font-mono">{proposal.device_id}</span>
+        <h3 className="font-medium text-sm leading-snug text-[color:var(--text)] line-clamp-1">
+          <Link
+            href={`/proposals/${proposal.id}`}
+            className="hover:underline after:absolute after:inset-0"
+          >
+            <ProposalDeviceLabel proposal={proposal} />
+          </Link>
+          {proposal.environment_slug && (
+            <span className="ml-2 text-xs font-normal text-muted">{proposal.environment_slug}</span>
+          )}
         </h3>
 
-        <p className="text-[12.5px] text-fg/65 mt-1.5 line-clamp-3 whitespace-pre-line">
-          {preview}
-        </p>
+        <p className="text-sm text-muted mt-1 line-clamp-2">{proposalReason(proposal)}</p>
 
-        <div className="flex items-center gap-2 mt-3">
-          {proposal.status === "pending" && (
-            <span
-              className="text-[11px] h-7 px-2.5 rounded-md border border-warning/60 text-[color:var(--warning)] flex items-center"
-              title="This proposal is waiting for an operator decision"
-            >
-              Needs approval
-            </span>
-          )}
+        <div className="relative z-10 flex items-center gap-2 mt-3">
           {proposal.status === "approved" && (
-            <span className="text-[11px] h-7 px-2.5 rounded-md border border-line text-muted flex items-center">
-              Queued for executor
-            </span>
+            <span className="text-xs text-muted">Queued for the executor</span>
           )}
           {proposal.status === "stale" && (
-            <span
-              className="text-[11px] h-7 px-2.5 rounded-md border border-line text-muted flex items-center"
-              title="SoT intent changed between approval and execution; re-author or re-approve."
-            >
-              Stale — re-author needed
+            <span className="text-xs text-muted">
+              The intended config changed after approval; re-author or re-approve it.
             </span>
           )}
-          <span className="ml-auto text-[11px] text-muted flex items-center gap-1 group-hover:text-[color:var(--text)] transition-colors">
-            Open <ChevronRight className="h-3.5 w-3.5" />
-          </span>
+          {pending ? (
+            <Link href={`/proposals/${proposal.id}`} className={cn(buttonClass("primary", "sm"), "ml-auto")}>
+              Review &amp; approve <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+            </Link>
+          ) : (
+            <Link
+              href={`/proposals/${proposal.id}`}
+              className="ml-auto text-xs text-muted inline-flex items-center gap-1 hover:text-[color:var(--text)] transition-colors"
+            >
+              Open <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+            </Link>
+          )}
         </div>
       </div>
-
-      <style jsx>{`
-        .proposal-tile:hover {
-          transform: translateY(-1px);
-          box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.08),
-            inset 5px 0 0 ${stripe},
-            inset 6px 0 16px -4px ${glow},
-            0 1px 0 rgba(0, 0, 0, 0.25),
-            0 14px 28px -14px rgba(0, 0, 0, 0.6),
-            -2px 0 28px -6px ${glow} !important;
-        }
-      `}</style>
-    </Link>
+    </article>
   );
 }

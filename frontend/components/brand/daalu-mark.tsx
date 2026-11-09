@@ -43,3 +43,41 @@ export function DaaluMark({ size = 44 }: { size?: number }) {
     </div>
   );
 }
+
+/**
+ * The text wordmark ("daalu" + tagline) used by the sidebar header,
+ * rendered as real text in the brand face so it stays legible at any size
+ * and takes its colours from the theme tokens (no washed-out raster in
+ * light mode). Prefer this over `DaaluMark` wherever the name is shown.
+ */
+export function DaaluWordmark({
+  size = "md",
+  tagline = true,
+}: {
+  size?: "sm" | "md";
+  tagline?: boolean;
+}) {
+  return (
+    <div aria-label="Daalu" role="img">
+      <div
+        aria-hidden
+        className={
+          "leading-none font-bold tracking-[-0.02em] text-[color:var(--text)] " +
+          (size === "sm" ? "text-[26px]" : "text-[34px]")
+        }
+        style={{ fontFamily: "var(--font-brand)" }}
+      >
+        daalu
+      </div>
+      {tagline && (
+        <div
+          aria-hidden
+          className="mt-1.5 text-[12.5px] font-medium tracking-[0.04em] text-[color:var(--accent)]"
+          style={{ fontFamily: "var(--font-brand)" }}
+        >
+          intelligent IT operations
+        </div>
+      )}
+    </div>
+  );
+}

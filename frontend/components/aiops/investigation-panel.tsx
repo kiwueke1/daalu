@@ -66,7 +66,7 @@ export function AlertInvestigationPanel({ alertId }: { alertId: string }) {
     <section className="surface p-5 space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <ClipboardCheck className="h-4 w-4 text-accent" />
-        <div className="text-[10px] uppercase tracking-wider text-muted">Investigation record</div>
+        <div className="text-[11px] uppercase tracking-wider text-muted">Investigation record</div>
         <Chip tone={RESOLUTION_TONE[inv.resolution] ?? "muted"}>
           {RESOLUTION_LABEL[inv.resolution] ?? inv.resolution}
         </Chip>
@@ -74,7 +74,7 @@ export function AlertInvestigationPanel({ alertId }: { alertId: string }) {
         {inv.verified === false && <Chip tone="critical">Fix did not verify</Chip>}
         <Link
           href={`/investigations?open=${inv.id}`}
-          className="ml-auto text-[11px] text-muted hover:text-fg underline underline-offset-2"
+          className="ml-auto min-h-6 text-xs text-muted hover:text-fg underline underline-offset-2"
         >
           All investigations
         </Link>

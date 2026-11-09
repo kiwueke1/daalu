@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { AlertTriangle, Loader2 } from "lucide-react";
-import { DaaluMark } from "@/components/brand/daalu-mark";
-import { api, type InvitePreview } from "@/lib/api";
+import { DaaluWordmark } from "@/components/brand/daalu-mark";
+import { Button } from "@/components/ui/button";
+import { api, ApiError, type InvitePreview } from "@/lib/api";
+import { errorText } from "@/lib/errors";
 import { useAuth } from "@/lib/auth";
 
 /**
@@ -41,6 +43,9 @@ export default function AcceptInvitePage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const pwShort = password.length > 0 && password.length < 8;
+  const pwMismatch = confirm.length > 0 && confirm !== password;
+
   useEffect(() => {
     let cancelled = false;
     api.auth
@@ -68,11 +73,11 @@ export default function AcceptInvitePage() {
     e.preventDefault();
     setError(null);
     if (password.length < 8) {
-      setError("Password must be at least 8 characters.");
+      setError("Use a password of at least 8 characters.");
       return;
     }
     if (password !== confirm) {
-      setError("Passwords do not match.");
+      setError("The two passwords don't match. Retype the confirmation.");
       return;
     }
     setBusy(true);
@@ -87,13 +92,13 @@ export default function AcceptInvitePage() {
       await refresh();
       router.replace("/");
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const status = err instanceof ApiError ? err.status : 0;
       setError(
-        /404/.test(msg)
-          ? "This invite is no longer valid."
-          : /409/.test(msg)
-          ? "A user with this email already exists. Try signing in instead."
-          : "Could not accept invite. Try again.",
+        status === 404
+          ? "This invite is no longer valid. Ask your admin to send a new one."
+          : status === 409
+          ? "An account with this email already exists. Sign in instead."
+          : errorText(err),
       );
     } finally {
       setBusy(false);
@@ -103,29 +108,23 @@ export default function AcceptInvitePage() {
   return (
     <div className="relative min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
-        <div className="flex items-center gap-3 mb-8">
-          <DaaluMark />
-          <div>
-            <div className="text-sm font-semibold tracking-wide">Daalu</div>
-            <div className="text-[10px] uppercase tracking-[0.18em] text-muted">
-              Operations
-            </div>
-          </div>
+        <div className="mb-8">
+          <DaaluWordmark />
         </div>
 
         {loadError ? (
           <InviteError message={loadError} />
         ) : preview === null ? (
-          <div className="flex items-center gap-2 text-sm text-muted">
-            <Loader2 className="h-4 w-4 animate-spin" /> Checking invite…
+          <div role="status" className="flex items-center gap-2 text-sm text-muted">
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Checking invite…
           </div>
         ) : (
-          <>
+          <div className="motion-enter">
             <h1 className="text-xl font-semibold mb-1">
               Join {preview.tenant_name || "Daalu"}
             </h1>
             <p className="text-sm text-muted mb-2">
-              You're invited as{" "}
+              You&apos;re invited as{" "}
               <span className="text-[color:var(--text)] font-medium">
                 {preview.role}
               </span>
@@ -137,74 +136,98 @@ export default function AcceptInvitePage() {
               </blockquote>
             )}
 
-            <form onSubmit={onSubmit} className="space-y-3">
+            <form onSubmit={onSubmit} className="space-y-3" noValidate>
               <label className="block">
-                <span className="text-xs uppercase tracking-wider text-muted">
-                  Email
-                </span>
+                <span className="text-sm font-medium">Email</span>
                 <input
                   readOnly
+                  type="email"
+                  autoComplete="email"
                   value={preview.email}
-                  className="mt-1 w-full bg-bg-secondary/40 border border-line rounded-md px-3 py-2 text-sm text-muted"
+                  className="mt-1 w-full h-10 bg-bg-secondary/40 border border-dashed border-line rounded-md px-3 text-sm text-muted"
                 />
               </label>
               <label className="block">
-                <span className="text-xs uppercase tracking-wider text-muted">
-                  Display name (optional)
-                </span>
+                <span className="text-sm font-medium">Display name (optional)</span>
                 <input
                   type="text"
                   autoFocus
+                  autoComplete="name"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  className="mt-1 w-full bg-bg-secondary/60 border border-line rounded-md px-3 py-2 text-sm focus:outline-none focus:border-accent-blue/60 focus:bg-bg-secondary"
+                  className={inputCls}
                 />
               </label>
               <label className="block">
-                <span className="text-xs uppercase tracking-wider text-muted">
-                  Password
-                </span>
+                <span className="text-sm font-medium">Password</span>
                 <input
                   type="password"
+                  autoComplete="new-password"
                   required
                   minLength={8}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="mt-1 w-full bg-bg-secondary/60 border border-line rounded-md px-3 py-2 text-sm focus:outline-none focus:border-accent-blue/60 focus:bg-bg-secondary"
+                  aria-invalid={pwShort || undefined}
+                  aria-describedby="invite-pw-hint"
+                  className={inputCls}
                 />
+                <span
+                  id="invite-pw-hint"
+                  className={`mt-1 block text-xs ${pwShort ? "text-signal-critical" : password ? "text-accent" : "text-muted"}`}
+                >
+                  {pwShort
+                    ? `At least 8 characters: ${8 - password.length} more to go.`
+                    : password
+                      ? "Long enough."
+                      : "At least 8 characters."}
+                </span>
               </label>
               <label className="block">
-                <span className="text-xs uppercase tracking-wider text-muted">
-                  Confirm password
-                </span>
+                <span className="text-sm font-medium">Confirm password</span>
                 <input
                   type="password"
+                  autoComplete="new-password"
                   required
                   minLength={8}
                   value={confirm}
                   onChange={(e) => setConfirm(e.target.value)}
-                  className="mt-1 w-full bg-bg-secondary/60 border border-line rounded-md px-3 py-2 text-sm focus:outline-none focus:border-accent-blue/60 focus:bg-bg-secondary"
+                  aria-invalid={pwMismatch || undefined}
+                  aria-describedby="invite-confirm-hint"
+                  className={inputCls}
                 />
+                {confirm && (
+                  <span
+                    id="invite-confirm-hint"
+                    aria-live="polite"
+                    className={`mt-1 block text-xs ${pwMismatch ? "text-signal-critical" : "text-accent"}`}
+                  >
+                    {pwMismatch ? "Passwords don't match yet." : "Passwords match."}
+                  </span>
+                )}
               </label>
               {error && (
-                <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/30 rounded px-3 py-2 flex items-start gap-2">
-                  <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                <div
+                  role="alert"
+                  className="text-sm text-signal-critical bg-signal-critical/10 border border-signal-critical/30 rounded-md px-3 py-2 flex items-start gap-2 motion-enter"
+                >
+                  <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" aria-hidden />
                   <span>{error}</span>
                 </div>
               )}
-              <button
+              <Button
                 type="submit"
-                disabled={busy}
-                className="w-full rounded-md text-sm font-medium py-2 transition-colors disabled:opacity-60 bg-accent text-black hover:opacity-90 inline-flex items-center justify-center gap-2"
+                variant="primary"
+                pending={busy}
+                disabledReason="Accepting invite…"
+                className="w-full h-10"
               >
-                {busy && <Loader2 className="h-4 w-4 animate-spin" />}
                 Accept invite and sign in
-              </button>
+              </Button>
               <p className="text-xs text-muted text-center">
                 Expires {new Date(preview.expires_at).toLocaleString()}.
               </p>
             </form>
-          </>
+          </div>
         )}
       </div>
     </div>
@@ -213,11 +236,14 @@ export default function AcceptInvitePage() {
 
 function InviteError({ message }: { message: string }) {
   return (
-    <div className="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-sm">
+    <div role="alert" className="rounded-md border border-signal-critical/30 bg-signal-critical/10 p-4 text-sm motion-enter">
       <div className="flex items-start gap-2">
-        <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-red-400" />
+        <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-signal-critical" aria-hidden />
         <p>{message}</p>
       </div>
     </div>
   );
 }
+
+const inputCls =
+  "mt-1 w-full h-10 bg-bg-secondary/60 border border-line rounded-md px-3 text-sm focus:border-accent focus:bg-bg-secondary aria-[invalid=true]:border-signal-critical";

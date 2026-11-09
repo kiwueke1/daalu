@@ -1,9 +1,8 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useCallback, useId, useState } from "react";
 import {
-  Loader2,
   Play,
   AlertTriangle,
   ShieldAlert,
@@ -17,7 +16,11 @@ import {
 } from "@/lib/api";
 import { Accordion, AccordionItem } from "@/components/ui/accordion";
 import { LoadState } from "@/components/ui/load-state";
-import { RunStateBadge, fmtWhen, useRecent } from "./run-state";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast";
+import { errorText } from "@/lib/errors";
+import { cn } from "@/lib/utils";
+import { RunStateBadge, When, useRecent, useRunWatch } from "./run-state";
 
 /**
  * AIPerf — load-test / SLO benchmarking. Access is gated server-side:
@@ -32,6 +35,7 @@ type Target = "vllm" | "gateway";
 
 export function AiperfPanel() {
   const qc = useQueryClient();
+  const toast = useToast();
   const [target, setTarget] = useState<Target>("vllm");
   const [concurrency, setConcurrency] = useState("1,2,4,8,16,32");
   const [requestCount, setRequestCount] = useState(200);
@@ -66,14 +70,20 @@ export function AiperfPanel() {
       }),
     onMutate: () => setErr(null),
     onSuccess: () => {
+      toast.success("Benchmark sweep queued. It appears in Past sweeps below.");
       qc.invalidateQueries({ queryKey: ["aiFactory", "aiperf"] });
     },
-    onError: (e: unknown) =>
-      setErr(e instanceof Error ? e.message : "failed to start benchmark"),
+    onError: (e: unknown) => {
+      setErr(errorText(e));
+      toast.error(errorText(e));
+    },
   });
 
   const allRuns = runs.data?.runs ?? [];
   const recent = useRecent(allRuns);
+  const describe = useCallback(() => "Benchmark sweep", []);
+  const fresh = useRunWatch(runs.data?.runs, describe);
+  const runsOff = !!runs.data && !execEnabled;
 
   return (
     <div className="space-y-4">
@@ -81,7 +91,7 @@ export function AiperfPanel() {
         {/* Load-test hazard banner: the icon carries the colour, the text
             stays readable on both themes. */}
         <div className="flex items-start gap-2 rounded-lg border border-signal-warning/30 bg-signal-warning/5 px-3 py-2 text-xs text-[color:var(--text)]">
-          <ShieldAlert className="h-4 w-4 mt-px shrink-0 text-[color:var(--warning)]" />
+          <ShieldAlert className="h-4 w-4 mt-px shrink-0 text-[color:var(--warning)]" aria-hidden />
           <span>
             A sweep is real load on the endpoint under test and will spike its
             latency while it runs.{" "}
@@ -94,7 +104,9 @@ export function AiperfPanel() {
         <div className="mt-4 flex flex-wrap items-end gap-3">
           {isSite && (
             <Field label="Target">
+              {(id) => (
               <select
+                id={id}
                 value={target}
                 onChange={(e) => setTarget(e.target.value as Target)}
                 className="h-8 rounded-md border border-line bg-bg-base px-2 text-xs"
@@ -102,18 +114,24 @@ export function AiperfPanel() {
                 <option value="vllm">vLLM (llm-classifier)</option>
                 <option value="gateway">Gateway (front door)</option>
               </select>
+              )}
             </Field>
           )}
-          <Field label="Concurrency sweep">
+          <Field label="Concurrent users per step">
+            {(id) => (
             <input
+              id={id}
               value={concurrency}
               onChange={(e) => setConcurrency(e.target.value)}
               className="h-8 rounded-md border border-line bg-bg-base px-2 text-xs w-40 font-mono"
               placeholder="1,2,4,8,16,32"
             />
+            )}
           </Field>
-          <Field label="Requests / level">
+          <Field label="Requests per step">
+            {(id) => (
             <input
+              id={id}
               type="number"
               min={1}
               max={2000}
@@ -121,37 +139,36 @@ export function AiperfPanel() {
               onChange={(e) => setRequestCount(Number(e.target.value))}
               className="h-8 rounded-md border border-line bg-bg-base px-2 text-xs w-24"
             />
+            )}
           </Field>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              disabled={run.isPending}
-              onClick={() => run.mutate()}
-              className="text-xs h-8 px-3 rounded-lg bg-gradient-to-r from-accent-cyan to-accent-emerald text-bg-base inline-flex items-center gap-1.5 disabled:opacity-60"
-            >
-              {run.isPending ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Play className="h-3.5 w-3.5" />
-              )}
-              Run sweep
-            </button>
-            <span className="text-[10px] text-muted uppercase tracking-wide">
-              {isSite ? "shared stack" : "your endpoint"}
-            </span>
-          </div>
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={runsOff || runs.isLoading}
+            disabledReason={runsOff ? "Benchmark runs are switched off on this deployment" : undefined}
+            pending={run.isPending}
+            onClick={() => run.mutate()}
+            icon={<Play className="h-3.5 w-3.5" aria-hidden />}
+          >
+            Run sweep
+          </Button>
         </div>
+        {!isSite && (
+          <div className="mt-2 text-xs text-muted">
+            Target: your own GPU endpoint.
+          </div>
+        )}
 
-        {runs.data && !execEnabled && (
-          <div className="mt-3 text-[11px] text-muted">
-            Benchmark runs are switched off on this deployment, so a queued run
-            will stop with an error. Ask your Daalu operator to turn them on.
+        {runsOff && (
+          <div className="mt-3 text-xs text-muted" role="note">
+            Benchmark runs are switched off on this deployment, so you can&apos;t
+            start a sweep yet. Ask your Daalu operator to turn them on.
           </div>
         )}
 
         {err && (
-          <div className="mt-3 text-[11px] text-[color:var(--critical)] flex items-center gap-1.5">
-            <AlertTriangle className="h-3 w-3" /> {err}
+          <div role="alert" className="mt-3 text-xs text-[color:var(--critical)] flex items-center gap-1.5">
+            <AlertTriangle className="h-3.5 w-3.5" aria-hidden /> {err}
           </div>
         )}
       </section>
@@ -163,12 +180,18 @@ export function AiperfPanel() {
           empty={allRuns.length === 0}
           loadingText="Loading benchmark runs…"
           emptyTitle="No benchmark runs yet"
-          emptyHint="Run a sweep above. Each run records TTFT, inter-token latency and throughput at every concurrency level."
+          emptyHint="Run a sweep above. Each run records time to first token (TTFT), time between tokens (ITL) and throughput at every step."
         >
           <Accordion>
-            {recent.shown.map((r) => (
-              <AiperfRow key={r.id} run={r} />
-            ))}
+            {recent.shown.map((r) =>
+              fresh.has(r.id) ? (
+                <div key={r.id} className="motion-enter">
+                  <AiperfRow run={r} fresh />
+                </div>
+              ) : (
+                <AiperfRow key={r.id} run={r} />
+              )
+            )}
           </Accordion>
           {recent.toggle && <div className="pt-1">{recent.toggle}</div>}
         </LoadState>
@@ -182,14 +205,15 @@ function Field({
   children,
 }: {
   label: string;
-  children: React.ReactNode;
+  children: (id: string) => React.ReactNode;
 }) {
+  const id = useId();
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-[10px] uppercase tracking-wide text-muted">
+      <label htmlFor={id} className="text-xs text-muted">
         {label}
       </label>
-      {children}
+      {children(id)}
     </div>
   );
 }
@@ -305,7 +329,7 @@ function ArtifactList({ runId }: { runId: string }) {
   }
   return (
     <div className="space-y-1">
-      <div className="text-[10px] uppercase tracking-wide text-muted">
+      <div className="text-[11px] uppercase tracking-wide text-muted">
         Artifacts ({artifacts.length})
       </div>
       <ul className="space-y-0.5">
@@ -316,7 +340,7 @@ function ArtifactList({ runId }: { runId: string }) {
               download
               className="inline-flex items-center gap-1 text-accent-cyan hover:underline font-mono break-all"
             >
-              <Download className="h-3 w-3 shrink-0" />
+              <Download className="h-3 w-3 shrink-0" aria-hidden />
               {a.path}
             </a>
             <span className="text-muted whitespace-nowrap">{bytes(a.size)}</span>
@@ -349,11 +373,11 @@ function headline(
   const last = levels[levels.length - 1];
   const itl = last?.metrics?.["itl_ms"] ?? metrics?.["itl_ms"];
   if (typeof itl !== "number") return null;
-  const at = last?.concurrency != null ? ` at c=${last.concurrency}` : "";
-  return `ITL ${itl.toFixed(1)} ms${at}`;
+  const at = last?.concurrency != null ? ` at ${last.concurrency} concurrent` : "";
+  return `${itl.toFixed(1)} ms between tokens${at}`;
 }
 
-function AiperfRow({ run }: { run: AiFactoryAiperfRun }) {
+function AiperfRow({ run, fresh = false }: { run: AiFactoryAiperfRun; fresh?: boolean }) {
   const metrics = metricsOf(run.summary);
   const levels = levelsOf(run.summary);
   const error = errorOf(run.summary);
@@ -373,10 +397,15 @@ function AiperfRow({ run }: { run: AiFactoryAiperfRun }) {
       title={
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-medium">{sweepLabel(run)}</span>
+            <span className={cn("font-medium px-1 -mx-1", fresh && "motion-update")}>{sweepLabel(run)}</span>
             <RunStateBadge state={run.state} />
             {head && (
-              <span className="text-[11px] font-mono text-muted">{head}</span>
+              <span
+                className="text-xs text-muted"
+                title="Inter-token latency (ITL) at the highest concurrency level reached"
+              >
+                {head}
+              </span>
             )}
           </div>
           {bad && error && (
@@ -387,7 +416,7 @@ function AiperfRow({ run }: { run: AiFactoryAiperfRun }) {
           )}
         </div>
       }
-      meta={fmtWhen(run.started_at)}
+      meta={<When iso={run.started_at} />}
     >
       <AiperfDetail run={run} metrics={metrics} levels={levels} error={error} />
     </AccordionItem>

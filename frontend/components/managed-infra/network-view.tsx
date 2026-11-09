@@ -33,12 +33,11 @@
  * Copy rule: user-visible strings are vendor-neutral (capability names only).
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentType } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import {
-  Network,
   ExternalLink,
   CheckCircle2,
   Server,
@@ -65,18 +64,28 @@ import {
 import { api, ConfigManagerEnvironment, ConfigManagerProgress } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { OnboardDevices } from "@/components/network/onboard-devices";
+import { Button } from "@/components/ui/button";
+import { ConfirmButton } from "@/components/ui/confirm-button";
+import { Dialog } from "@/components/ui/dialog";
+import { LoadState } from "@/components/ui/load-state";
+import { TabBar } from "@/components/ui/tabs";
+import { useToast } from "@/components/ui/toast";
+import { errorText } from "@/lib/errors";
 
 type IconType = ComponentType<{ className?: string }>;
 
 // Daalu components → label. `ui` has no upstream service of its own (it rides
 // config-store), so it isn't a provisionable toggle here.
+// The first four are the core of every environment (always on, folded under
+// "Components (advanced)"); ZTP and DHCP are the real choices.
+const CORE_COMPONENT_KEYS = new Set(["render", "configStore", "temporal", "nautobot"]);
 const COMPONENTS: { key: string; label: string; help: string }[] = [
-  { key: "render", label: "Render service", help: "Renders intended config to vendor syntax" },
-  { key: "configStore", label: "Config store", help: "Stores intended config + serves the config API" },
-  { key: "temporal", label: "Workflow engine", help: "Orchestrates and retries deploys" },
-  { key: "nautobot", label: "Source of truth", help: "Inventory, IPAM, intended config" },
-  { key: "ztp", label: "Zero-touch provisioning", help: "Onboard new switches automatically" },
-  { key: "dhcp", label: "DHCP", help: "Bundled DHCP for zero-touch provisioning" },
+  { key: "render", label: "Render service", help: "Turns intended config into each vendor's syntax" },
+  { key: "configStore", label: "Config store", help: "Keeps intended config and serves the config API" },
+  { key: "temporal", label: "Workflow engine", help: "Runs and retries deploys" },
+  { key: "nautobot", label: "Source of truth", help: "Inventory, addressing and intended config" },
+  { key: "ztp", label: "Zero-touch provisioning", help: "Set up new switches automatically when they're plugged in" },
+  { key: "dhcp", label: "DHCP", help: "Hands out addresses to new switches during zero-touch provisioning" },
 ];
 
 // Per-service human (browser) URLs. These are flat, single-label hosts
@@ -235,27 +244,11 @@ function StatusBadge({ status }: { status: string }) {
   };
   const [text, dot] = map[status] ?? ["text-accent-amber", "bg-accent-amber"];
   return (
-    <span className={`inline-flex items-center gap-1.5 text-[11px] uppercase tracking-wider ${text}`}>
-      <span className={`h-2 w-2 rounded-full ${dot}`} />
+    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] uppercase tracking-wider ${text}`}>
+      <span aria-hidden className={`h-2 w-2 rounded-full ${dot}`} />
       {status || "provisioning"}
     </span>
   );
-}
-
-function extractDetail(err: Error): string | null {
-  // Backend errors arrive as "<status> <statusText>: <body>". Pull the
-  // body if it's a JSON object with a {detail} key, which is what
-  // FastAPI HTTPException renders. Both name rejections (400 "…is reserved",
-  // 409 "…already exists") and the upgrade 409 ("1.3.0 is not newer than the
-  // current") are written to be read by the user, so this is shown verbatim.
-  const m = err.message.match(/\d+\s[^:]+:\s(.+)$/);
-  if (!m) return null;
-  try {
-    const body = JSON.parse(m[1]) as { detail?: string };
-    return body.detail ?? null;
-  } catch {
-    return m[1];
-  }
 }
 
 // Ordinary in-flight kubelet reasons. A pod running init containers sits in
@@ -443,7 +436,7 @@ function ProvisioningProgress({
           anything here is the actionable reason the install isn't finishing. */}
       {events.length > 0 && (
         <div className="space-y-1.5">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">
             Notable events
           </p>
           <ul className="space-y-1">
@@ -477,6 +470,7 @@ function ProvisioningProgress({
  */
 function VersionRow({ env }: { env: ConfigManagerEnvironment }) {
   const qc = useQueryClient();
+  const toast = useToast();
   const { user } = useAuth();
   const isAdmin = user?.is_admin ?? false;
 
@@ -496,6 +490,7 @@ function VersionRow({ env }: { env: ConfigManagerEnvironment }) {
     mutationFn: () => api.onboarding.upgradeConfigManagerEnvironment(env.id, {}),
     onSuccess: () => {
       setScheduled(true);
+      toast.success("Upgrade scheduled. It runs in the background.");
       // Start observing immediately rather than waiting out the interval.
       qc.invalidateQueries({ queryKey: ["configManager", "environments"] });
       qc.invalidateQueries({ queryKey: ["integrations", "config"] });
@@ -507,9 +502,7 @@ function VersionRow({ env }: { env: ConfigManagerEnvironment }) {
   if (!isAdmin || (!env.chart_version && !env.upgrade_available)) return null;
 
   const inFlight = busy || scheduled || upgrade.isPending;
-  const failure = upgrade.isError
-    ? extractDetail(upgrade.error as Error) || "Upgrade could not be scheduled"
-    : null;
+  const failure = upgrade.isError ? errorText(upgrade.error) : null;
 
   return (
     <div className="space-y-2">
@@ -528,14 +521,13 @@ function VersionRow({ env }: { env: ConfigManagerEnvironment }) {
         )}
 
         {env.upgrade_available && (
-          <button
-            onClick={() => upgrade.mutate()}
-            disabled={inFlight}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1 text-xs font-medium text-black hover:opacity-90 disabled:opacity-60"
-          >
-            {inFlight && <Loader2 className="h-3 w-3 animate-spin" />}
-            {inFlight ? "Upgrading…" : "Upgrade"}
-          </button>
+          <ConfirmButton
+            label={inFlight ? "Upgrading…" : "Upgrade"}
+            confirmLabel="Upgrade now"
+            consequence="Rolls the stack to the new version; tools may restart for a few minutes."
+            onConfirm={() => upgrade.mutate()}
+            pending={inFlight}
+          />
         )}
       </div>
 
@@ -590,7 +582,7 @@ function EnvironmentTile({
     <button
       type="button"
       onClick={onOpen}
-      className="group flex w-full flex-col gap-3 rounded-2xl border border-line bg-bg-card p-5 text-left transition hover:border-accent-cyan/50 hover:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-cyan"
+      className="group flex w-full flex-col gap-3 rounded-2xl border border-line bg-bg-card p-5 text-left transition hover:border-accent-cyan/50 hover:bg-bg-elevated/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-cyan"
     >
       <div className="flex items-start justify-between gap-3">
         <span className="flex min-w-0 items-center gap-2 text-base font-medium text-fg">
@@ -599,7 +591,7 @@ function EnvironmentTile({
           {/* Which environment the rest of Daalu talks to by default. Quiet
               on purpose — it's a fact about the environment, not a status. */}
           {isPrimary && (
-            <span className="shrink-0 rounded-full border border-line px-1.5 py-px text-[10px] uppercase tracking-wider text-muted">
+            <span className="shrink-0 rounded-full border border-line px-1.5 py-px text-[11px] uppercase tracking-wider text-muted">
               Primary
             </span>
           )}
@@ -640,6 +632,8 @@ function CreateEnvironmentForm({
   onCancel: (() => void) | null;
 }) {
   const qc = useQueryClient();
+  const toast = useToast();
+  const [showCore, setShowCore] = useState(false);
 
   const [name, setName] = useState("");
   // Only complain once they've tried, so the field isn't red before it's had
@@ -686,17 +680,14 @@ function CreateEnvironmentForm({
       }),
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ["integrations", "config"] });
+      toast.success(`Building ${res.environment.name || "the environment"}. The first run takes a few minutes.`);
       onCreated(res.environment);
     },
   });
 
   // The server's own verdict on the name (400 reserved/unusable, 409 taken)
   // is written for the person who typed it, so it goes on screen as-is.
-  const serverError = create.isError
-    ? extractDetail(create.error as Error) ||
-      (create.error as Error)?.message ||
-      "Creating the environment failed"
-    : null;
+  const serverError = create.isError ? errorText(create.error) : null;
 
   const submit = () => {
     setTouched(true);
@@ -715,13 +706,9 @@ function CreateEnvironmentForm({
           </p>
         </div>
         {onCancel && (
-          <button
-            type="button"
-            onClick={onCancel}
-            className="shrink-0 text-sm text-muted hover:text-fg"
-          >
+          <Button variant="ghost" size="sm" onClick={onCancel} className="shrink-0">
             Cancel
-          </button>
+          </Button>
         )}
       </div>
 
@@ -750,10 +737,12 @@ function CreateEnvironmentForm({
         <p id="env-name-help" className="text-xs text-muted">
           {slug ? (
             <>
-              Identifier: <span className="font-mono text-fg">{slug}</span> —{" "}
+              Identifier: <span className="font-mono text-fg">{slug}</span>. It{" "}
             </>
-          ) : null}
-          this becomes the namespace and the public hostnames, and{" "}
+          ) : (
+            "It "
+          )}
+          becomes the namespace and the public hostnames, and{" "}
           <span className="text-fg">cannot be changed after creation</span>.
         </p>
         {touched && localError && (
@@ -764,11 +753,13 @@ function CreateEnvironmentForm({
         )}
       </div>
 
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-medium">Optional components</legend>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-        {COMPONENTS.map((c) => (
+        {COMPONENTS.filter((c) => !CORE_COMPONENT_KEYS.has(c.key)).map((c) => (
           <label
             key={c.key}
-            className="flex items-start gap-2 rounded-xl border border-line p-3 cursor-pointer hover:bg-white/5"
+            className="flex items-start gap-2 rounded-xl border border-line p-3 cursor-pointer hover:bg-bg-elevated/40"
           >
             <input
               type="checkbox"
@@ -783,6 +774,33 @@ function CreateEnvironmentForm({
           </label>
         ))}
       </div>
+      <button
+        type="button"
+        onClick={() => setShowCore((v) => !v)}
+        aria-expanded={showCore}
+        className="text-sm text-muted hover:text-fg"
+      >
+        {showCore ? "−" : "+"} Components (advanced)
+      </button>
+      <div className="collapse-grid" data-open={showCore}>
+        <div className="collapse-inner">
+          <p className="text-xs text-muted pb-2">
+            Every environment runs these core services; they stay on.
+          </p>
+          <ul className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {COMPONENTS.filter((c) => CORE_COMPONENT_KEYS.has(c.key)).map((c) => (
+              <li key={c.key} className="flex items-start gap-2 rounded-xl border border-line p-3">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-accent-emerald" aria-hidden />
+                <span>
+                  <span className="text-sm font-medium">{c.label}</span>
+                  <span className="block text-xs text-muted">{c.help}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+      </fieldset>
 
       <div className="space-y-1.5">
         <div className="flex items-center gap-3">
@@ -875,16 +893,17 @@ function CreateEnvironmentForm({
         )}
       </div>
 
-      <button
+      {/* The request only *schedules* the install, so the pending state is on
+          screen for a moment — the progress view takes it from here. */}
+      <Button
+        variant="primary"
         onClick={submit}
-        disabled={create.isPending || (touched && !!localError) || !!adminPassError}
-        className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-sm font-medium text-black hover:opacity-90 disabled:opacity-60"
+        pending={create.isPending}
+        disabled={(touched && !!localError) || !!adminPassError}
+        disabledReason={localError || adminPassError || undefined}
       >
-        {create.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-        {/* The request only *schedules* the install, so this label is on
-            screen for a moment — the progress view takes it from here. */}
-        {create.isPending ? "Scheduling…" : "Create environment"}
-      </button>
+        Create environment
+      </Button>
 
       {serverError && (
         <p className="inline-flex items-start gap-1.5 text-sm text-signal-critical">
@@ -941,7 +960,7 @@ function CompletionState({
                   href={c.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-start gap-3 rounded-xl border border-line bg-bg-card p-3 transition hover:border-accent-cyan/50 hover:bg-white/5"
+                  className="flex items-start gap-3 rounded-xl border border-line bg-bg-card p-3 transition hover:border-accent-cyan/50 hover:bg-bg-elevated/40"
                 >
                   <Icon className="mt-0.5 h-4 w-4 shrink-0 text-accent-cyan" />
                   <span className="min-w-0 flex-1">
@@ -953,7 +972,7 @@ function CompletionState({
               );
             })}
           </div>
-          <p className="text-[11px] text-muted">
+          <p className="text-xs text-muted">
             These consoles are optional and read-mostly — you sign in with your
             org SSO. Day to day, drive changes from Operations.
           </p>
@@ -969,7 +988,7 @@ function CompletionState({
               <Link
                 key={l.href}
                 href={l.href}
-                className="flex items-start gap-3 rounded-xl border border-line bg-bg-card p-3 transition hover:border-accent-emerald/50 hover:bg-white/5"
+                className="flex items-start gap-3 rounded-xl border border-line bg-bg-card p-3 transition hover:border-accent-emerald/50 hover:bg-bg-elevated/40"
               >
                 <Icon className="mt-0.5 h-4 w-4 shrink-0 text-accent-emerald" />
                 <span className="min-w-0 flex-1">
@@ -1015,33 +1034,42 @@ function DeleteEnvironmentDialog({
   const [force, setForce] = useState(false);
   const matches = typed.trim().toLowerCase() === name.trim().toLowerCase();
 
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-bg/70 p-4 pt-16 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Delete environment ${name}`}
-      onClick={(e) => {
-        if (e.target === e.currentTarget && !pending) onCancel();
-      }}
-    >
-      <div className="w-full max-w-[520px] surface space-y-4 p-5">
-        <div className="flex items-start justify-between gap-3">
-          <h2 className="flex items-center gap-2 text-base font-semibold text-[color:var(--critical)]">
-            <AlertTriangle className="h-4 w-4" />
-            Delete {name}?
-          </h2>
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={pending}
-            aria-label="Cancel"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-line text-muted hover:text-fg disabled:opacity-50"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+  // The parent re-renders on every poll; keep Dialog's onClose stable so its
+  // focus handling doesn't re-run (and steal focus) mid-typing.
+  const latest = useRef({ pending, onCancel });
+  latest.current = { pending, onCancel };
+  const close = useCallback(() => {
+    if (!latest.current.pending) latest.current.onCancel();
+  }, []);
 
+  return (
+    <Dialog
+      open
+      onClose={close}
+      title={
+        <span className="flex items-center gap-2 text-[color:var(--critical)]">
+          <AlertTriangle className="h-4 w-4" aria-hidden />
+          Delete {name}?
+        </span>
+      }
+      footer={
+        <>
+          <Button variant="ghost" onClick={onCancel} disabled={pending}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            onClick={() => onConfirm(force)}
+            pending={pending}
+            disabled={!matches}
+            disabledReason={!matches ? `Type ${name} to confirm` : undefined}
+          >
+            {force ? "Force delete" : "Delete environment"}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
         <div className="space-y-2 text-sm text-muted">
           <p>
             This uninstalls the whole management stack — source of truth,
@@ -1063,9 +1091,8 @@ function DeleteEnvironmentDialog({
         </div>
 
         <label className="block">
-          <span className="text-[11px] uppercase tracking-wider text-muted">
-            Type <span className="font-mono normal-case text-fg">{name}</span> to
-            confirm
+          <span className="text-xs text-muted">
+            Type <span className="font-mono text-fg">{name}</span> to confirm
           </span>
           <input
             type="text"
@@ -1076,9 +1103,8 @@ function DeleteEnvironmentDialog({
             onChange={(e) => setTyped(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && matches && !pending) onConfirm(force);
-              if (e.key === "Escape" && !pending) onCancel();
             }}
-            className="mt-1 h-9 w-full rounded-lg border border-line bg-bg-elevated px-3 text-sm focus:border-signal-critical/60 focus:outline-none"
+            className="mt-1 h-9 w-full rounded-lg border border-line bg-bg-elevated px-3 text-sm focus:border-signal-critical/60"
           />
         </label>
 
@@ -1100,30 +1126,10 @@ function DeleteEnvironmentDialog({
         )}
 
         {error && (
-          <p className="text-xs text-[color:var(--critical)]">{error}</p>
+          <p role="alert" className="text-xs text-[color:var(--critical)]">{error}</p>
         )}
-
-        <div className="flex items-center justify-end gap-2">
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={pending}
-            className="h-9 rounded-lg border border-line px-3 text-xs text-muted hover:text-fg disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => onConfirm(force)}
-            disabled={!matches || pending}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-signal-critical/40 bg-signal-critical/10 px-3 text-xs text-[color:var(--critical)] disabled:opacity-40"
-          >
-            {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            {force ? "Force delete" : "Delete environment"}
-          </button>
-        </div>
       </div>
-    </div>
+    </Dialog>
   );
 }
 
@@ -1157,6 +1163,7 @@ function EnvironmentDetail({
   const active = env.state === "active";
 
   const qc = useQueryClient();
+  const toast = useToast();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   // A teardown that can't finish (host cluster gone or unreachable) parks the
   // environment in `deleting`. Offer the record-only removal from there, and
@@ -1168,29 +1175,29 @@ function EnvironmentDetail({
     onSuccess: () => {
       setConfirmingDelete(false);
       qc.invalidateQueries({ queryKey: ["configManager", "environments"] });
+      toast.success(`Deleting ${name}. Its tile disappears once teardown finishes.`);
       onBack();
     },
   });
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <button
           type="button"
           onClick={onBack}
           className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"
         >
-          <ArrowLeft className="h-3.5 w-3.5" /> All environments
+          <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> All environments
         </button>
-        <button
-          type="button"
-          disabled={destroy.isPending}
+        <Button
+          variant="danger"
+          size="sm"
+          pending={destroy.isPending}
           onClick={() => setConfirmingDelete(true)}
-          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-signal-critical/40 px-3 text-xs text-[color:var(--critical)] hover:bg-signal-critical/10 disabled:opacity-50"
         >
-          {destroy.isPending && <Loader2 className="h-3 w-3 animate-spin" />}
           {stuckDeleting ? "Deleting… (force remove)" : "Delete environment"}
-        </button>
+        </Button>
       </div>
       {confirmingDelete && (
         <DeleteEnvironmentDialog
@@ -1198,25 +1205,25 @@ function EnvironmentDetail({
           namespace={namespace}
           stuckDeleting={stuckDeleting}
           pending={destroy.isPending}
-          error={destroy.isError ? extractDetail(destroy.error as Error) ?? String(destroy.error) : null}
+          error={destroy.isError ? errorText(destroy.error) : null}
           onCancel={() => setConfirmingDelete(false)}
           onConfirm={(force) => destroy.mutate(force)}
         />
       )}
       {destroy.isError && !confirmingDelete && (
-        <p className="text-xs text-[color:var(--critical)]">
-          Delete failed: {String(destroy.error)}
+        <p role="alert" className="text-xs text-[color:var(--critical)]">
+          Delete failed: {errorText(destroy.error)}
         </p>
       )}
 
       <section className="rounded-2xl border border-line bg-bg-card p-5 space-y-3">
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="flex items-center gap-2 text-base font-medium">
               <Boxes className="h-4 w-4 text-accent-cyan" />
               {name}
               {env.is_primary && (
-                <span className="rounded-full border border-line px-1.5 py-px text-[10px] uppercase tracking-wider text-muted">
+                <span className="rounded-full border border-line px-1.5 py-px text-[11px] uppercase tracking-wider text-muted">
                   Primary
                 </span>
               )}
@@ -1466,14 +1473,12 @@ export default function NetworkServerManagementPage() {
   return (
     <div className="space-y-8 max-w-[1100px]">
       <div>
-        <h1 className="text-2xl font-semibold flex items-start gap-2">
-          <Network className="h-5 w-5 mt-1.5 shrink-0 text-accent-cyan" /> Network &amp; server management
-        </h1>
-        <p className="text-muted text-sm mt-1">
+        {/* The tab bar already names this page; no duplicate H1. */}
+        <p className="text-muted text-sm">
           Daalu manages your network switches and bare-metal servers through
           dedicated management environments running in your own clusters. Create
           one here; then work the inventory and approve changes in{" "}
-          <a href="/operations" className="underline">Operations</a> — Daalu
+          <Link href="/operations" className="underline">Operations</Link> — Daalu
           drives the underlying services for you.
         </p>
       </div>
@@ -1506,21 +1511,19 @@ export default function NetworkServerManagementPage() {
             {/* A shown-once secret that can only be hand-selected invites a
                 truncated copy. Same affordance as the API-token reveal in
                 settings. */}
-            <button
-              type="button"
+            <Button
+              size="sm"
               onClick={copyAdmin}
-              className="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-line hover:border-line-strong"
+              icon={
+                adminCopied ? (
+                  <Check className="h-3.5 w-3.5 motion-success" aria-hidden />
+                ) : (
+                  <Copy className="h-3.5 w-3.5" aria-hidden />
+                )
+              }
             >
-              {adminCopied ? (
-                <>
-                  <Check className="h-3.5 w-3.5" /> Copied
-                </>
-              ) : (
-                <>
-                  <Copy className="h-3.5 w-3.5" /> Copy password
-                </>
-              )}
-            </button>
+              {adminCopied ? "Copied" : "Copy password"}
+            </Button>
             <button
               type="button"
               onClick={() => setJustCreated(null)}
@@ -1532,15 +1535,18 @@ export default function NetworkServerManagementPage() {
         </section>
       )}
 
-      {loading ? (
-        <div className="text-muted text-sm inline-flex items-center gap-2">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading environments…
-        </div>
-      ) : listError ? (
-        <p className="inline-flex items-start gap-1.5 text-sm text-signal-critical">
-          <AlertTriangle className="h-4 w-4 shrink-0 mt-px" />
-          {extractDetail(envQuery.error as Error) || "Could not load your environments."}
-        </p>
+      {loading || listError ? (
+        <LoadState
+          query={{
+            isLoading: loading,
+            isError: listError,
+            error: envQuery.error,
+            refetch: envQuery.refetch,
+          }}
+          loadingText="Loading environments…"
+        >
+          {null}
+        </LoadState>
       ) : openEnv ? (
         <EnvironmentDetail
           env={openEnv}
@@ -1565,17 +1571,17 @@ export default function NetworkServerManagementPage() {
           onCancel={envs.length > 0 ? () => setCreating(false) : null}
         />
       ) : (
-        <section className="space-y-3">
-          <div className="flex items-center justify-between gap-3">
+        <section className="space-y-3 motion-enter">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs uppercase tracking-wider text-muted">Environments</p>
             {isAdmin && (
-              <button
-                type="button"
+              <Button
+                size="sm"
                 onClick={() => setCreating(true)}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1 text-xs text-muted transition hover:border-accent-cyan/50 hover:text-fg"
+                icon={<Plus className="h-3.5 w-3.5" aria-hidden />}
               >
-                <Plus className="h-3.5 w-3.5" /> Add environment
-              </button>
+                Add environment
+              </Button>
             )}
           </div>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -1626,26 +1632,21 @@ function EnvDetailTabs({
   const [tab, setTab] = useState<(typeof ENV_TABS)[number]["id"]>("consoles");
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-1 rounded-xl border border-line bg-bg-card p-1 w-fit">
-        {ENV_TABS.filter((t) => t.id !== "devices" || devices).map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setTab(t.id)}
-            className={`rounded-lg px-3.5 py-1.5 text-sm transition ${
-              tab === t.id
-                ? "bg-bg-elevated text-fg"
-                : "text-muted hover:text-fg"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
+      <TabBar
+        tabs={ENV_TABS.filter((t) => t.id !== "devices" || devices).map((t) => ({
+          id: t.id,
+          label: t.label,
+        }))}
+        active={tab}
+        onChange={setTab}
+        ariaLabel="Environment sections"
+      />
+      <div key={tab} role="tabpanel" className="motion-enter">
+        {tab === "consoles" && consoles}
+        {tab === "devices" && devices}
+        {tab === "observability" && observability}
+        {tab === "workloads" && workloads}
       </div>
-      {tab === "consoles" && consoles}
-      {tab === "devices" && devices}
-      {tab === "observability" && observability}
-      {tab === "workloads" && workloads}
     </div>
   );
 }
@@ -1691,6 +1692,7 @@ const OBS_INSTALLABLE = new Set(["grafana", "opensearch"]);
 
 function EnvObservability() {
   const qc = useQueryClient();
+  const toast = useToast();
   const { data: configs } = useQuery({
     queryKey: ["integrations", "config"],
     queryFn: () => api.integrations.listConfig(),
@@ -1699,8 +1701,11 @@ function EnvObservability() {
 
   const install = useMutation({
     mutationFn: (provider: string) => api.observability.install(provider),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: ["integrations", "config"] }),
+    onSuccess: (res, provider) => {
+      qc.invalidateQueries({ queryKey: ["integrations", "config"] });
+      toast.success(`Installed ${provider}: ${res.applied.length} objects applied.`);
+    },
+    onError: (err) => toast.error(errorText(err)),
   });
 
   return (
@@ -1725,8 +1730,8 @@ function EnvObservability() {
               >
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium">{t.label}</span>
-                  <span className="ml-auto text-[11px] text-accent-emerald">
-                    connected
+                  <span className="ml-auto whitespace-nowrap text-xs text-accent-emerald">
+                    Connected
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-muted">{t.help}</p>
@@ -1740,30 +1745,27 @@ function EnvObservability() {
             >
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium">{t.label}</span>
-                <span className="ml-auto text-[11px] text-accent-amber">
-                  not connected
+                <span className="ml-auto whitespace-nowrap text-xs text-accent-amber">
+                  Not connected
                 </span>
               </div>
               <p className="mt-1 text-xs text-muted">{t.help}</p>
-              <div className="mt-3 flex items-center gap-3">
+              <div className="mt-3 flex flex-wrap items-center gap-3">
                 {OBS_INSTALLABLE.has(t.provider) && (
-                  <button
-                    type="button"
+                  <ConfirmButton
+                    label="Install into cluster"
+                    confirmLabel={`Install ${t.label.toLowerCase()}`}
+                    consequence="Applies its manifests to this environment's cluster."
+                    onConfirm={() => install.mutate(t.provider)}
+                    pending={installing}
                     disabled={install.isPending}
-                    onClick={() => install.mutate(t.provider)}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-gradient-to-r from-accent-emerald to-accent-cyan px-3 text-xs text-bg-base disabled:opacity-50"
-                  >
-                    {installing && (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    )}
-                    Install into cluster
-                  </button>
+                  />
                 )}
                 <Link
-                  href="/managed-infra"
-                  className="text-[11px] text-muted underline hover:text-fg"
+                  href="/managed-infra?tab=clusters"
+                  className="text-xs text-muted underline hover:text-fg"
                 >
-                  connect an existing one
+                  Connect an existing one
                 </Link>
               </div>
             </div>
@@ -1771,12 +1773,12 @@ function EnvObservability() {
         })}
       </div>
       {install.isError && (
-        <p className="text-xs text-[color:var(--critical)]">
-          Install failed: {String(install.error)}
+        <p role="alert" className="text-xs text-[color:var(--critical)]">
+          Install failed: {errorText(install.error)}
         </p>
       )}
       {install.data && (
-        <p className="text-xs text-accent-emerald">
+        <p role="status" className="text-xs text-accent-emerald motion-enter">
           Installed: {install.data.applied.length} objects applied
           {install.data.finalizing
             ? " — finishing setup in the background (the tile flips to connected once the store answers)."

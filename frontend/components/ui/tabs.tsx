@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import type { LucideIcon } from "lucide-react";
+import { ChevronLeft, ChevronRight, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -47,22 +47,55 @@ export function TabBar<T extends string>({
       ?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [active]);
 
+  // When the bar overflows, fade the clipped edge so it's clear more tabs
+  // are off-screen (a phone shows no scrollbar).
+  const [edges, setEdges] = useState({ left: false, right: false });
+  const tabsKey = tabs.map((t) => `${t.id}:${typeof t.badge === "object" ? "" : String(t.badge ?? "")}`).join("|");
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const measure = () => {
+      const left = el.scrollLeft > 2;
+      const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 2;
+      setEdges((cur) => (cur.left === left && cur.right === right ? cur : { left, right }));
+    };
+    measure();
+    el.addEventListener("scroll", measure, { passive: true });
+    window.addEventListener("resize", measure);
+    // The bar's own box doesn't change when its content grows (web fonts
+    // loading, a badge appearing), so watch each tab too.
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+    ro?.observe(el);
+    Array.from(el.children).forEach((c) => ro?.observe(c));
+    let alive = true;
+    document.fonts?.ready.then(() => alive && measure()).catch(() => {});
+    return () => {
+      alive = false;
+      el.removeEventListener("scroll", measure);
+      window.removeEventListener("resize", measure);
+      ro?.disconnect();
+    };
+  }, [tabsKey]);
+
   return (
     <div className="flex items-center gap-2 border-b border-line">
+      <div className="relative flex-1 min-w-0">
       <div
         ref={listRef}
         role="tablist"
         aria-label={ariaLabel}
-        className="flex flex-1 min-w-0 items-center gap-1 overflow-x-auto"
+        className="flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {tabs.map(({ id, label, shortLabel, icon: Icon, badge, badgeTone = "muted" }) => {
           const selected = active === id;
           return (
             <button
               key={id}
+              id={`tab-${id}`}
               type="button"
               role="tab"
               aria-selected={selected}
+              aria-controls={`tabpanel-${id}`}
               aria-label={typeof badge === "string" || typeof badge === "number" ? `${label} (${badge})` : label}
               onClick={() => onChange(id)}
               className={cn(
@@ -72,7 +105,7 @@ export function TabBar<T extends string>({
                   : "text-muted hover:text-[color:var(--text)]"
               )}
             >
-              {Icon && <Icon className={cn("h-4 w-4", shortLabel && "hidden sm:block")} />}
+              {Icon && <Icon aria-hidden className={cn("h-4 w-4", shortLabel && "hidden sm:block")} />}
               {shortLabel ? (
                 <>
                   <span className="sm:hidden">{shortLabel}</span>
@@ -83,7 +116,10 @@ export function TabBar<T extends string>({
               )}
               {badge !== undefined && badge !== null && (
                 <span
-                  className="rounded-full px-1.5 py-px text-[10px] font-semibold leading-4"
+                  className={cn(
+                    "rounded-full px-1.5 py-px text-[11px] font-semibold leading-4",
+                    badgeTone === "accent" && "motion-attention"
+                  )}
                   style={
                     badgeTone === "accent"
                       ? {
@@ -114,7 +150,54 @@ export function TabBar<T extends string>({
           );
         })}
       </div>
+      {edges.left && (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 left-0 w-12 flex items-center"
+          style={{ background: "linear-gradient(to right, var(--bg-base) 35%, transparent)" }}
+        >
+          <ChevronLeft className="h-4 w-4 text-muted" />
+        </span>
+      )}
+      {edges.right && (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 right-0 w-12 flex items-center justify-end"
+          style={{ background: "linear-gradient(to left, var(--bg-base) 35%, transparent)" }}
+        >
+          <ChevronRight className="h-4 w-4 text-muted" />
+        </span>
+      )}
+      </div>
       {trailing && <div className="shrink-0 pb-1">{trailing}</div>}
+    </div>
+  );
+}
+
+/**
+ * The content of the active tab. Keyed on the tab, so switching tabs fades
+ * the new panel in (`motion-enter`) instead of swapping with a jump.
+ *
+ *   <TabPanel id={tab}>{tab === "logs" ? <Logs /> : <Metrics />}</TabPanel>
+ */
+export function TabPanel({
+  id,
+  className,
+  children,
+}: {
+  id: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      key={id}
+      id={`tabpanel-${id}`}
+      role="tabpanel"
+      aria-labelledby={`tab-${id}`}
+      className={cn("motion-enter", className)}
+    >
+      {children}
     </div>
   );
 }

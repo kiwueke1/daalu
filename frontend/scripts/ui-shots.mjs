@@ -148,6 +148,18 @@ async function main() {
           // let that navigation finish before judging the page.
           await page.waitForLoadState("networkidle");
           if (args.tab) await page.getByRole("tab", { name: new RegExp(args.tab, "i") }).click();
+          // Don't judge a page by its spinner: wait (up to 20 s) until no
+          // loading indicator is on screen. A page stuck loading is still
+          // captured, and that is itself a finding.
+          await page
+            .waitForFunction(
+              () =>
+                !document.querySelector("main .animate-spin, main [aria-busy='true']") &&
+                !/Loading…|Checking .*…/.test(document.querySelector("main")?.innerText ?? ""),
+              null,
+              { timeout: 20000 }
+            )
+            .catch(() => {});
           await page.waitForTimeout(WAIT);
           const overflow = await page.evaluate(
             () => document.documentElement.scrollWidth - window.innerWidth

@@ -23,7 +23,7 @@ export default function ReliabilityPage() {
   return (
     <FactoryPageShell
       title="Reliability"
-      subtitle="How GPU faults (XID / ECC / thermal) are caught and contained on your cards."
+      subtitle="How GPU faults (driver errors, memory errors, overheating) are caught and contained on your cards."
     >
       <LoadState query={overview} loadingText="Checking your access…">
         {!isHardware ? (

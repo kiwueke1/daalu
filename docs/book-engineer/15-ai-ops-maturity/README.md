@@ -1,6 +1,7 @@
 # Part XV — The AI-Ops Maturity Model
 
-Everything behind the **AI Ops** section of the sidebar: the AI-Ops Maturity
+Everything behind the Maturity, Autonomy policy, Investigations, Runbooks, Evals
+and Audit log pages (grouped by task in the sidebar, see `frontend/DESIGN.md`): the AI-Ops Maturity
 Model (AOMM) itself, its metrics and how they score a team's level, the
 autonomy policy that decides which writes the agent
 may make on its own, the guardrails around automatic execution, the

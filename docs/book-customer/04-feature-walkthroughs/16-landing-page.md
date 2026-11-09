@@ -35,27 +35,23 @@ The bar at the very top is shared by every page:
 
 ## Left sidebar (every page)
 
-Same on every page:
+Same on every page, and grouped by what you came to do:
 
-- Home
-- Operations
-- Agents
-- Automations
-- Reports
-- Alerts
-- Workflows
-- Workspace
-- AI Factory
-- Topology
-- Dashboards
-- Managed infra
-- Usage & Pricing
-- — (separator)
-- Settings
-- Help & Feedback
+- **Home**
+- **Respond:** Alerts, Investigations, Workflows
+- **Automate:** Automations, Agents, Runbooks, Autonomy policy
+- **Infrastructure:** Managed infra, AI Factory, Operations, Workspace
+- **Insights:** Dashboards, Reports, Maturity, Evals, Audit log
+- At the bottom: Usage & Pricing, Settings, Help & Feedback
 
-Width is fixed; on phones the sidebar becomes a slide-in drawer
-behind the hamburger button. Devices and Proposals are tabs
+What needs you shows on the entry itself, from any page: critical
+alerts or warnings on **Alerts**, investigations waiting for a verdict
+on **Investigations** ("2 to grade", over the last 30 days), workflow
+runs waiting for approval on **Workflows** ("1 to approve"), and
+**Paused** on **Autonomy policy** when automation is stopped.
+
+The sidebar stays on screen as a page scrolls. On phones it becomes a
+slide-in drawer behind the hamburger button. Devices and Proposals are tabs
 inside *Operations*; Integrations, Clusters, and Onboarding are
 tabs inside *Managed infra* — their old standalone URLs still
 resolve.
@@ -154,22 +150,24 @@ Click any row to drill into the source object.
 
 ## Right panel — Assistant
 
-Always docked to the right; default width is ~360 px. Drag the
-edge to widen. Components from top to bottom:
+On a wide screen, a slim strip runs down the right side of most pages,
+with four sections you open and close independently. They start closed
+so the page gets the width, and your choice is remembered in this browser.
+A dot on **Alerts** shows when something is firing.
 
-- **Header** — "AI Assistant" plus a status dot showing whether
-  the underlying LLM is local or cloud.
-- **Conversation thread** — your messages and the Assistant's
-  replies, scrollable. Tool calls show as expandable cards
-  ("queried Prometheus: 4 results"); proposals show as inline
-  cards with an "Open proposal" link.
-- **Input** — multiline text input with Enter to send and
-  Shift+Enter for newline. Markdown is rendered as you type.
-- **Footer** — three controls:
-  - Tool toggle (allow / disallow specific tools for this
-    conversation).
-  - Clear conversation.
-  - Send feedback (to the Daalu team about an Assistant reply).
+- **Assistant** — ask about your live operational state, or start from a
+  suggested question.
+- **Alerts** — the critical and warning alerts, plus new AI recommendations.
+- **Sessions** — workflows running or waiting for approval.
+- **Health** — a reliability score based on open alerts.
+
+On phones and smaller windows the strip becomes an **Assistant** button
+in the bottom-right corner, showing the number of open alerts. It opens a
+sheet with **Ask**, **Notifications** and **System health** tabs. Your
+conversation is kept when you close the sheet or change page, until you
+reload.
+
+An alert's detail page replaces all of this with a chat about that alert.
 
 ---
 

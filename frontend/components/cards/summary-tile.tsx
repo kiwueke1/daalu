@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 
@@ -33,6 +34,16 @@ export function SummaryTile({
   const positive =
     intent === "positive" || (delta && !delta.startsWith("-") && intent !== "negative");
 
+  // Tint the number once when a refetch changes it (not on first load), so
+  // a moving metric catches the eye without anything looping.
+  const prev = useRef(value);
+  const [bump, setBump] = useState(0);
+  useEffect(() => {
+    const was = prev.current;
+    prev.current = value;
+    if (was !== value && was !== "—" && value !== "—") setBump((n) => n + 1);
+  }, [value]);
+
   return (
     <Link
       href={href}
@@ -50,12 +61,12 @@ export function SummaryTile({
       />
 
       <div className="relative flex items-start justify-between">
-        <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.18em] text-muted">
+        <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-muted">
           <span
-            className="inline-flex h-6 w-6 items-center justify-center rounded-md"
+            className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md"
             style={{
-              background: "rgba(255,255,255,0.025)",
-              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
+              background: "var(--bg-elevated)",
+              boxShadow: "inset 0 1px 0 var(--hairline-strong)",
             }}
           >
             <Icon className="h-3.5 w-3.5" />
@@ -63,6 +74,7 @@ export function SummaryTile({
           {label}
         </div>
         <ArrowUpRight
+          aria-hidden
           className="h-3.5 w-3.5 text-muted opacity-0 group-hover:opacity-100 transition-opacity"
           style={{ color: "var(--accent)" }}
         />
@@ -70,11 +82,16 @@ export function SummaryTile({
 
       <div className="relative flex items-end justify-between gap-3">
         <div>
-          <div className="text-[30px] leading-none font-semibold tracking-tight">
+          <div
+            key={bump}
+            className={`text-[30px] leading-none font-semibold tracking-tight tabular-nums inline-block ${
+              bump > 0 ? "motion-update" : ""
+            }`}
+          >
             {value}
           </div>
           {(delta || hint) && (
-            <div className="mt-2 flex items-center gap-2 text-[11px]">
+            <div className="mt-2 flex items-center gap-2 text-xs">
               {delta && (
                 <span
                   className="font-medium"
@@ -108,7 +125,7 @@ function Sparkline({ data }: { data: number[] }) {
     .join(" ");
   const lastY = h - ((data[data.length - 1] - min) / range) * h;
   return (
-    <svg width={w} height={h} className="overflow-visible">
+    <svg width={w} height={h} className="overflow-visible shrink-0" aria-hidden>
       <defs>
         <linearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.35} />

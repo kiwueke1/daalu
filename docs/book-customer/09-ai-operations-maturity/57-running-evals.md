@@ -6,7 +6,7 @@ let the AI SRE investigate, and grade what it did against an answer key
 written before it started. Run the same scenarios against two models and you
 know which one to trust with more autonomy — measured, not guessed.
 
-URL: `https://daalu.example.com/evals` (sidebar: **AI Ops → Evals**).
+URL: `https://daalu.example.com/evals` (sidebar: **Insights → Evals**).
 
 ---
 

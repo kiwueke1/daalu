@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -54,9 +54,30 @@ export function AccordionItem({
   children: React.ReactNode;
 }) {
   const ctx = useContext(Ctx);
-  if (!ctx) throw new Error("AccordionItem must be inside <Accordion>");
-  const open = ctx.openId === id;
+  const open = ctx?.openId === id;
   const panelId = `acc-${id}`;
+  // The body mounts on open, then expands a frame later so the height
+  // transition runs; on close it collapses first and unmounts after, so
+  // folded content is never focusable and lazy bodies don't fetch early.
+  const [mounted, setMounted] = useState(open);
+  const [expanded, setExpanded] = useState(open);
+  useEffect(() => {
+    if (open) {
+      setMounted(true);
+      let r2 = 0;
+      const r1 = requestAnimationFrame(() => {
+        r2 = requestAnimationFrame(() => setExpanded(true));
+      });
+      return () => {
+        cancelAnimationFrame(r1);
+        cancelAnimationFrame(r2);
+      };
+    }
+    setExpanded(false);
+    const t = window.setTimeout(() => setMounted(false), 240);
+    return () => window.clearTimeout(t);
+  }, [open]);
+  if (!ctx) throw new Error("AccordionItem must be inside <Accordion>");
   return (
     <div
       className="rounded-xl overflow-hidden"
@@ -75,23 +96,26 @@ export function AccordionItem({
       >
         {leading}
         <div className="flex-1 min-w-0 text-[13px] leading-snug">{title}</div>
-        {meta && <div className="shrink-0 text-[11px] text-muted">{meta}</div>}
+        {meta && <div className="shrink-0 text-xs text-muted">{meta}</div>}
         <ChevronRight
+          aria-hidden
           className={cn(
             "h-4 w-4 shrink-0 text-muted transition-transform",
             open && "rotate-90"
           )}
         />
       </button>
-      {open && (
-        <div
-          id={panelId}
-          className="px-4 pb-4 pt-1"
-          style={{ borderTop: "1px solid var(--line)" }}
-        >
-          {children}
+      {/* Height eases open (.collapse-grid) so the eye follows where the
+          detail came from. */}
+      <div id={panelId} className="collapse-grid" data-open={expanded}>
+        <div className="collapse-inner">
+          {mounted && (
+            <div className="px-4 pb-4 pt-1" style={{ borderTop: "1px solid var(--line)" }}>
+              {children}
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

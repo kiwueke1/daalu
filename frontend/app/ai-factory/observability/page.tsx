@@ -23,7 +23,7 @@ export default function ObservabilityPage() {
   return (
     <FactoryPageShell
       title="Observability check"
-      subtitle="End-to-end self-check of the metrics pipeline so you can confirm the factory is wired up before trusting the dashboards."
+      subtitle="Make sure GPU metrics are being collected and can be charted before you trust the dashboards."
     >
       <LoadState query={overview} loadingText="Checking your access…">
         {!isAdmin || role === "none" ? (

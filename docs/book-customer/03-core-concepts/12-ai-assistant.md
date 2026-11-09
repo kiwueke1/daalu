@@ -15,8 +15,10 @@ deliberately won't.
 
 The Assistant has two surfaces:
 
-1. **The right panel.** Anchored to the right side of every
-   page. Open and close it with the chevron at its edge, or hit
+1. **The right panel.** Anchored to the right side of most
+   pages; on phones and smaller windows it's the **Assistant**
+   button in the bottom-right corner, which opens a sheet. On a
+   wide screen, open and close it from the strip at the edge, or hit
    `Cmd-K` (Mac) / `Ctrl-K` (others). On the home page it's
    tenant-wide; on every other page it inherits the page's
    context.

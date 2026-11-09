@@ -7,7 +7,7 @@ verification, every policy change, verdict and runbook publish — in order.
 Each entry carries a fingerprint of the one before it, so if anyone edits or
 deletes a past entry, the chain breaks and Daalu can tell you exactly where.
 
-URL: `https://daalu.example.com/audit` (sidebar: **AI Ops → Audit log**).
+URL: `https://daalu.example.com/audit` (sidebar: **Insights → Audit log**).
 
 ---
 

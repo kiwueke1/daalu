@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, SearchCheck } from "lucide-react";
 import { api } from "@/lib/api";
-import { formatRelative, severityColor } from "@/lib/utils";
+import { cn, formatRelative, severityColor } from "@/lib/utils";
 import { LoadState } from "@/components/ui/load-state";
 import {
   Chip,
@@ -80,7 +80,7 @@ function InvestigationsInner() {
             </option>
           ))}
         </select>
-        <label className="inline-flex items-center gap-2 text-xs">
+        <label className="inline-flex items-center gap-2 text-xs min-h-[24px]">
           <input type="checkbox" checked={needsVerdict} onChange={(e) => setNeedsVerdict(e.target.checked)} />
           Needs a verdict
         </label>
@@ -93,19 +93,53 @@ function InvestigationsInner() {
         emptyTitle={needsVerdict ? "Nothing waiting for a verdict" : "No investigations in this window"}
         emptyHint="An investigation starts when the AI triages an alert — open an alert, or turn on investigate_automatically in the autonomy policy."
       >
-        <div className="rounded-2xl border border-line bg-bg-card overflow-x-auto">
+        {/* Phone: stacked cards, so the verdict and outcome stay visible. */}
+        <ul className="md:hidden space-y-2 motion-enter">
+          {rows.map((r) => (
+            <li key={r.id}>
+              <button
+                type="button"
+                onClick={() => setOpen(r.id)}
+                className="w-full text-left rounded-2xl border border-line bg-bg-card p-3.5 hover:bg-bg-elevated/30"
+              >
+                <div className="flex items-start gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium text-sm break-words">{r.alert_title}</div>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+                      <Severity value={r.alert_severity} />
+                      <span>{formatRelative(r.started_at)}</span>
+                      {r.triaged_at && <span>triaged in {fmtDuration(r.time_to_triage_s)}</span>}
+                    </div>
+                  </div>
+                  <ChevronRight aria-hidden className="h-4 w-4 mt-0.5 shrink-0 text-muted" />
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <VerdictCell r={r} />
+                  <Chip tone={RESOLUTION_TONE[r.resolution] ?? "muted"}>
+                    {RESOLUTION_LABEL[r.resolution] ?? r.resolution}
+                  </Chip>
+                </div>
+                <div className="mt-2 text-xs text-muted">
+                  <ActionCounts r={r} />
+                </div>
+              </button>
+            </li>
+          ))}
+        </ul>
+
+        <div className="hidden md:block rounded-2xl border border-line bg-bg-card relative overflow-x-auto motion-enter">
           <table className="w-full min-w-[900px] text-sm">
-            <thead className="text-[10px] uppercase tracking-wider text-muted bg-bg-elevated/50">
+            <thead className="text-[11px] uppercase tracking-wider text-muted bg-bg-elevated/50">
               <tr>
                 <th className="text-left px-4 py-2.5">Alert</th>
                 <th className="text-left px-4 py-2.5">Started</th>
                 <th className="text-right px-4 py-2.5">To triage</th>
-                <th className="text-left px-4 py-2.5" title="proposed / approved / rejected / auto">
-                  Actions P / A / R / Auto
-                </th>
+                <th className="text-left px-4 py-2.5">Actions</th>
                 <th className="text-left px-4 py-2.5">Resolution</th>
                 <th className="text-left px-4 py-2.5">Verdict</th>
-                <th className="px-2" />
+                <th className="px-2">
+                  <span className="sr-only">Open</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -116,21 +150,24 @@ function InvestigationsInner() {
                   className="border-t border-line/60 hover:bg-bg-elevated/30 cursor-pointer"
                 >
                   <td className="px-4 py-2.5 max-w-[22rem]">
-                    <div className="font-medium truncate">{r.alert_title}</div>
-                    <div
-                      className="text-[10px] uppercase tracking-wider font-semibold"
-                      style={{ color: severityColor[r.alert_severity] }}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpen(r.id);
+                      }}
+                      className="block max-w-full text-left font-medium truncate hover:text-accent"
                     >
-                      {r.alert_severity}
-                    </div>
+                      {r.alert_title}
+                    </button>
+                    <Severity value={r.alert_severity} />
                   </td>
                   <td className="px-4 py-2.5 text-muted whitespace-nowrap">{formatRelative(r.started_at)}</td>
                   <td className="px-4 py-2.5 text-right tabular-nums">
                     {r.triaged_at ? fmtDuration(r.time_to_triage_s) : <span className="text-muted">—</span>}
                   </td>
-                  <td className="px-4 py-2.5 tabular-nums text-muted whitespace-nowrap">
-                    {r.actions_proposed} / {r.actions_approved} / {r.actions_rejected} /{" "}
-                    <span className={r.actions_auto ? "text-accent font-semibold" : undefined}>{r.actions_auto}</span>
+                  <td className="px-4 py-2.5 text-xs text-muted min-w-[7rem]">
+                    <ActionCounts r={r} stacked />
                   </td>
                   <td className="px-4 py-2.5">
                     <Chip tone={RESOLUTION_TONE[r.resolution] ?? "muted"}>
@@ -138,16 +175,10 @@ function InvestigationsInner() {
                     </Chip>
                   </td>
                   <td className="px-4 py-2.5">
-                    {r.verdict ? (
-                      <VerdictChip verdict={r.verdict} />
-                    ) : r.triaged_at ? (
-                      <Chip tone="accent" solid>needs verdict</Chip>
-                    ) : (
-                      <span className="text-muted text-xs">—</span>
-                    )}
+                    <VerdictCell r={r} />
                   </td>
                   <td className="px-2 text-muted">
-                    <ChevronRight className="h-4 w-4" />
+                    <ChevronRight aria-hidden className="h-4 w-4" />
                   </td>
                 </tr>
               ))}
@@ -159,4 +190,60 @@ function InvestigationsInner() {
       {openId && <InvestigationDrawer id={openId} onClose={() => setOpen(null)} />}
     </div>
   );
+}
+
+type Row = Awaited<ReturnType<typeof api.aiops.investigations.list>>[number];
+
+/** Severity as a dot + word, quiet enough that a list of criticals isn't a wall of red. */
+function Severity({ value }: { value: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs text-muted capitalize">
+      <span
+        aria-hidden
+        className="h-1.5 w-1.5 rounded-full"
+        style={{ background: severityColor[value] ?? "var(--text-muted)" }}
+      />
+      {value}
+    </span>
+  );
+}
+
+/**
+ * "1 proposed", "1 approved", … hiding zeros. Each count is its own unbroken
+ * segment (stacked in the table, wrapping in cards), so no line ever starts
+ * with a stray separator.
+ */
+function ActionCounts({ r, stacked = false }: { r: Row; stacked?: boolean }) {
+  const parts: { n: number; label: string; accent?: boolean }[] = [
+    { n: r.actions_proposed, label: "proposed" },
+    { n: r.actions_approved, label: "approved" },
+    { n: r.actions_rejected, label: "rejected" },
+    { n: r.actions_auto, label: "automatic", accent: true },
+  ];
+  if (parts.every((p) => !p.n)) return <span className="whitespace-nowrap">No actions</span>;
+  return (
+    <span
+      className={cn(
+        "tabular-nums",
+        stacked ? "flex flex-col gap-0.5" : "flex flex-wrap gap-x-3 gap-y-0.5",
+      )}
+    >
+      {parts
+        .filter((p) => p.n)
+        .map((p) => (
+          <span
+            key={p.label}
+            className={cn("whitespace-nowrap", p.accent && "text-accent font-semibold")}
+          >
+            {p.n} {p.label}
+          </span>
+        ))}
+    </span>
+  );
+}
+
+function VerdictCell({ r }: { r: Row }) {
+  if (r.verdict) return <VerdictChip verdict={r.verdict} />;
+  if (r.triaged_at) return <Chip tone="accent" solid>needs verdict</Chip>;
+  return <span className="text-muted text-xs">Not triaged yet</span>;
 }

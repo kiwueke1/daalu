@@ -17,6 +17,9 @@ const nextConfig = {
       // Device SSH terminal WebSocket (topology UI → asyncssh PTY). Same
       // single-origin story as /ide — in prod Traefik routes /ws to daalu-api.
       { source: "/ws/:path*", destination: `${apiBase}/ws/:path*` },
+      // Build/version info for Help → System status (served at /version,
+      // outside /api). Without this the box 404s in local dev.
+      { source: "/version", destination: `${apiBase}/version` },
     ];
   },
 };

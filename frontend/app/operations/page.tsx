@@ -10,7 +10,10 @@
  */
 
 import { Suspense } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { LayoutGrid } from "lucide-react";
+import { api } from "@/lib/api";
+import { LoadState } from "@/components/ui/load-state";
 import { OverviewView } from "@/components/operations/overview-view";
 import { DevicesView } from "@/components/operations/devices-view";
 import { DriftView } from "@/components/operations/drift-view";
@@ -34,27 +37,48 @@ const TAB_IDS = TABS.map((t) => t.id);
 
 function OperationsPageInner() {
   const [tab, onSelect] = useUrlTab<TabId>(TAB_IDS, "overview");
+  // Open drift needs an operator decision: badge the Drift tab from any tab
+  // (same query key as the Overview/Drift views, so it's one shared fetch).
+  const driftQ = useQuery({
+    queryKey: ["change-proposals", "drift"],
+    queryFn: () =>
+      api.changeProposals.list({ kind: "drift", status: "pending" }),
+    refetchInterval: 15_000,
+  });
+  // Without Nautobot the SoT tabs show a setup step, so a drift count would
+  // contradict them (it can be stale or seeded data): no badge until it's set
+  // up. Same query key as the Overview/Devices views, so no extra fetch.
+  const devicesQ = useQuery({
+    queryKey: ["sot-devices"],
+    queryFn: () => api.sot.devices.list(),
+  });
+  const sotReady = !!devicesQ.data;
+  const openDrift = sotReady ? driftQ.data?.length ?? 0 : 0;
 
   return (
     <div className="space-y-6 max-w-[1400px]">
       <div>
         <h1 className="text-2xl font-semibold flex items-center gap-2">
-          <LayoutGrid className="h-5 w-5 text-accent-cyan" /> Operations
+          <LayoutGrid className="h-5 w-5 text-accent-cyan" aria-hidden /> Operations
         </h1>
         <p className="text-muted text-sm mt-1">
-          Devices, drift detection, change proposals, and bulk inventory — your
-          Source of Truth in one place.
+          Devices, drift, change proposals and bulk inventory: your Source of
+          Truth in one place.
         </p>
       </div>
 
       <TabBar
-        tabs={TABS.map(({ id, label }) => ({ id, label }))}
+        tabs={TABS.map(({ id, label }) =>
+          id === "drift" && openDrift > 0
+            ? { id, label, badge: openDrift, badgeTone: "accent" as const }
+            : { id, label },
+        )}
         active={tab}
         onChange={onSelect}
         ariaLabel="Operations"
       />
 
-      <div>
+      <div key={tab} className="motion-enter">
         {tab === "overview" && (
           <OverviewView onJumpTo={(id) => onSelect(id as TabId)} />
         )}
@@ -71,7 +95,11 @@ function OperationsPageInner() {
 export default function OperationsPage() {
   // useSearchParams must be wrapped in Suspense per Next 14's app-router rules.
   return (
-    <Suspense fallback={<div className="p-6 text-sm text-muted">Loading…</div>}>
+    <Suspense
+      fallback={
+        <LoadState query={{ isLoading: true, isError: false }}>{null}</LoadState>
+      }
+    >
       <OperationsPageInner />
     </Suspense>
   );

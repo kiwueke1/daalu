@@ -9,7 +9,7 @@ move from Level 2 to Level 4: it's how "the AI is usually right" becomes a
 number instead of a feeling. That number is **agreement rate**, one of the
 five TRACE metrics (chapter 55).
 
-URL: `https://daalu.example.com/investigations` (sidebar: **AI Ops →
+URL: `https://daalu.example.com/investigations` (sidebar: **Respond →
 Investigations**).
 
 ---

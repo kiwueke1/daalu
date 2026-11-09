@@ -13,9 +13,11 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Loader2, ShieldCheck, Terminal } from "lucide-react";
-import { DaaluMark } from "@/components/brand/daalu-mark";
+import { AlertTriangle, CheckCircle2, Loader2, ShieldCheck, Terminal } from "lucide-react";
+import { DaaluWordmark } from "@/components/brand/daalu-mark";
+import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
+import { errorText } from "@/lib/errors";
 
 export default function CliActivatePage() {
   return (
@@ -33,6 +35,7 @@ function CliActivate() {
   const [state, setState] = useState<State>("loading");
   const [clientName, setClientName] = useState<string | null>(null);
   const [error, setError] = useState<string>("");
+  const [busy, setBusy] = useState<"approve" | "deny" | null>(null);
 
   useEffect(() => {
     const c = search.get("code");
@@ -57,33 +60,39 @@ function CliActivate() {
         setState("ready");
       }
     } catch (e) {
-      setError(String(e));
+      setError(errorText(e));
       setState("error");
     }
   }
 
   async function approve() {
-    setState("loading");
+    setBusy("approve");
     try {
       await api.cli.deviceApprove(code.trim());
       setState("approved");
     } catch (e) {
-      setError(String(e));
+      setError(errorText(e));
       setState("error");
+    } finally {
+      setBusy(null);
     }
   }
 
   async function deny() {
+    setBusy("deny");
     try {
       await api.cli.deviceDeny(code.trim());
     } catch {
       /* best-effort */
     }
+    setBusy(null);
     setState("denied");
   }
 
+  const cmd = <code className="font-mono text-[0.95em] px-1 rounded bg-bg-elevated">daalu login</code>;
+
   return (
-    <div className="relative min-h-screen flex items-center justify-center px-4 overflow-hidden">
+    <div className="relative min-h-screen flex items-center justify-center px-4 py-10 overflow-hidden">
       <div
         className="pointer-events-none absolute inset-0"
         style={{
@@ -91,130 +100,152 @@ function CliActivate() {
             "radial-gradient(60% 50% at 50% 30%, rgba(var(--accent-rgb),0.10), transparent 60%)",
         }}
       />
-      <div className="relative w-full max-w-sm">
-        <div className="flex items-center gap-3 mb-8">
-          <DaaluMark />
-          <div>
-            <div className="text-sm font-semibold tracking-wide">Daalu</div>
-            <div className="text-[10px] tracking-[0.18em] text-muted">
-              command-line sign-in
-            </div>
-          </div>
+      <div className="relative w-full max-w-md">
+        <div className="mb-6 flex justify-center">
+          <DaaluWordmark size="sm" />
         </div>
 
-        {state === "loading" && (
-          <p className="text-sm text-muted flex items-center gap-2">
-            <Loader2 className="h-4 w-4 animate-spin" /> Checking your login
-            request…
-          </p>
-        )}
+        <div className="surface rounded-2xl p-6 sm:p-7">
+          {state === "loading" && (
+            <p role="status" className="text-sm text-muted flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Checking
+              your sign-in request…
+            </p>
+          )}
 
-        {state === "ready" && (
-          <div className="space-y-4">
-            <div className="flex items-start gap-3">
-              <Terminal className="h-5 w-5 mt-0.5 text-accent" />
-              <div>
-                <h1 className="text-xl font-semibold">Authorize this terminal?</h1>
-                <p className="text-sm text-muted mt-1">
-                  {clientName ? (
-                    <>
-                      <strong className="text-fg">
-                        {clientName}
-                      </strong>{" "}
-                      wants to sign in to Daalu as you.
-                    </>
-                  ) : (
-                    "A terminal wants to sign in to Daalu as you."
-                  )}
+          {state === "ready" && (
+            <div className="space-y-5 motion-enter">
+              <div className="flex items-start gap-3">
+                <Terminal className="h-5 w-5 mt-1 text-accent shrink-0" aria-hidden />
+                <div>
+                  <h1 className="text-xl font-semibold">Authorize this terminal?</h1>
+                  <p className="text-sm text-muted mt-1">
+                    {clientName ? (
+                      <>
+                        <strong className="text-fg">{clientName}</strong> wants to
+                        sign in to Daalu as you.
+                      </>
+                    ) : (
+                      "A terminal wants to sign in to Daalu as you."
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              {search.get("code") ? (
+                <div>
+                  <div id="code-label" className="text-sm font-medium mb-1.5">
+                    Check this matches the code in your terminal
+                  </div>
+                  <div
+                    className="w-full rounded-lg border border-line bg-bg-elevated px-3 py-3 text-center text-2xl font-mono font-semibold uppercase tracking-[0.25em] select-all"
+                    aria-labelledby="code-label"
+                  >
+                    {code}
+                  </div>
+                </div>
+              ) : (
+                <label className="block">
+                  <span className="block text-sm font-medium mb-1.5">
+                    Code shown in your terminal
+                  </span>
+                  <input
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    placeholder="XXXX-XXXX"
+                    autoComplete="one-time-code"
+                    spellCheck={false}
+                    className="w-full h-10 px-3 rounded-lg bg-bg-elevated border border-line text-base font-mono uppercase tracking-widest placeholder:text-muted placeholder:normal-case"
+                  />
+                </label>
+              )}
+
+              <div
+                role="note"
+                className="flex items-start gap-2.5 rounded-lg px-3 py-2.5 text-sm"
+                style={{
+                  background: "color-mix(in srgb, var(--warning) 10%, var(--bg-card))",
+                  border: "1px solid color-mix(in srgb, var(--warning) 40%, var(--line))",
+                }}
+              >
+                <AlertTriangle
+                  className="h-4 w-4 mt-0.5 shrink-0"
+                  style={{ color: "var(--warning)" }}
+                  aria-hidden
+                />
+                <p>
+                  <strong className="font-semibold">Only approve if you just ran {cmd} on
+                  your own machine.</strong>{" "}
+                  It gets a token that acts as you until you revoke it in
+                  Settings → API tokens.
                 </p>
               </div>
-            </div>
 
-            {search.get("code") ? (
-              <div>
-                <div className="text-xs text-muted mb-1.5">
-                  Check this matches the code in your terminal
-                </div>
-                <div
-                  className="w-full rounded-lg border border-line bg-bg-elevated px-3 py-3 text-center text-2xl font-mono font-semibold uppercase tracking-[0.25em] select-all"
-                  aria-label="Login code"
+              {/* Side by side only when both fit; otherwise stacked full
+                  width with Authorize first. Fixed height, never squashed. */}
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="primary"
+                  onClick={approve}
+                  pending={busy === "approve"}
+                  disabled={!code.trim() || busy !== null}
+                  disabledReason={
+                    busy === "approve"
+                      ? "Authorizing…"
+                      : !code.trim()
+                        ? "Enter the code from your terminal"
+                        : undefined
+                  }
+                  icon={<ShieldCheck className="h-4 w-4" aria-hidden />}
+                  className="grow shrink-0 basis-52 min-w-fit h-10"
                 >
-                  {code}
-                </div>
+                  Authorize this terminal
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={deny}
+                  pending={busy === "deny"}
+                  disabled={busy !== null}
+                  className="grow shrink-0 basis-44 min-w-fit h-10"
+                >
+                  Deny — don&apos;t sign in
+                </Button>
               </div>
-            ) : (
-              <label className="block">
-                <span className="block text-xs text-muted mb-1.5">
-                  Code shown in your terminal
-                </span>
-                <input
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  placeholder="XXXX-XXXX"
-                  autoComplete="off"
-                  spellCheck={false}
-                  className="w-full h-10 px-3 rounded-lg bg-bg-elevated border border-line text-base font-mono uppercase tracking-widest placeholder:text-muted/50 placeholder:normal-case"
-                />
-              </label>
-            )}
-
-            <p className="text-[11px] text-muted">
-              Only approve if you just ran{" "}
-              <code className="text-[10.5px]">daalu login</code> on this machine.
-              Approving grants it a token that acts as you until you revoke it in
-              Settings → API tokens.
-            </p>
-
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={approve}
-                disabled={!code.trim()}
-                className="flex-1 h-9 rounded-lg bg-gradient-to-r from-accent-emerald to-accent-cyan text-bg-base text-sm font-medium disabled:opacity-50 inline-flex items-center justify-center gap-1.5"
-              >
-                <ShieldCheck className="h-4 w-4" /> Authorize
-              </button>
-              <button
-                type="button"
-                onClick={deny}
-                className="h-9 px-4 rounded-lg border border-line text-muted hover:text-[color:var(--critical)] text-sm"
-              >
-                Deny
-              </button>
             </div>
-          </div>
-        )}
+          )}
 
-        {state === "approved" && (
-          <div className="space-y-2">
-            <h1 className="text-xl font-semibold">You&apos;re all set ✓</h1>
-            <p className="text-sm text-muted">
-              Return to your terminal — <code className="text-[11px]">daalu</code>{" "}
-              is now signed in. You can close this tab.
-            </p>
-          </div>
-        )}
+          {state === "approved" && (
+            <div role="status" className="text-center space-y-2 motion-enter">
+              <CheckCircle2
+                className="h-10 w-10 mx-auto text-accent motion-success"
+                aria-hidden
+              />
+              <h1 className="text-xl font-semibold">Terminal authorized.</h1>
+              <p className="text-sm text-muted">
+                You can close this tab. Your terminal is now signed in to Daalu.
+              </p>
+            </div>
+          )}
 
-        {state === "denied" && (
-          <div className="space-y-2">
-            <h1 className="text-xl font-semibold">Request denied</h1>
-            <p className="text-sm text-muted">
-              No token was issued. If this was you, run{" "}
-              <code className="text-[11px]">daalu login</code> again.
-            </p>
-          </div>
-        )}
+          {state === "denied" && (
+            <div role="status" className="space-y-2 motion-enter">
+              <h1 className="text-xl font-semibold">Request denied</h1>
+              <p className="text-sm text-muted">
+                No token was issued. If this was you, run {cmd} again.
+              </p>
+            </div>
+          )}
 
-        {state === "error" && (
-          <div className="space-y-2">
-            <h1 className="text-xl font-semibold">That didn&apos;t work</h1>
-            <p className="text-sm text-muted">
-              {error || "The login request is invalid or has expired."} Run{" "}
-              <code className="text-[11px]">daalu login</code> again to get a
-              fresh request.
-            </p>
-          </div>
-        )}
+          {state === "error" && (
+            <div role="alert" className="space-y-2 motion-enter">
+              <h1 className="text-xl font-semibold">That didn&apos;t work</h1>
+              <p className="text-sm text-muted">
+                {error || "The sign-in request is invalid or has expired."} Run{" "}
+                {cmd} again to get a fresh request.
+              </p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

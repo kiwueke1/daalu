@@ -23,7 +23,7 @@ export function MetricsCard({
     intent === "positive" || (delta && !delta.startsWith("-") && intent !== "negative");
   return (
     <div className="surface relative overflow-hidden p-4">
-      <div className="text-[10px] uppercase tracking-[0.18em] text-muted">{label}</div>
+      <div className="text-[11px] uppercase tracking-[0.18em] text-muted">{label}</div>
       <div className="flex items-end gap-3 mt-2">
         <div className="text-[28px] leading-none font-semibold tracking-tight">
           {value}

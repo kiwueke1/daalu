@@ -35,41 +35,25 @@ import {
 } from "lucide-react";
 import {
   api,
+  ApiError,
   type ObsQuerySpec,
   type ObsQueryResult,
 } from "@/lib/api";
 import { HUB } from "@/lib/hub-routes";
 import { LoadState } from "@/components/ui/load-state";
-
-/** Give up on a store that doesn't answer, so the page never spins forever. */
-const OVERVIEW_TIMEOUT_MS = 20_000;
-
-function withTimeout<T>(p: Promise<T>, what: string): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const t = window.setTimeout(
-      () =>
-        reject(
-          new Error(
-            `${what} didn't answer within ${OVERVIEW_TIMEOUT_MS / 1000}s. It may be slow or unreachable from Daalu.`
-          )
-        ),
-      OVERVIEW_TIMEOUT_MS
-    );
-    p.then(
-      (v) => {
-        window.clearTimeout(t);
-        resolve(v);
-      },
-      (e) => {
-        window.clearTimeout(t);
-        reject(e);
-      }
-    );
-  });
-}
+import { Button } from "@/components/ui/button";
+import { errorText } from "@/lib/errors";
+import { isUnreachable, withTimeout } from "@/lib/timeout";
 
 const METRIC_WINDOWS = ["instant", "5m", "15m", "1h", "6h", "24h"];
 const LOG_WINDOWS = ["5m", "15m", "1h", "6h", "24h"];
+
+const PROVIDER_SUBTITLE: Record<string, string> = {
+  prometheus: "Check that your metrics store is healthy and run read-only metric queries against it.",
+  thanos: "Check that your long-term metrics store is healthy and run read-only metric queries against it.",
+  loki: "Check that your log store is healthy and pull recent log lines with read-only queries.",
+  opensearch: "Check that your search and log store is healthy and run read-only queries against it.",
+};
 
 const PROVIDER_TITLE: Record<string, string> = {
   prometheus: "Prometheus / Alertmanager",
@@ -97,7 +81,9 @@ export default function ObservabilityDetailPage() {
   });
   const overview = overviewQuery.data;
   const notFound =
-    overviewQuery.isError && String(overviewQuery.error).includes("404");
+    overviewQuery.isError &&
+    overviewQuery.error instanceof ApiError &&
+    overviewQuery.error.status === 404;
   // The cluster has no store of this kind: say so instead of "unreachable".
   const noStoreOnCluster =
     !!cluster && !!overview && !overview.reachable &&
@@ -135,6 +121,7 @@ export default function ObservabilityDetailPage() {
           {overview && !noStoreOnCluster && (
             <span className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-muted">
               <span
+                aria-hidden
                 className={`h-2 w-2 rounded-full ${
                   overview.reachable ? "bg-accent-emerald" : "bg-signal-critical"
                 }`}
@@ -143,6 +130,10 @@ export default function ObservabilityDetailPage() {
             </span>
           )}
         </div>
+        <p className="text-sm text-muted mt-1 max-w-[720px]">
+          {PROVIDER_SUBTITLE[provider] ??
+            "Check that this store is healthy and run read-only queries against it."}
+        </p>
         {baseUrl && (
           <div className="text-xs text-muted mt-1 break-all">
             endpoint <span className="font-mono">{baseUrl}</span>
@@ -182,6 +173,24 @@ export default function ObservabilityDetailPage() {
         <LoadState
           query={overviewQuery}
           loadingText={`Querying ${title}…`}
+          notSetUp={{
+            when: isUnreachable,
+            title: `Couldn't reach ${title}`,
+            hint: (
+              <>
+                Check the cluster&apos;s observability connection in{" "}
+                <Link href={HUB.clusters} className="underline">
+                  Managed infra
+                </Link>
+                .
+              </>
+            ),
+            action: (
+              <Button size="sm" onClick={() => overviewQuery.refetch()}>
+                Retry
+              </Button>
+            ),
+          }}
         >
           {overview && (
             <OverviewAndConsole
@@ -500,17 +509,20 @@ function WindowToggle({
   options,
   value,
   onChange,
+  ariaLabel,
 }: {
   options: string[];
   value: string;
   onChange: (v: string) => void;
+  ariaLabel: string;
 }) {
   return (
-    <div className="flex rounded-lg border border-line overflow-hidden">
+    <div role="group" aria-label={ariaLabel} className="flex flex-wrap rounded-lg border border-line overflow-hidden">
       {options.map((o) => (
         <button
           key={o}
           type="button"
+          aria-pressed={value === o}
           onClick={() => onChange(o)}
           className={
             "h-9 px-3 text-xs " +
@@ -537,6 +549,7 @@ function ResultBlock({ result }: { result: ObsQueryResult }) {
         </code>
         {result.ok && result.output && (
           <button
+            type="button"
             onClick={() => {
               navigator.clipboard.writeText(result.output);
               setCopied(true);
@@ -544,7 +557,8 @@ function ResultBlock({ result }: { result: ObsQueryResult }) {
             }}
             className="text-[11px] h-7 px-2 rounded-md border border-line hover:bg-bg-elevated/60 inline-flex items-center gap-1 shrink-0"
           >
-            <Copy className="h-3 w-3" /> {copied ? "Copied" : "Copy"}
+            <Copy className="h-3 w-3" aria-hidden />{" "}
+            <span aria-live="polite">{copied ? "Copied" : "Copy"}</span>
           </button>
         )}
       </div>
@@ -560,22 +574,29 @@ function RunButton({
   pending,
   count,
   onClick,
+  disabledReason,
 }: {
   disabled: boolean;
   pending: boolean;
   count: number;
   onClick: () => void;
+  disabledReason?: string;
 }) {
   return (
-    <button
-      type="button"
+    <Button
+      variant="primary"
       disabled={disabled}
+      disabledReason={disabledReason}
+      pending={pending}
       onClick={onClick}
-      className="h-9 px-4 rounded-lg bg-accent-cyan/15 border border-accent-cyan/40 text-accent-cyan text-sm disabled:opacity-50 inline-flex items-center gap-1.5"
+      icon={<Play className="h-3.5 w-3.5" aria-hidden />}
     >
-      <Play className="h-3.5 w-3.5" />
-      {pending ? "Running…" : `Run${count ? ` (${count})` : ""}`}
-    </button>
+      {pending
+        ? "Running…"
+        : count
+          ? `Run ${count} ${count === 1 ? "query" : "queries"}`
+          : "Run queries"}
+    </Button>
   );
 }
 
@@ -651,37 +672,46 @@ function MetricsConsole({
         </div>
 
         <div className="flex flex-wrap items-end gap-3 border-t border-line pt-3">
-          <label className="text-xs space-y-1">
-            <div className="text-muted uppercase tracking-wider">
+          <div className="text-xs space-y-1">
+            <div className="text-muted uppercase tracking-wider" aria-hidden>
               Time window
             </div>
             <WindowToggle
+              ariaLabel="Time window"
               options={METRIC_WINDOWS}
               value={timeRange}
               onChange={setTimeRange}
             />
-          </label>
+          </div>
           <RunButton
             disabled={nothingPicked || !reachable || run.isPending}
+            disabledReason={
+              !reachable
+                ? "The store isn't reachable"
+                : nothingPicked
+                  ? "Tick a panel or type a query first"
+                  : undefined
+            }
             pending={run.isPending}
             count={selected.size + (custom.trim() ? 1 : 0)}
             onClick={() => run.mutate(undefined)}
           />
         </div>
         {!reachable && (
-          <p className="text-[11px] text-accent-amber">
-            Endpoint is not reachable — queries are disabled.
+          <p className="text-xs text-muted">
+            Daalu can&apos;t reach this store right now, so queries are off.
+            Check the integration, then reload.
           </p>
         )}
         {run.error && (
-          <p className="text-[11px] text-signal-critical">
-            {String(run.error.message || run.error)}
+          <p role="alert" className="text-xs text-signal-critical">
+            {errorText(run.error)}
           </p>
         )}
       </div>
 
       {run.data && (
-        <div className="space-y-3">
+        <div className="space-y-3 motion-enter" key={run.submittedAt}>
           {run.data.results.map((r) => (
             <ResultBlock key={r.id} result={r} />
           ))}
@@ -778,14 +808,15 @@ function LogsConsole({
               className="h-9 px-3 rounded-lg bg-bg-elevated/60 border border-line text-sm w-56"
             />
           </label>
-          <label className="text-xs space-y-1">
-            <div className="text-muted uppercase tracking-wider">Since</div>
+          <div className="text-xs space-y-1">
+            <div className="text-muted uppercase tracking-wider" aria-hidden>Since</div>
             <WindowToggle
+              ariaLabel="Since"
               options={LOG_WINDOWS}
               value={since}
               onChange={setSince}
             />
-          </label>
+          </div>
           <label className="text-xs space-y-1">
             <div className="text-muted uppercase tracking-wider">Limit</div>
             <input
@@ -803,25 +834,33 @@ function LogsConsole({
           </label>
           <RunButton
             disabled={selected.size === 0 || !reachable || run.isPending}
+            disabledReason={
+              !reachable
+                ? "The store isn't reachable"
+                : selected.size === 0
+                  ? "Tick a panel first"
+                  : undefined
+            }
             pending={run.isPending}
             count={selected.size}
             onClick={() => run.mutate(undefined)}
           />
         </div>
         {!reachable && (
-          <p className="text-[11px] text-accent-amber">
-            Endpoint is not reachable — queries are disabled.
+          <p className="text-xs text-muted">
+            Daalu can&apos;t reach this store right now, so queries are off.
+            Check the integration, then reload.
           </p>
         )}
         {run.error && (
-          <p className="text-[11px] text-signal-critical">
-            {String(run.error.message || run.error)}
+          <p role="alert" className="text-xs text-signal-critical">
+            {errorText(run.error)}
           </p>
         )}
       </div>
 
       {run.data && (
-        <div className="space-y-3">
+        <div className="space-y-3 motion-enter" key={run.submittedAt}>
           {run.data.results.map((r) => (
             <ResultBlock key={r.id} result={r} />
           ))}

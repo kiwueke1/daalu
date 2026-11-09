@@ -19,12 +19,17 @@ import { useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LoadState } from "@/components/ui/load-state";
+import { Button, buttonClass } from "@/components/ui/button";
+import { ConfirmButton } from "@/components/ui/confirm-button";
+import { TabBar } from "@/components/ui/tabs";
+import { useToast } from "@/components/ui/toast";
 import {
   ArrowRight,
   Bot,
   Check,
   Code2,
   Copy,
+  Cpu,
   HardDrive,
   KeyRound,
   Loader2,
@@ -35,7 +40,8 @@ import {
   Terminal,
   Trash2,
 } from "lucide-react";
-import { api, type WorkspaceView, type CodingModelView } from "@/lib/api";
+import { api, type WorkspaceView } from "@/lib/api";
+import { errorText } from "@/lib/errors";
 
 export default function WorkspacePage() {
   const qc = useQueryClient();
@@ -61,7 +67,7 @@ export default function WorkspacePage() {
     <div className="space-y-6 max-w-3xl">
       <header>
         <h1 className="text-2xl font-semibold flex items-center gap-2">
-          <Code2 className="h-5 w-5 text-accent-cyan" /> Workspace
+          <Code2 className="h-5 w-5 text-accent-cyan" aria-hidden /> Workspace
         </h1>
         <p className="text-muted text-sm mt-1">
           A browser-hosted VS Code, pre-wired to your inference tier so
@@ -72,8 +78,8 @@ export default function WorkspacePage() {
       </header>
 
       {eligibility.isLoading && (
-        <div className="surface p-4 text-sm text-muted flex items-center gap-2">
-          <Loader2 className="h-4 w-4 animate-spin" /> Checking eligibility…
+        <div role="status" className="surface p-4 text-sm text-muted flex items-center gap-2">
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Checking whether Workspace is available…
         </div>
       )}
 
@@ -88,10 +94,11 @@ export default function WorkspacePage() {
       {eligibility.data?.eligible && (
         <>
           {session.isLoading && (
-            <div className="surface p-4 text-sm text-muted flex items-center gap-2">
-              <Loader2 className="h-4 w-4 animate-spin" /> Loading workspace…
+            <div role="status" className="surface p-4 text-sm text-muted flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Loading workspace…
             </div>
           )}
+          {session.isError && <LoadState query={session}>{null}</LoadState>}
           {session.data && (
             <ExistingWorkspaceCard
               workspace={session.data}
@@ -111,7 +118,7 @@ export default function WorkspacePage() {
         </>
       )}
 
-      <FeatureHints />
+      {eligibility.data?.eligible !== false && <FeatureHints />}
     </div>
   );
 }
@@ -129,13 +136,15 @@ function explainIneligible(reason: string): {
   title: string;
   sentence: string;
   options: React.ReactNode[];
+  /** The first option as a real action, when there is one to take here. */
+  primary?: { label: string; href: string };
 } {
   const r = reason.toLowerCase();
   if (r.includes("no coding model")) {
     return {
       title: "No coding model is running yet",
       sentence:
-        "Your tenant can use Workspace, but the coding model it talks to isn't deployed on your cluster, so there is nothing to answer the assistant's prompts.",
+        "Your organisation can use Workspace, but the coding model it talks to isn't deployed on your cluster yet, so nothing can answer the assistant's prompts.",
       options: [
         <>Ask your operator to deploy the coding model on your GPU cluster.</>,
         <>Then come back here to create your workspace.</>,
@@ -143,49 +152,53 @@ function explainIneligible(reason: string): {
     };
   }
   return {
-    title: "Workspace isn't enabled for your tenant",
+    title: "Workspace isn't turned on for your organisation",
     sentence:
-      "Workspace only runs on an AI tier that keeps your code off the public internet, and your tenant doesn't have one yet.",
+      "Workspace only runs on an AI tier that keeps your code off the public internet, and your organisation doesn't have one yet. Connecting your own GPU is the quickest way.",
+    primary: { label: "Connect a GPU", href: "/ai-factory" },
     options: [
       <>
-        Connect your own <strong>GPU</strong> (sovereign tier) to Daalu, or
+        Or opt into the <strong>Daalu-hosted</strong> AI tier (talk to your
+        account contact).
       </>,
-      <>
-        Opt into the <strong>Daalu-hosted</strong> AI tier (talk to your
-        account contact), or
-      </>,
-      <>Ask your Daalu operator to turn Workspace on for your tenant.</>,
+      <>Or ask your Daalu operator to turn Workspace on for your organisation.</>,
     ],
   };
 }
 
 function NotEligibleCard({ reason }: { reason: string }) {
-  const { title, sentence, options } = explainIneligible(reason || "");
+  const { title, sentence, options, primary } = explainIneligible(reason || "");
   return (
     <section className="surface p-5 space-y-3">
       <div className="flex items-start gap-3">
         <div
-          className="h-9 w-9 rounded-lg flex items-center justify-center shrink-0"
-          style={{
-            background: "color-mix(in srgb, var(--warning) 14%, transparent)",
-          }}
+          // Neutral, not a warning: "not turned on" is a setup step, not an error.
+          className="h-9 w-9 rounded-lg flex items-center justify-center shrink-0 border border-line bg-bg-elevated/60"
         >
-          <Lock className="h-4 w-4" style={{ color: "var(--warning)" }} />
+          <Lock className="h-4 w-4 text-muted" aria-hidden />
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-base font-semibold">{title}</div>
-          <p className="text-[12.5px] text-muted mt-1 leading-relaxed">{sentence}</p>
-          <ul className="text-[12.5px] text-muted mt-3 space-y-1.5 list-disc list-inside">
+          <p className="text-sm text-muted mt-1 leading-relaxed">{sentence}</p>
+          {primary && (
+            <Link
+              href={primary.href}
+              className={buttonClass("primary") + " mt-3"}
+            >
+              <Cpu className="h-4 w-4" aria-hidden /> {primary.label}
+            </Link>
+          )}
+          <ul className="text-sm text-muted mt-3 space-y-1.5 list-disc list-inside">
             {options.map((o, i) => (
               <li key={i}>{o}</li>
             ))}
           </ul>
           {reason && (
-            <details className="mt-3 text-[11.5px] text-muted">
+            <details className="mt-3 text-xs text-muted">
               <summary className="cursor-pointer hover:text-fg">
                 Technical details
               </summary>
-              <pre className="mt-1.5 whitespace-pre-wrap break-words rounded-lg bg-bg-elevated p-2.5 font-mono text-[11px]">
+              <pre className="mt-1.5 whitespace-pre-wrap break-words rounded-lg bg-bg-elevated p-2.5 font-mono text-xs">
                 {reason}
               </pre>
             </details>
@@ -193,13 +206,11 @@ function NotEligibleCard({ reason }: { reason: string }) {
         </div>
       </div>
       <div className="pt-2 border-t border-line/40 flex justify-end">
-        <Link
-          href="/billing"
-          className="text-xs h-9 px-4 rounded-lg border border-line text-muted hover:text-fg inline-flex items-center gap-1.5"
-        >
-          Manage AI tier <ArrowRight className="h-3.5 w-3.5" />
+        <Link href="/billing" className={buttonClass("secondary")}>
+          Manage AI tier <ArrowRight className="h-3.5 w-3.5" aria-hidden />
         </Link>
       </div>
+      <FeatureHints collapsed />
     </section>
   );
 }
@@ -211,9 +222,14 @@ function ExistingWorkspaceCard({
   workspace: WorkspaceView;
   onDestroyed: () => void;
 }) {
+  const toast = useToast();
   const destroy = useMutation({
     mutationFn: () => api.ide.destroy(),
-    onSuccess: onDestroyed,
+    onSuccess: () => {
+      onDestroyed();
+      toast.success("Workspace deleted. Its volume has been released.");
+    },
+    onError: (err) => toast.error(errorText(err)),
   });
   const isProvisioning = workspace.state === "provisioning";
   const isActive = workspace.state === "active";
@@ -221,49 +237,42 @@ function ExistingWorkspaceCard({
     <section className="surface p-5 space-y-4">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <div className="text-[11px] uppercase tracking-wider text-muted">
+          <div className="text-xs text-muted">
             Your workspace · {workspace.profile} · {workspace.model}
           </div>
           <div className="text-base font-semibold mt-1 flex items-center gap-2">
             <StateBadge state={workspace.state} />
             {isProvisioning && (
-              <span className="text-[12px] text-muted font-normal">
-                first boot can take ~60s while the image pulls
+              <span className="text-xs text-muted font-normal">
+                First boot can take about a minute while the image downloads.
               </span>
             )}
           </div>
           {workspace.git_repo_url && (
-            <div className="text-[12px] text-muted mt-2 flex items-center gap-1.5 flex-wrap">
+            <div className="text-xs text-muted mt-2 flex items-center gap-1.5 flex-wrap">
               <span>
                 Cloned from{" "}
-                <code className="text-[11px]">{workspace.git_repo_url}</code> on{" "}
-                <code className="text-[11px]">{workspace.git_branch}</code>
+                <code className="text-xs">{workspace.git_repo_url}</code> on{" "}
+                <code className="text-xs">{workspace.git_branch}</code>
               </span>
               {workspace.git_authenticated && (
-                <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider rounded px-1.5 py-0.5 bg-accent-emerald/15 text-[color:var(--accent-emerald)]">
-                  <ShieldCheck className="h-3 w-3" /> Private
+                <span className="inline-flex items-center gap-1 text-[11px] uppercase tracking-wider rounded px-1.5 py-0.5 bg-accent/15 text-accent">
+                  <ShieldCheck className="h-3 w-3" aria-hidden /> Private
                 </span>
               )}
             </div>
           )}
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            if (
-              confirm(
-                "Delete this workspace? Your /workspace folder (and its 5/20/50 GiB PVC) " +
-                  "will be released. Push any in-flight changes first.",
-              )
-            ) {
-              destroy.mutate();
-            }
-          }}
-          disabled={destroy.isPending}
-          className="text-xs h-9 px-3 rounded-lg border border-line text-muted hover:text-[color:var(--critical)] disabled:opacity-50 inline-flex items-center gap-1.5"
-        >
-          <Trash2 className="h-3.5 w-3.5" /> Delete
-        </button>
+        <ConfirmButton
+          tone="danger"
+          label="Delete"
+          confirmLabel="Delete workspace"
+          consequence="Your /workspace files are deleted. Push any changes first."
+          icon={<Trash2 className="h-3.5 w-3.5" aria-hidden />}
+          pending={destroy.isPending}
+          onConfirm={() => destroy.mutate()}
+          className="shrink-0"
+        />
       </div>
 
       {isActive && (
@@ -272,13 +281,14 @@ function ExistingWorkspaceCard({
             href={workspace.ide_url}
             target="_blank"
             rel="noreferrer"
-            className="text-xs h-9 px-4 rounded-lg bg-gradient-to-r from-accent-emerald to-accent-cyan text-bg-base inline-flex items-center gap-1.5"
+            className={buttonClass("primary")}
           >
-            <Code2 className="h-3.5 w-3.5" /> Open IDE
+            <Code2 className="h-3.5 w-3.5" aria-hidden /> Open IDE
+            <span className="sr-only">(opens in a new tab)</span>
           </a>
-          <div className="text-[11px] text-muted self-center">
+          <div className="text-xs text-muted self-center">
             Opens in a new tab. The Daalu Assistant lives in the activity
-            bar — or run <code className="text-[10.5px]">daalu chat</code>{" "}
+            bar, or run <code className="text-xs">daalu chat</code>{" "}
             in the terminal for a CLI agent.
           </div>
         </div>
@@ -291,11 +301,11 @@ function StateBadge({ state }: { state: WorkspaceView["state"] }) {
   const map: Record<WorkspaceView["state"], { label: string; cls: string }> = {
     provisioning: {
       label: "Provisioning",
-      cls: "bg-accent-amber/15 text-[color:var(--accent-amber)]",
+      cls: "bg-signal-warning/15 text-signal-warning",
     },
     active: {
       label: "Active",
-      cls: "bg-accent-emerald/15 text-[color:var(--accent-emerald)]",
+      cls: "bg-accent/15 text-accent",
     },
     paused: {
       label: "Paused (idle)",
@@ -307,13 +317,13 @@ function StateBadge({ state }: { state: WorkspaceView["state"] }) {
     },
     error: {
       label: "Error",
-      cls: "bg-signal-critical/15 text-[color:var(--critical)]",
+      cls: "bg-signal-critical/15 text-signal-critical",
     },
   };
   const m = map[state];
   return (
     <span
-      className={`inline-flex items-center text-[10px] uppercase tracking-wider rounded px-1.5 py-0.5 ${m.cls}`}
+      className={`inline-flex items-center text-[11px] font-semibold uppercase tracking-wider rounded px-1.5 py-0.5 ${m.cls}`}
     >
       {m.label}
     </span>
@@ -326,6 +336,7 @@ function CreateWorkspaceForm({ onCreated }: { onCreated: () => void }) {
   const [gitRepoUrl, setGitRepoUrl] = useState("");
   const [gitBranch, setGitBranch] = useState("main");
   const [gitToken, setGitToken] = useState("");
+  const toast = useToast();
 
   const models = useQuery({
     queryKey: ["ide-models"],
@@ -350,7 +361,10 @@ function CreateWorkspaceForm({ onCreated }: { onCreated: () => void }) {
         // Only send a token when both a repo and a token are present.
         git_token: gitRepoUrl.trim() && gitToken.trim() ? gitToken.trim() : null,
       }),
-    onSuccess: () => onCreated(),
+    onSuccess: () => {
+      onCreated();
+      toast.success("Workspace is starting. It'll be ready in about a minute.");
+    },
   });
   const noneAvailable = list.length > 0 && !list.some((m) => m.available);
 
@@ -363,7 +377,7 @@ function CreateWorkspaceForm({ onCreated }: { onCreated: () => void }) {
         <h2 className="text-base font-semibold mt-1">
           Provision your workspace
         </h2>
-        <p className="text-[12.5px] text-muted mt-1 leading-relaxed">
+        <p className="text-sm text-muted mt-1 leading-relaxed">
           One workspace per user. Your files live on a persistent volume
           and survive pauses; idle workspaces are reaped after 14 days.
         </p>
@@ -371,7 +385,7 @@ function CreateWorkspaceForm({ onCreated }: { onCreated: () => void }) {
 
       <div className="space-y-3">
         <label className="block text-xs space-y-1">
-          <span className="text-muted uppercase tracking-wider">
+          <span className="text-xs font-medium text-muted">
             Coding model
           </span>
           <select
@@ -388,7 +402,7 @@ function CreateWorkspaceForm({ onCreated }: { onCreated: () => void }) {
               </option>
             ))}
           </select>
-          <span className="text-[10px] text-muted">
+          <span className="block text-xs text-muted">
             {(() => {
               const sel = list.find((m) => m.id === effectiveModel);
               if (sel) return sel.description;
@@ -400,7 +414,7 @@ function CreateWorkspaceForm({ onCreated }: { onCreated: () => void }) {
         </label>
 
         <label className="block text-xs space-y-1">
-          <span className="text-muted uppercase tracking-wider">Profile</span>
+          <span className="text-xs font-medium text-muted">Profile</span>
           <select
             value={profile}
             onChange={(e) =>
@@ -418,14 +432,14 @@ function CreateWorkspaceForm({ onCreated }: { onCreated: () => void }) {
               Large — 2/8 CPU · 8/16 GiB RAM · 50 GiB disk
             </option>
           </select>
-          <span className="text-[10px] text-muted">
-            Pick small unless you know you need more. Operator may cap your
-            tenant's max profile.
+          <span className="block text-xs text-muted">
+            Pick small unless you know you need more. Your operator may cap
+            the largest size your organisation can use.
           </span>
         </label>
 
         <label className="block text-xs space-y-1">
-          <span className="text-muted uppercase tracking-wider">
+          <span className="text-xs font-medium text-muted">
             Git repo URL (optional)
           </span>
           <input
@@ -433,9 +447,10 @@ function CreateWorkspaceForm({ onCreated }: { onCreated: () => void }) {
             value={gitRepoUrl}
             onChange={(e) => setGitRepoUrl(e.target.value)}
             placeholder="https://github.com/acme/infra.git"
+            autoComplete="url"
             className="w-full h-9 px-3 rounded-lg bg-bg-elevated/60 border border-line text-sm"
           />
-          <span className="text-[10px] text-muted">
+          <span className="block text-xs text-muted">
             HTTPS URL of a GitHub, GitLab, or self-hosted repo. If set, your
             workspace is seeded with a fresh clone on first boot. Leave blank
             to start empty — you can drag-and-drop files into the IDE later,
@@ -445,8 +460,8 @@ function CreateWorkspaceForm({ onCreated }: { onCreated: () => void }) {
 
         {gitRepoUrl.trim() && (
           <label className="block text-xs space-y-1">
-            <span className="text-muted uppercase tracking-wider flex items-center gap-1.5">
-              <KeyRound className="h-3 w-3" /> Access token (private repos)
+            <span className="text-xs font-medium text-muted flex items-center gap-1.5">
+              <KeyRound className="h-3 w-3" aria-hidden /> Access token (private repos)
             </span>
             <input
               type="password"
@@ -456,9 +471,9 @@ function CreateWorkspaceForm({ onCreated }: { onCreated: () => void }) {
               placeholder="ghp_… / glpat-… (leave blank for public repos)"
               className="w-full h-9 px-3 rounded-lg bg-bg-elevated/60 border border-line text-sm font-mono"
             />
-            <span className="text-[10px] text-muted">
-              A personal-access-token with <code className="text-[10px]">repo</code>{" "}
-              (GitHub) or <code className="text-[10px]">read_repository</code>{" "}
+            <span className="block text-xs text-muted">
+              A personal-access-token with <code className="text-xs">repo</code>{" "}
+              (GitHub) or <code className="text-xs">read_repository</code>{" "}
               (GitLab) scope. Stored{" "}
               <strong className="text-[color:var(--text)]">encrypted</strong>,
               mounted into the clone as an in-memory credential, and never
@@ -469,7 +484,7 @@ function CreateWorkspaceForm({ onCreated }: { onCreated: () => void }) {
         )}
 
         <label className="block text-xs space-y-1">
-          <span className="text-muted uppercase tracking-wider">
+          <span className="text-xs font-medium text-muted">
             Git branch
           </span>
           <input
@@ -482,27 +497,27 @@ function CreateWorkspaceForm({ onCreated }: { onCreated: () => void }) {
       </div>
 
       <div className="flex justify-end pt-2 border-t border-line/40">
-        <button
-          type="button"
+        <Button
+          variant="primary"
           onClick={() => create.mutate()}
-          disabled={create.isPending || noneAvailable || !effectiveModel}
-          className="text-xs h-9 px-4 rounded-lg bg-gradient-to-r from-accent-emerald to-accent-cyan text-bg-base disabled:opacity-50 inline-flex items-center gap-1.5"
+          pending={create.isPending}
+          disabled={noneAvailable || !effectiveModel}
+          disabledReason={
+            create.isPending
+              ? "Creating…"
+              : models.isLoading
+                ? "Loading models…"
+                : "No coding model is available yet"
+          }
+          icon={<Sparkles className="h-3.5 w-3.5" aria-hidden />}
         >
-          {create.isPending ? (
-            <>
-              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Provisioning…
-            </>
-          ) : (
-            <>
-              <Sparkles className="h-3.5 w-3.5" /> Create workspace
-            </>
-          )}
-        </button>
+          {create.isPending ? "Creating…" : "Create workspace"}
+        </Button>
       </div>
 
       {create.isError && (
-        <div className="text-[11.5px] text-[color:var(--critical)]">
-          {String(create.error)}
+        <div role="alert" className="text-sm text-signal-critical">
+          {errorText(create.error)}
         </div>
       )}
     </section>
@@ -527,9 +542,14 @@ function CopyButton({ text, label = "Copy" }: { text: string; label?: string }) 
           /* clipboard blocked — the user can still select the text */
         }
       }}
-      className="shrink-0 text-[10.5px] h-7 px-2 rounded-md border border-line text-muted hover:text-[color:var(--text)] inline-flex items-center gap-1"
+      aria-label={copied ? "Copied" : `${label} command`}
+      className="motion-press shrink-0 text-xs h-7 px-2 rounded-md border border-line text-muted hover:text-[color:var(--text)] inline-flex items-center gap-1"
     >
-      {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+      {copied ? (
+        <Check className="h-3 w-3 motion-success" aria-hidden />
+      ) : (
+        <Copy className="h-3 w-3" aria-hidden />
+      )}
       {copied ? "Copied" : label}
     </button>
   );
@@ -538,7 +558,7 @@ function CopyButton({ text, label = "Copy" }: { text: string; label?: string }) 
 function CommandLine({ cmd }: { cmd: string }) {
   return (
     <div className="flex items-center gap-2 bg-bg-elevated/60 border border-line rounded-lg px-3 h-9">
-      <code className="text-[11.5px] font-mono flex-1 overflow-x-auto whitespace-nowrap">
+      <code className="text-xs font-mono flex-1 overflow-x-auto whitespace-nowrap">
         {cmd}
       </code>
       <CopyButton text={cmd} />
@@ -560,6 +580,7 @@ function TerminalCard() {
   const loginCmd = useMutation({
     mutationFn: () => api.cli.loginCommand(),
   });
+  type InstallId = (typeof INSTALL_TABS)[number]["id"];
 
   return (
     <section className="surface p-5 space-y-4">
@@ -567,15 +588,15 @@ function TerminalCard() {
         <div
           className="h-9 w-9 rounded-lg flex items-center justify-center shrink-0"
           style={{
-            background: "color-mix(in srgb, var(--accent-cyan) 14%, transparent)",
+            background: "color-mix(in srgb, var(--accent) 14%, transparent)",
           }}
         >
-          <Terminal className="h-4 w-4 text-[color:var(--accent-cyan)]" />
+          <Terminal className="h-4 w-4 text-accent" aria-hidden />
         </div>
         <div className="flex-1">
           <h2 className="text-base font-semibold">Use Daalu from your terminal</h2>
-          <p className="text-[12.5px] text-muted mt-1 leading-relaxed">
-            Prefer your own editor? Install the <code className="text-[11px]">daalu</code>{" "}
+          <p className="text-sm text-muted mt-1 leading-relaxed">
+            Prefer your own editor? Install the <code className="text-xs">daalu</code>{" "}
             CLI and run the same coding agent in any project on your machine —
             it edits the files that are already on disk, across as many repos as
             you like. Same sovereign inference; your code never leaves the
@@ -589,23 +610,21 @@ function TerminalCard() {
         <div className="text-[11px] uppercase tracking-wider text-muted">
           1 · Install
         </div>
-        <div className="flex flex-wrap gap-1.5">
-          {INSTALL_TABS.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setTab(t.id)}
-              className={`text-[10.5px] h-7 px-2.5 rounded-md border ${
-                t.id === tab
-                  ? "border-[color:var(--accent-cyan)] text-[color:var(--text)]"
-                  : "border-line text-muted hover:text-[color:var(--text)]"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
+        <TabBar<InstallId>
+          tabs={INSTALL_TABS.map((t) => ({ id: t.id, label: t.label }))}
+          active={tab}
+          onChange={setTab}
+          ariaLabel="Install method"
+        />
+        <div
+          role="tabpanel"
+          id={`tabpanel-${active.id}`}
+          aria-labelledby={`tab-${active.id}`}
+          key={active.id}
+          className="motion-enter"
+        >
+          <CommandLine cmd={active.cmd} />
         </div>
-        <CommandLine cmd={active.cmd} />
       </div>
 
       {/* Step 2 — log in */}
@@ -614,39 +633,31 @@ function TerminalCard() {
           2 · Log in
         </div>
         <CommandLine cmd="daalu login" />
-        <p className="text-[11px] text-muted">
+        <p className="text-xs text-muted">
           Opens your browser to approve this machine, then you&apos;re signed in.
-          Or skip the browser — generate a one-time command tied to your account:
+          Or skip the browser and generate a one-time command tied to your account:
         </p>
         {loginCmd.data ? (
-          <div className="space-y-1.5">
+          <div className="space-y-1.5 motion-enter">
             <CommandLine cmd={loginCmd.data.command} />
-            <p className="text-[10.5px] text-muted">
+            <p className="text-xs text-muted">
               One-time, expires in {Math.round(loginCmd.data.expires_in / 60)}{" "}
               minutes. Paste it into your terminal to log in instantly.
             </p>
           </div>
         ) : (
-          <button
-            type="button"
+          <Button
             onClick={() => loginCmd.mutate()}
-            disabled={loginCmd.isPending}
-            className="text-xs h-9 px-4 rounded-lg border border-line text-muted hover:text-[color:var(--text)] disabled:opacity-50 inline-flex items-center gap-1.5"
+            pending={loginCmd.isPending}
+            disabledReason="Generating…"
+            icon={<KeyRound className="h-3.5 w-3.5" aria-hidden />}
           >
-            {loginCmd.isPending ? (
-              <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating…
-              </>
-            ) : (
-              <>
-                <KeyRound className="h-3.5 w-3.5" /> Generate one-time login command
-              </>
-            )}
-          </button>
+            {loginCmd.isPending ? "Generating…" : "Generate one-time login command"}
+          </Button>
         )}
         {loginCmd.isError && (
-          <div className="text-[11px] text-[color:var(--critical)]">
-            {String(loginCmd.error)}
+          <div role="alert" className="text-sm text-signal-critical">
+            {errorText(loginCmd.error)}
           </div>
         )}
       </div>
@@ -657,9 +668,9 @@ function TerminalCard() {
           3 · Code
         </div>
         <CommandLine cmd="cd ~/your/project && daalu" />
-        <p className="text-[11px] text-muted">
+        <p className="text-xs text-muted">
           The agent reads files, proposes diffs you approve, and runs commands
-          (asking first). <code className="text-[10.5px]">daalu --help</code> for
+          (asking first). <code className="text-xs">daalu --help</code> for
           everything.
         </p>
       </div>
@@ -667,10 +678,13 @@ function TerminalCard() {
   );
 }
 
-function FeatureHints() {
-  return (
-    <section className="surface p-4 space-y-2 text-[12.5px] text-muted">
-      <h3 className="text-[11px] uppercase tracking-wider">What's in the box</h3>
+/**
+ * What a workspace includes. On its own it's a card; inside the blocked
+ * state (`collapsed`) it folds into a <details> so the next step leads.
+ */
+function FeatureHints({ collapsed = false }: { collapsed?: boolean }) {
+  const body = (
+    <>
       <ul className="space-y-1.5 list-disc list-inside leading-relaxed">
         <li>
           <strong className="text-[color:var(--text)]">VS Code</strong>{" "}
@@ -679,14 +693,14 @@ function FeatureHints() {
         </li>
         <li>
           <strong className="text-[color:var(--text)]">Terminal</strong> with
-          <code className="text-[11px]"> kubectl</code>,{" "}
-          <code className="text-[11px]">helm</code>,{" "}
-          <code className="text-[11px]">git</code>,{" "}
-          <code className="text-[11px]">jq</code> pre-installed.
+          <code className="text-xs"> kubectl</code>,{" "}
+          <code className="text-xs">helm</code>,{" "}
+          <code className="text-xs">git</code>,{" "}
+          <code className="text-xs">jq</code> pre-installed.
         </li>
         <li>
           <strong className="text-fg">
-            <code className="text-[11px]">daalu chat</code> CLI
+            <code className="text-xs">daalu chat</code> CLI
           </strong>{" "}
           — a coding-agent REPL inside the terminal. Reads + writes
           files (asks before each), runs shell commands (asks first).
@@ -695,20 +709,36 @@ function FeatureHints() {
           <strong className="text-[color:var(--text)]">Privacy</strong>: prompts
           and code never reach external LLM providers — the router blocks
           all external tiers when{" "}
-          <code className="text-[11px]">purpose=&apos;coding&apos;</code>.
+          <code className="text-xs">purpose=&apos;coding&apos;</code>.
         </li>
       </ul>
       <p className="pt-1 italic">
-        <RefreshCw className="h-3 w-3 inline mr-1" /> Idle workspaces
-        pause after 24 h (files retained) and are destroyed after 14 d
-        of continued inactivity. You'll get an email warning before the
-        14-day cliff.
+        <RefreshCw className="h-3 w-3 inline mr-1" aria-hidden /> Idle workspaces
+        pause after 24 h (files retained) and are destroyed after 14 days
+        of continued inactivity. You&apos;ll get an email warning before
+        then.
       </p>
       <div className="flex items-center gap-2 pt-1">
-        <HardDrive className="h-3 w-3" />
-        <Bot className="h-3 w-3" />
-        <span>One workspace per user. Per-tenant profile caps apply.</span>
+        <HardDrive className="h-3 w-3" aria-hidden />
+        <Bot className="h-3 w-3" aria-hidden />
+        <span>One workspace per user. Your organisation&apos;s size limits apply.</span>
       </div>
+    </>
+  );
+  if (collapsed) {
+    return (
+      <details className="pt-3 border-t border-line/40 text-sm text-muted group">
+        <summary className="cursor-pointer hover:text-fg font-medium">
+          What&apos;s in the box
+        </summary>
+        <div className="mt-2 space-y-2">{body}</div>
+      </details>
+    );
+  }
+  return (
+    <section className="surface p-4 space-y-2 text-sm text-muted">
+      <h3 className="text-[11px] uppercase tracking-wider">What&apos;s in the box</h3>
+      {body}
     </section>
   );
 }

@@ -1,24 +1,9 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Fragment, useState } from "react";
-import {
-  Receipt,
-  Cpu,
-  Cloud,
-  CloudOff,
-  Check,
-  Loader2,
-  ArrowRight,
-  Server,
-  Plus,
-  Trash2,
-  AlertTriangle,
-  X,
-  Terminal,
-  ChevronUp,
-  ChevronDown,
-} from "lucide-react";
+import { Fragment } from "react";
+import Link from "next/link";
+import { Receipt, Cpu, Cloud, Check, Info, Loader2 } from "lucide-react";
 import {
   Area,
   AreaChart,
@@ -28,13 +13,12 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import {
-  api,
-  type RoutingPolicy,
-  type Sku,
-  type GpuCluster,
-} from "@/lib/api";
+import { api, type RoutingPolicy, type Sku } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { errorText } from "@/lib/errors";
+import { LoadState } from "@/components/ui/load-state";
+import { ConfirmButton } from "@/components/ui/confirm-button";
+import { useToast } from "@/components/ui/toast";
 import { GpuOnboardingCard, LocalGpuPill } from "@/components/gpu/connect-gpu";
 
 const compact = new Intl.NumberFormat(undefined, {
@@ -76,15 +60,22 @@ export default function BillingPage() {
     refetchInterval: 30_000,
   });
 
+  const toast = useToast();
   const changeSku = useMutation({
     mutationFn: api.billing.changeSku,
-    onSuccess: () => {
+    onSuccess: (_d, slug) => {
       qc.invalidateQueries({ queryKey: ["billing"] });
+      const name = skus.data?.find((s) => s.slug === slug)?.name ?? "the new plan";
+      toast.success(`You're on ${name} now. New pricing applies from today.`);
     },
+    onError: (err) => toast.error(errorText(err)),
   });
 
   const currentSlug = current.data?.sku?.slug ?? null;
   const totals = current.data?.totals;
+  // Until the GPU status has loaded, don't claim either way.
+  const gpuKnown = !!localGpu.data;
+  const gpuConfigured = localGpu.data?.configured ?? false;
 
   return (
     <div className="space-y-8 max-w-[1200px]">
@@ -100,35 +91,61 @@ export default function BillingPage() {
             from the moment you change.
           </p>
         </div>
-        <LocalGpuPill
-          configured={localGpu.data?.configured ?? false}
-          healthy={localGpu.data?.healthy ?? false}
-          model={localGpu.data?.model_classifier ?? ""}
-        />
+        {gpuKnown && (
+          <div className="flex flex-col items-start sm:items-end gap-1.5 max-w-[320px] motion-enter">
+            <LocalGpuPill
+              configured={gpuConfigured}
+              healthy={localGpu.data?.healthy ?? false}
+              model={localGpu.data?.model_classifier ?? ""}
+            />
+            {!gpuConfigured && (
+              <p className="text-xs text-muted sm:text-right">
+                No local GPU is connected, so requests go to external models
+                and are billed at external rates.{" "}
+                <Link href="/ai-factory" className="underline hover:text-fg">
+                  Connect a GPU in AI Factory
+                </Link>{" "}
+                to run them locally.
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ── Local-GPU onboarding ──────────────────────────────────── */}
       <GpuOnboardingCard />
 
       {/* ── Period totals ──────────────────────────────────────────── */}
-      <PeriodCard totals={totals} sku={current.data?.sku ?? null} />
+      <LoadState query={current} loadingText="Loading current period…">
+        {totals && <PeriodCard totals={totals} sku={current.data?.sku ?? null} />}
+      </LoadState>
 
       {/* ── SKU picker ─────────────────────────────────────────────── */}
       <section>
         <h2 className="text-sm uppercase tracking-[0.18em] text-muted mb-3">
           Plans
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-          {(skus.data ?? []).map((s) => (
-            <SkuCard
-              key={s.slug}
-              sku={s}
-              active={s.slug === currentSlug}
-              switching={changeSku.isPending && changeSku.variables === s.slug}
-              onSelect={() => changeSku.mutate(s.slug)}
-            />
-          ))}
-        </div>
+        <LoadState
+          query={skus}
+          loadingText="Loading plans…"
+          empty={!skus.data?.length}
+          emptyTitle="No plans available"
+          emptyHint="Plans couldn't be listed for your organisation. Contact support to choose one."
+        >
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 motion-enter">
+            {(skus.data ?? []).map((s) => (
+              <SkuCard
+                key={s.slug}
+                sku={s}
+                active={s.slug === currentSlug}
+                switching={changeSku.isPending && changeSku.variables === s.slug}
+                busy={changeSku.isPending || current.isLoading}
+                gpuMissing={gpuKnown && !gpuConfigured}
+                onSelect={() => changeSku.mutate(s.slug)}
+              />
+            ))}
+          </div>
+        </LoadState>
       </section>
 
       {/* ── Charts ─────────────────────────────────────────────────── */}
@@ -139,6 +156,15 @@ export default function BillingPage() {
             <span className="text-xs text-muted">USD per day</span>
           </div>
           <div className="h-56 mt-3">
+            {daily.isLoading ? (
+              <div role="status" className="h-full flex items-center justify-center gap-2 text-sm text-muted">
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Loading spend…
+              </div>
+            ) : daily.isError ? (
+              <div className="h-full flex items-center justify-center text-sm text-muted text-center px-4">
+                Couldn&apos;t load spend. {errorText(daily.error)}
+              </div>
+            ) : (
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={daily.data ?? []}>
                 <defs>
@@ -147,13 +173,14 @@ export default function BillingPage() {
                     <stop offset="100%" stopColor="var(--accent)" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid stroke="rgba(255,255,255,0.04)" vertical={false} />
-                <XAxis dataKey="day" stroke="rgba(255,255,255,0.3)" fontSize={10} />
-                <YAxis stroke="rgba(255,255,255,0.3)" fontSize={10} />
+                <CartesianGrid stroke="var(--line)" vertical={false} />
+                <XAxis dataKey="day" stroke="var(--text-muted)" fontSize={12} />
+                <YAxis stroke="var(--text-muted)" fontSize={12} />
                 <Tooltip
                   contentStyle={{
-                    background: "rgba(15,15,18,0.95)",
-                    border: "1px solid rgba(255,255,255,0.08)",
+                    background: "var(--bg-card)",
+                    border: "1px solid var(--line-strong)",
+                    color: "var(--text)",
                     fontSize: 12,
                   }}
                   formatter={(v: number) => `$${v.toFixed(4)}`}
@@ -167,10 +194,12 @@ export default function BillingPage() {
                 />
               </AreaChart>
             </ResponsiveContainer>
+            )}
           </div>
         </div>
         <BreakdownPanel
           title="Where tokens were made"
+          query={breakdown}
           rows={breakdown.data?.by_tier ?? []}
           labelMap={TIER_LABELS}
         />
@@ -179,6 +208,7 @@ export default function BillingPage() {
       <section>
         <BreakdownPanel
           title="Top sources this period"
+          query={breakdown}
           rows={breakdown.data?.by_source ?? []}
         />
       </section>
@@ -192,22 +222,16 @@ function PeriodCard({
   totals,
   sku,
 }: {
-  totals: any | undefined;
+  totals: any;
   sku: Sku | null;
 }) {
-  if (!totals)
-    return (
-      <div className="rounded-xl border border-line p-6 text-muted text-sm">
-        Loading current period…
-      </div>
-    );
   const variable = Math.max(0, totals.cost_usd);
   const totalThisMonth = totals.base_usd + variable;
   const bundlePct = totals.included_events
     ? Math.min(100, (totals.included_events_used / totals.included_events) * 100)
     : 0;
   return (
-    <section className="rounded-xl border border-line bg-bg-elevated/40 p-6">
+    <section className="rounded-xl border border-line bg-bg-elevated/40 p-6 motion-enter">
       <div className="flex items-start justify-between flex-wrap gap-4">
         <div>
           <div className="text-xs uppercase tracking-[0.18em] text-muted">
@@ -264,12 +288,13 @@ function PeriodCard({
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
+  // Labels may wrap on a phone; values stay aligned along the bottom.
   return (
-    <div>
+    <div className="flex flex-col justify-between">
       <div className="text-xs uppercase tracking-[0.18em] text-muted">
         {label}
       </div>
-      <div className="text-lg font-medium mt-1">{value}</div>
+      <div className="text-lg font-medium mt-1 tabular-nums">{value}</div>
     </div>
   );
 }
@@ -277,7 +302,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 // ── SKU card ────────────────────────────────────────────────────────────
 
 const POLICY_LABEL: Record<RoutingPolicy, string> = {
-  local_first: "Local first, external model for quality",
+  local_first: "Local GPU first; external models for hard questions",
   hybrid: "Local first for everything; external on miss",
   external_only: "External models only, no local routing",
   sovereign: "Your own GPU, federated cluster",
@@ -287,13 +312,19 @@ function SkuCard({
   sku,
   active,
   switching,
+  busy,
+  gpuMissing,
   onSelect,
 }: {
   sku: Sku;
   active: boolean;
   switching: boolean;
+  busy: boolean;
+  /** No local GPU connected: say where "local" traffic goes instead. */
+  gpuMissing: boolean;
   onSelect: () => void;
 }) {
+  const price = `$${sku.monthly_base_usd.toFixed(0)}/mo`;
   return (
     <div
       className={cn(
@@ -305,7 +336,7 @@ function SkuCard({
     >
       {active && (
         <div className="absolute top-3 right-3 text-xs flex items-center gap-1 text-accent-blue">
-          <Check className="h-3.5 w-3.5" /> Current
+          <Check className="h-3.5 w-3.5" aria-hidden /> Current
         </div>
       )}
       <div>
@@ -325,38 +356,36 @@ function SkuCard({
           Includes {sku.included_events_per_month.toLocaleString()} events
         </div>
       )}
-      <div className="text-[11px] text-muted flex items-start gap-1.5 mt-1 leading-relaxed">
+      <div className="text-xs text-muted flex items-start gap-1.5 mt-1 leading-relaxed">
         {sku.routing_policy === "external_only" ? (
-          <Cloud className="h-3.5 w-3.5 mt-px shrink-0" />
+          <Cloud className="h-3.5 w-3.5 mt-px shrink-0" aria-hidden />
         ) : (
-          <Cpu className="h-3.5 w-3.5 mt-px shrink-0" />
+          <Cpu className="h-3.5 w-3.5 mt-px shrink-0" aria-hidden />
         )}
         {POLICY_LABEL[sku.routing_policy]}
       </div>
+      {gpuMissing && (sku.routing_policy === "local_first" || sku.routing_policy === "hybrid") && (
+        <div className="text-xs text-muted flex items-start gap-1.5 leading-relaxed">
+          <Info className="h-3.5 w-3.5 mt-px shrink-0" aria-hidden />
+          No GPU connected yet, so local requests go to external models for now.
+        </div>
+      )}
       <PriceTable sku={sku} />
-      <button
-        type="button"
-        disabled={active || switching}
-        onClick={onSelect}
-        className={cn(
-          "text-xs px-3 py-2 rounded-lg border transition-all",
-          active
-            ? "border-line text-muted cursor-default"
-            : "border-accent-blue/60 text-[color:var(--text)] hover:bg-accent-blue/20"
-        )}
-      >
-        {switching ? (
-          <span className="flex items-center justify-center gap-1.5">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Switching…
-          </span>
-        ) : active ? (
-          "Active plan"
+      <div className="mt-auto pt-2">
+        {active ? (
+          <div className="h-8 flex items-center text-xs text-muted">Your current plan</div>
         ) : (
-          <span className="flex items-center justify-center gap-1.5">
-            Switch to {sku.name} <ArrowRight className="h-3.5 w-3.5" />
-          </span>
+          <ConfirmButton
+            label={`Switch to ${sku.name} · ${price}`}
+            confirmLabel={`Switch to ${sku.name}`}
+            consequence={`Switch to ${sku.name} — ${price} from today.`}
+            pending={switching}
+            disabled={busy}
+            onConfirm={onSelect}
+            className="w-full justify-center h-auto min-h-[32px] py-1.5 border-accent/50 hover:border-accent"
+          />
         )}
-      </button>
+      </div>
     </div>
   );
 }
@@ -389,18 +418,18 @@ function PriceTable({ sku }: { sku: Sku }) {
     });
   if (rows.length === 0)
     return (
-      <div className="text-[11px] text-muted">No metered tiers on this plan.</div>
+      <div className="text-xs text-muted">No metered tiers on this plan.</div>
     );
   return (
-    <div className="text-[11px] mt-1 grid grid-cols-[1fr_auto_auto] gap-x-3 gap-y-1">
-      <span className="text-muted">Tier</span>
-      <span className="text-muted text-right">In $/M</span>
-      <span className="text-muted text-right">Out $/M</span>
+    <div className="text-xs mt-1 grid grid-cols-[1fr_auto_auto] gap-x-2 gap-y-1">
+      <span className="text-muted" title="Price in US dollars per million tokens">Tier · $/M tokens</span>
+      <span className="text-muted text-right">In</span>
+      <span className="text-muted text-right">Out</span>
       {rows.map((r) => (
         <Fragment key={r.label}>
-          <span className="min-w-0 leading-snug">{r.label}</span>
-          <span className="text-right">${r.in_.toFixed(2)}</span>
-          <span className="text-right">${r.out_.toFixed(2)}</span>
+          <span className="leading-snug whitespace-nowrap">{r.label}</span>
+          <span className="text-right tabular-nums">${r.in_.toFixed(2)}</span>
+          <span className="text-right tabular-nums">${r.out_.toFixed(2)}</span>
         </Fragment>
       ))}
     </div>
@@ -418,10 +447,12 @@ const TIER_LABELS: Record<string, string> = {
 
 function BreakdownPanel({
   title,
+  query,
   rows,
   labelMap,
 }: {
   title: string;
+  query: { isLoading: boolean; isError: boolean; error?: unknown };
   rows: { key: string; events: number; cost_usd: number }[];
   labelMap?: Record<string, string>;
 }) {
@@ -429,10 +460,19 @@ function BreakdownPanel({
   return (
     <div className="rounded-xl border border-line bg-bg-elevated/40 p-5">
       <h3 className="text-sm font-medium mb-3">{title}</h3>
-      {rows.length === 0 && (
-        <div className="text-xs text-muted">No activity this period.</div>
-      )}
-      <div className="space-y-2.5">
+      {query.isLoading ? (
+        <div role="status" className="text-sm text-muted flex items-center gap-2">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> Loading…
+        </div>
+      ) : query.isError ? (
+        <div className="text-sm text-muted">Couldn&apos;t load this. {errorText(query.error)}</div>
+      ) : rows.length === 0 ? (
+        <div className="text-sm text-muted">
+          No usage yet this period. It appears here as soon as the agent or
+          copilot makes a model call; ask the copilot something to see it.
+        </div>
+      ) : null}
+      <div className="space-y-2.5 motion-enter">
         {rows.map((r) => {
           const pct = total ? (r.cost_usd / total) * 100 : 0;
           return (

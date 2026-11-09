@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, CircleSlash, Loader2, X } from "lucide-react";
 import { api, type Investigation, type Verdict } from "@/lib/api";
+import { useToast } from "@/components/ui/toast";
 import { Chip, ErrorNote, TONE_VAR, fmtDateTime, inputCls, type Tone } from "./ui";
 
 export const VERDICT_META: Record<Verdict, { label: string; tone: Tone }> = {
@@ -30,6 +31,7 @@ export function VerdictButtons({
   onSaved?: (inv: Investigation) => void;
 }) {
   const qc = useQueryClient();
+  const toast = useToast();
   const [note, setNote] = useState(investigation.verdict_note ?? "");
   const [picked, setPicked] = useState<Verdict | null>(null);
   const [editing, setEditing] = useState(!investigation.verdict);
@@ -43,6 +45,9 @@ export function VerdictButtons({
       qc.invalidateQueries({ queryKey: ["aiops-investigation"] });
       qc.invalidateQueries({ queryKey: ["aiops-investigation-by-alert", inv.alert_id] });
       onSaved?.(inv);
+      toast.success(
+        `Verdict saved: ${inv.verdict ? VERDICT_META[inv.verdict].label : "graded"}. It now counts toward the agreement rate.`
+      );
     },
   });
 
@@ -55,12 +60,12 @@ export function VerdictButtons({
           by {investigation.verdict_by || "someone"} · {fmtDateTime(investigation.verdict_at)}
         </span>
         {investigation.verdict_note && (
-          <span className="text-fg/80 basis-full">&ldquo;{investigation.verdict_note}&rdquo;</span>
+          <span className="text-fg basis-full">&ldquo;{investigation.verdict_note}&rdquo;</span>
         )}
         <button
           type="button"
           onClick={() => setEditing(true)}
-          className="text-muted hover:text-fg underline underline-offset-2"
+          className="min-h-6 px-1 text-muted hover:text-fg underline underline-offset-2"
         >
           Change
         </button>
@@ -80,6 +85,17 @@ export function VerdictButtons({
         Was the AI&apos;s root cause right? Your answer feeds the agreement-rate
         metric on the Maturity page.
       </div>
+      {/* The note comes first: picking a verdict saves straight away. */}
+      <label className="block">
+        <span className="text-xs font-medium text-muted">Note (optional)</span>
+        <input
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          maxLength={4000}
+          placeholder="What was actually wrong?"
+          className={`${inputCls} w-full mt-1`}
+        />
+      </label>
       <div className="flex flex-wrap items-center gap-2">
         {buttons.map(({ v, icon }) => {
           const m = VERDICT_META[v];
@@ -90,11 +106,12 @@ export function VerdictButtons({
               key={v}
               type="button"
               disabled={save.isPending}
+              aria-pressed={active}
               onClick={() => {
                 setPicked(v);
                 save.mutate(v);
               }}
-              className="h-8 px-3 rounded-lg text-xs font-medium inline-flex items-center gap-1.5 disabled:opacity-50"
+              className="motion-press h-8 px-3 rounded-lg text-xs font-medium inline-flex items-center gap-1.5 disabled:opacity-50"
               style={{
                 color: active ? "var(--bg-base)" : color,
                 background: active ? color : `color-mix(in srgb, ${color} 10%, transparent)`,
@@ -114,19 +131,12 @@ export function VerdictButtons({
           <button
             type="button"
             onClick={() => setEditing(false)}
-            className="text-xs text-muted hover:text-fg"
+            className="h-8 px-2 text-xs text-muted hover:text-fg"
           >
             Cancel
           </button>
         )}
       </div>
-      <input
-        value={note}
-        onChange={(e) => setNote(e.target.value)}
-        maxLength={4000}
-        placeholder="Optional note — what was actually wrong?"
-        className={`${inputCls} w-full`}
-      />
       <ErrorNote error={save.error} prefix="Couldn't save the verdict:" />
     </div>
   );

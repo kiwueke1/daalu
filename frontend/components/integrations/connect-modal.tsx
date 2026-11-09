@@ -12,8 +12,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, X } from "lucide-react";
 import { api, IntegrationConfig } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
+import { useToast } from "@/components/ui/toast";
+import { errorText } from "@/lib/errors";
 import {
   IntegrationStep,
   StepState,
@@ -35,6 +38,7 @@ export function ConnectModal({
   onSaved: () => void;
 }) {
   const qc = useQueryClient();
+  const toast = useToast();
 
   // Seed state from any existing config. `enabled` is always true inside
   // the modal — opening the modal IS the consent; the toggle is hidden.
@@ -125,7 +129,7 @@ export function ConnectModal({
         error: result.ok ? null : result.message,
       }));
     } catch (e) {
-      setState((prev) => ({ ...prev, error: (e as Error).message }));
+      setState((prev) => ({ ...prev, error: errorText(e) }));
     }
   }
 
@@ -156,70 +160,48 @@ export function ConnectModal({
         cluster_tunnel_id: state.clusterTunnelId,
       });
       setState((prev) => ({ ...prev, saved: true, error: null }));
+      toast.success(existing ? `${step.title} updated.` : `${step.title} connected.`);
       onSaved();
       onClose();
     } catch (e) {
-      setState((prev) => ({ ...prev, error: (e as Error).message }));
+      setState((prev) => ({ ...prev, error: errorText(e) }));
+      toast.error(errorText(e));
     }
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 bg-bg/70 backdrop-blur-sm flex items-start justify-center p-4 pt-16 overflow-y-auto"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div className="w-full max-w-[720px] space-y-3">
-        <div className="flex items-center justify-end">
-          <button
-            type="button"
-            onClick={onClose}
-            className="h-8 w-8 rounded-lg border border-line text-muted hover:text-fg flex items-center justify-center"
-            aria-label="Close"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <StepView
-          step={step}
-          state={state}
-          existing={existing}
-          hideToggle
-          onToggle={() => {
-            /* hidden — opening the modal implies enabled */
-          }}
-          onChange={updateValue}
-          onTest={runTest}
-          testing={testIntegration.isPending}
-          clusters={clusters ?? []}
-          onClusterChange={(id) =>
-            setState((prev) => ({ ...prev, clusterTunnelId: id, test: null }))
-          }
-        />
-
-        <div className="flex items-center justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-xs h-9 px-3 rounded-lg border border-line text-muted hover:text-fg"
-          >
+    <Dialog
+      open
+      onClose={onClose}
+      size="xl"
+      title={existing ? `Edit ${step.title}` : `Connect ${step.title}`}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            type="button"
-            onClick={runSave}
-            disabled={putIntegration.isPending}
-            className="text-xs h-9 px-3 rounded-lg bg-accent-cyan/15 border border-accent-cyan/40 text-accent-cyan disabled:opacity-50 flex items-center gap-1.5"
-          >
-            {putIntegration.isPending && (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            )}
-            {existing ? "Update" : "Connect"}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+          <Button variant="primary" onClick={runSave} pending={putIntegration.isPending}>
+            {existing ? "Save changes" : `Connect ${step.title}`}
+          </Button>
+        </>
+      }
+    >
+      <StepView
+        step={step}
+        state={state}
+        existing={existing}
+        hideToggle
+        onToggle={() => {
+          /* hidden — opening the modal implies enabled */
+        }}
+        onChange={updateValue}
+        onTest={runTest}
+        testing={testIntegration.isPending}
+        clusters={clusters ?? []}
+        onClusterChange={(id) =>
+          setState((prev) => ({ ...prev, clusterTunnelId: id, test: null }))
+        }
+      />
+    </Dialog>
   );
 }

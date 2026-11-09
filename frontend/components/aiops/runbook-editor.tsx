@@ -2,10 +2,13 @@
 
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { FileCode2, ListChecks, Loader2, Save, Send, Trash2 } from "lucide-react";
+import { FileCode2, ListChecks, Save, Send, Trash2 } from "lucide-react";
 import { api, type Runbook, type RunbookIn } from "@/lib/api";
 import { ConfirmButton } from "@/components/ui/confirm-button";
-import { Segmented, ErrorNote, btnPrimary, btnSecondary, inputCls } from "./ui";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast";
+import { Segmented, ErrorNote, inputCls } from "./ui";
+import { useUnsavedGuard } from "@/components/ui/use-unsaved-guard";
 import { WRITE_TOOLS } from "./starter-policies";
 
 const NEW_BODY = `## Symptoms
@@ -66,6 +69,7 @@ export function RunbookEditor({
   onDone: (rb: Runbook | null) => void;
 }) {
   const qc = useQueryClient();
+  const toast = useToast();
   const [mode, setMode] = useState<"fields" | "file">("fields");
   const [title, setTitle] = useState(runbook?.title ?? "");
   const [slug, setSlug] = useState(runbook?.slug ?? "");
@@ -87,6 +91,12 @@ export function RunbookEditor({
     allowed,
     body,
   });
+
+  // Unsaved-changes guard: compare against what the editor opened with.
+  const [initial] = useState(() => JSON.stringify(fields()));
+  const dirty =
+    JSON.stringify(fields()) !== initial || (mode === "file" && file !== toRunbookFile(fields()));
+  useUnsavedGuard(dirty);
 
   const switchMode = (m: "fields" | "file") => {
     if (m === "file") setFile(toRunbookFile(fields()));
@@ -112,6 +122,7 @@ export function RunbookEditor({
     },
     onSuccess: (rb) => {
       invalidate();
+      toast.success(runbook ? `Saved "${rb.title}" (v${rb.version})` : `Draft "${rb.title}" created`);
       onDone(rb);
     },
   });
@@ -119,6 +130,7 @@ export function RunbookEditor({
     mutationFn: () => api.aiops.runbooks.publish(runbook!.id),
     onSuccess: (rb) => {
       invalidate();
+      toast.success(`Published "${rb.title}". The AI now uses it for matching alerts.`);
       onDone(rb);
     },
   });
@@ -126,6 +138,7 @@ export function RunbookEditor({
     mutationFn: () => api.aiops.runbooks.remove(runbook!.id),
     onSuccess: () => {
       invalidate();
+      toast.success("Runbook deleted");
       onDone(null);
     },
   });
@@ -198,39 +211,43 @@ export function RunbookEditor({
           </label>
         </div>
       ) : (
+        <label className="block space-y-1 text-xs">
+          <span className="text-muted">Runbook file (frontmatter + markdown)</span>
         <textarea
           value={file}
           onChange={(e) => setFile(e.target.value)}
           rows={24}
           spellCheck={false}
-          aria-label="Runbook file"
           className="w-full rounded-lg bg-bg-elevated/60 border border-line px-3 py-2 font-mono text-[12.5px] leading-relaxed focus:outline-none focus:border-accent/60 resize-y"
         />
+        </label>
       )}
 
       <ErrorNote error={save.error ?? publish.error ?? remove.error} />
 
       <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          className={btnPrimary}
+        <Button
+          variant="primary"
+          size="sm"
           disabled={busy || (mode === "fields" && !title.trim())}
+          pending={save.isPending}
+          disabledReason={mode === "fields" && !title.trim() ? "Give the runbook a title first" : undefined}
+          icon={<Save className="h-3.5 w-3.5" aria-hidden />}
           onClick={() => save.mutate()}
         >
-          {save.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
           {runbook ? "Save changes" : "Create draft"}
-        </button>
+        </Button>
         {runbook && runbook.status !== "published" && (
-          <button
-            type="button"
-            className={btnSecondary}
+          <Button
+            size="sm"
             disabled={busy || !isAdmin}
-            title={isAdmin ? undefined : "Only a tenant admin can publish runbooks"}
+            pending={publish.isPending}
+            disabledReason={isAdmin ? undefined : "Only a tenant admin can publish runbooks"}
+            icon={<Send className="h-3.5 w-3.5" aria-hidden />}
             onClick={() => publish.mutate()}
           >
-            {publish.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-            Publish
-          </button>
+            Publish to triage
+          </Button>
         )}
         {runbook && (
           <ConfirmButton
@@ -239,12 +256,13 @@ export function RunbookEditor({
             consequence="The AI stops using it for matching alerts."
             onConfirm={() => remove.mutate()}
             pending={remove.isPending}
-            icon={<Trash2 className="h-3.5 w-3.5" />}
+            icon={<Trash2 className="h-3.5 w-3.5" aria-hidden />}
             tone="danger"
           />
         )}
-        <span className="text-[11px] text-muted inline-flex items-center gap-1 ml-auto">
-          {mode === "file" ? <FileCode2 className="h-3 w-3" /> : <ListChecks className="h-3 w-3" />}
+        {dirty && <span className="text-xs text-signal-warning">Unsaved changes</span>}
+        <span className="text-xs text-muted inline-flex items-center gap-1 ml-auto">
+          {mode === "file" ? <FileCode2 aria-hidden className="h-3 w-3" /> : <ListChecks aria-hidden className="h-3 w-3" />}
           {mode === "file" ? "Same format as `daalu runbooks import`." : "Published runbooks are injected into triage for matching alerts."}
         </span>
       </div>

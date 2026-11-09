@@ -14,13 +14,30 @@ const ThemeContext = createContext<{
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>("dark");
 
+  // The saved choice wins; with none, follow the OS (and keep following it
+  // if the OS switches, e.g. at sunset). The <head> script in app/layout.tsx
+  // already applied the same choice before first paint.
   useEffect(() => {
-    const stored = (typeof window !== "undefined" && localStorage.getItem(STORAGE_KEY)) as
-      | Theme
-      | null;
-    const initial: Theme = stored === "light" || stored === "dark" ? stored : "dark";
-    setThemeState(initial);
-    document.documentElement.dataset.theme = initial;
+    let stored: string | null = null;
+    try {
+      stored = localStorage.getItem(STORAGE_KEY);
+    } catch {
+      /* storage blocked */
+    }
+    if (stored === "light" || stored === "dark") {
+      setThemeState(stored);
+      document.documentElement.dataset.theme = stored;
+      return;
+    }
+    const mq = window.matchMedia("(prefers-color-scheme: light)");
+    const apply = () => {
+      const t: Theme = mq.matches ? "light" : "dark";
+      setThemeState(t);
+      document.documentElement.dataset.theme = t;
+    };
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
   }, []);
 
   function setTheme(t: Theme) {

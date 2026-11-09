@@ -19,8 +19,9 @@ Start here:
 6. **[runbooks/](runbooks/README.md)** and the
    **[operations runbooks](book-engineer/09-operations-runbooks/49-common-incidents.md)**
    — on-call quick reference.
-7. **[ui-design-system.md](ui-design-system.md)** — tokens, motion,
-   components.
+7. **[ui-design-system.md](ui-design-system.md)** — where the UI rules,
+   tokens and components live; history and open follow-ups in
+   [design/ux-principles.md](design/ux-principles.md).
 
 Books and feature guides:
 

@@ -20,6 +20,9 @@ import {
   type SotFabricImportResult,
   type SotFabricRow,
 } from "@/lib/api";
+import { errorText } from "@/lib/errors";
+import { ConfirmButton } from "@/components/ui/confirm-button";
+import { useToast } from "@/components/ui/toast";
 
 /** What each tab is, in the order the artifacts must be applied.
  *
@@ -105,6 +108,7 @@ export function FabricImportView({
   env?: string;
 }) {
   const qc = useQueryClient();
+  const toast = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<SotFabricImportResult | null>(null);
@@ -128,7 +132,10 @@ export function FabricImportView({
       // The fabric graph and the device list both read what just changed.
       qc.invalidateQueries({ queryKey: ["sot-devices"] });
       qc.invalidateQueries({ queryKey: ["topology"] });
+      const n = r.summary.created;
+      toast.success(`${n} object${n === 1 ? "" : "s"} written to Nautobot`);
     },
+    onError: (err) => toast.error(errorText(err)),
   });
 
   const onPick = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -149,10 +156,10 @@ export function FabricImportView({
 
       {spec.dependsOn && (
         <div className="text-xs text-muted inline-flex items-center gap-1.5">
-          <AlertCircle className="h-3.5 w-3.5" />
+          <AlertCircle className="h-3.5 w-3.5" aria-hidden />
           Upload{" "}
           <span className="text-[color:var(--text)]">{spec.dependsOn}</span>{" "}
-          first — every row here lands on something that file creates.
+          first: every row here lands on something that file creates.
         </div>
       )}
 
@@ -175,17 +182,17 @@ export function FabricImportView({
             </span>
           )}
           {(dryRun.isPending || apply.isPending) && (
-            <Loader2 className="h-4 w-4 animate-spin text-muted" />
+            <Loader2 className="h-4 w-4 animate-spin text-muted" aria-label="Working" />
           )}
         </div>
 
-        <div className="text-[10px] uppercase tracking-wider text-muted">
+        <div className="text-[11px] uppercase tracking-wider text-muted">
           Expected: {spec.file}
         </div>
 
         {dryRun.isError && (
-          <div className="text-xs text-[color:var(--critical)]">
-            {String(dryRun.error)}
+          <div role="alert" className="text-xs text-[color:var(--critical)]">
+            {errorText(dryRun.error)}
           </div>
         )}
       </div>
@@ -206,7 +213,7 @@ export function FabricImportView({
             model couldn&apos;t be read — not because the file is wrong.
           </p>
           {display.errors.map((e, i) => (
-            <div key={i} className="font-mono text-[11px] text-muted">
+            <div key={i} className="font-mono text-xs text-muted">
               {e}
             </div>
           ))}
@@ -215,9 +222,9 @@ export function FabricImportView({
 
       {/* Preview table */}
       {display && (
-        <div className="surface p-0 overflow-hidden">
-          <div className="px-5 py-3 border-b border-line flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3 text-sm">
+        <div className="surface p-0 overflow-hidden motion-enter">
+          <div className="px-5 py-3 border-b border-line flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-3 text-sm">
               <span className="font-semibold">
                 {applied ? "Applied" : "Preview"}
               </span>
@@ -257,31 +264,22 @@ export function FabricImportView({
               </span>
             </div>
             {!applied && (
-              <button
-                type="button"
-                disabled={!hasUploadableRows || apply.isPending || !file}
-                onClick={() => file && apply.mutate(file)}
-                className="text-xs h-9 px-4 rounded-lg bg-gradient-to-r from-accent-emerald to-accent-cyan text-bg-base disabled:opacity-50 inline-flex items-center gap-1.5"
-              >
-                {apply.isPending ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Applying…
-                  </>
-                ) : (
-                  <>
-                    <Upload className="h-3.5 w-3.5" /> Apply{" "}
-                    {display.summary.valid} object
-                    {display.summary.valid === 1 ? "" : "s"}
-                  </>
-                )}
-              </button>
+              <ConfirmButton
+                label={`Apply ${display.summary.valid} object${display.summary.valid === 1 ? "" : "s"}`}
+                confirmLabel="Apply to Nautobot"
+                consequence={`Writes ${display.summary.valid} object${display.summary.valid === 1 ? "" : "s"} to Nautobot. There is no undo.`}
+                icon={<Upload className="h-3.5 w-3.5" aria-hidden />}
+                disabled={!hasUploadableRows || !file}
+                pending={apply.isPending}
+                onConfirm={() => file && apply.mutate(file)}
+              />
             )}
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="text-[10px] uppercase tracking-wider text-muted border-b border-line">
+                <tr className="text-[11px] uppercase tracking-wider text-muted border-b border-line">
                   <th className="text-left px-3 py-2 w-12">#</th>
                   <th className="text-left px-3 py-2 w-12">Status</th>
                   <th className="text-left px-3 py-2">Object</th>
@@ -304,16 +302,16 @@ export function FabricImportView({
 
       {apply.isError && (
         <div className="text-xs text-[color:var(--critical)]">
-          Apply failed: {String(apply.error)}
+          Nothing was written: {errorText(apply.error)}
         </div>
       )}
 
       <details className="surface p-4">
         <summary className="cursor-pointer text-sm font-medium inline-flex items-center gap-2">
-          <FileText className="h-4 w-4 text-accent-cyan" />
+          <FileText className="h-4 w-4 text-accent-cyan" aria-hidden />
           What this file looks like
         </summary>
-        <pre className="mt-3 text-[11px] font-mono text-muted overflow-x-auto whitespace-pre">
+        <pre className="mt-3 text-xs font-mono text-muted overflow-x-auto whitespace-pre">
           {EXAMPLES[artifact]}
         </pre>
         <p className="mt-3 text-xs text-muted">
@@ -342,7 +340,7 @@ function FormedPanel({
   return (
     <div className="surface p-4 space-y-3">
       <div className="text-sm font-semibold inline-flex items-center gap-2">
-        <Network className="h-4 w-4 text-accent-cyan" />
+        <Network className="h-4 w-4 text-accent-cyan" aria-hidden />
         {applied ? "What formed" : "What this will form"}
       </div>
       <div className="flex flex-wrap gap-2">
@@ -353,7 +351,7 @@ function FormedPanel({
               key={op}
               className="inline-flex items-center gap-1.5 text-xs rounded-lg border border-line bg-bg-elevated/60 px-2.5 py-1.5"
             >
-              <Icon className="h-3.5 w-3.5 text-accent-emerald" />
+              <Icon className="h-3.5 w-3.5 text-accent-emerald" aria-hidden />
               <span className="font-mono">{n}</span>
               <span className="text-muted">{OP_PLURAL[op]}</span>
             </span>
@@ -367,9 +365,9 @@ function FormedPanel({
 function RowCell({ row }: { row: SotFabricRow }) {
   const icon =
     row.status === "error" ? (
-      <AlertCircle className="h-3.5 w-3.5 text-[color:var(--critical)]" />
+      <AlertCircle className="h-3.5 w-3.5 text-[color:var(--critical)]" aria-label="Error" />
     ) : row.status === "exists" ? (
-      <CircleSlash className="h-3.5 w-3.5 text-muted" />
+      <CircleSlash className="h-3.5 w-3.5 text-muted" aria-label="Already there" />
     ) : (
       <CheckCircle2
         className={
@@ -377,16 +375,17 @@ function RowCell({ row }: { row: SotFabricRow }) {
             ? "h-3.5 w-3.5 text-accent-emerald"
             : "h-3.5 w-3.5 text-muted"
         }
+        aria-label={row.status === "created" ? "Created" : "New"}
       />
     );
 
   return (
     <tr className="border-b border-line/40 last:border-b-0 align-top">
-      <td className="px-3 py-2 text-muted font-mono text-[11px]">{row.row}</td>
+      <td className="px-3 py-2 text-muted font-mono text-xs">{row.row}</td>
       <td className="px-3 py-2">{icon}</td>
       <td className="px-3 py-2 text-muted">{OP_LABEL[row.op]}</td>
-      <td className="px-3 py-2 font-mono text-[11px]">{row.target}</td>
-      <td className="px-3 py-2 font-mono text-[11px] text-muted">
+      <td className="px-3 py-2 font-mono text-xs">{row.target}</td>
+      <td className="px-3 py-2 font-mono text-xs text-muted">
         {row.detail}
       </td>
       <td className="px-3 py-2">
@@ -394,12 +393,12 @@ function RowCell({ row }: { row: SotFabricRow }) {
           <div className="text-[color:var(--critical)]">{row.error}</div>
         )}
         {row.warnings.map((w, i) => (
-          <div key={i} style={{ color: "var(--warning, #f59e0b)" }}>
+          <div key={i} className="text-signal-warning">
             {w}
           </div>
         ))}
         {!row.error && row.warnings.length === 0 && row.object_id && (
-          <span className="text-muted font-mono text-[11px]">
+          <span className="text-muted font-mono text-xs">
             {row.object_id.slice(0, 8)}
           </span>
         )}

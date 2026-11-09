@@ -124,7 +124,7 @@ export const STEPS: IntegrationStep[] = [
   {
     id: "prometheus",
     title: "Prometheus / Alertmanager",
-    description: "Pull-mode ingest of firing alerts from the customer's Alertmanager.",
+    description: "Brings your firing alerts into Daalu from Alertmanager (or Prometheus alert rules).",
     category: "observability",
     icon: Sparkles,
     provider: "prometheus",
@@ -137,7 +137,7 @@ export const STEPS: IntegrationStep[] = [
   {
     id: "loki",
     title: "Loki (logs)",
-    description: "On-demand log fetch from the agent. URL is required; basic-auth creds are optional.",
+    description: "Lets the agent read your logs while it investigates an alert. Only the URL is required.",
     category: "observability",
     icon: Cloud,
     provider: "loki",
@@ -152,7 +152,7 @@ export const STEPS: IntegrationStep[] = [
   {
     id: "thanos",
     title: "Thanos (long-history metrics)",
-    description: "Long-history metrics for triage context. Optional.",
+    description: "Older metrics the agent can look back through when it investigates. Optional.",
     category: "observability",
     icon: Sparkles,
     provider: "thanos",
@@ -165,7 +165,7 @@ export const STEPS: IntegrationStep[] = [
   {
     id: "opensearch",
     title: "OpenSearch (logs)",
-    description: "Parallel log index. Use a read-only OpenSearch user scoped to your k8s log indices.",
+    description: "Another log store the agent and the log console can search. Use a read-only user limited to your Kubernetes log indices.",
     category: "observability",
     icon: Cloud,
     provider: "opensearch",
@@ -195,7 +195,7 @@ export const STEPS: IntegrationStep[] = [
   {
     id: "pagerduty",
     title: "PagerDuty",
-    description: "Ingest incidents from PagerDuty into the alerts feed.",
+    description: "Brings open PagerDuty incidents into your alerts feed.",
     category: "ticketing",
     icon: ShieldAlert,
     provider: "pagerduty",
@@ -209,7 +209,7 @@ export const STEPS: IntegrationStep[] = [
     id: "kubernetes",
     title: "Customer kubeconfig",
     description:
-      "Hand the agent a kubeconfig for the customer's cluster. Pair with the cluster tunnel below if the cluster isn't publicly routable.",
+      "Give the agent a kubeconfig for your cluster. Add the secure tunnel below if the cluster isn't reachable from the internet.",
     category: "observability",
     icon: Server,
     provider: "kubernetes",
@@ -278,7 +278,7 @@ export const STEPS: IntegrationStep[] = [
     id: "nautobot",
     title: "Nautobot (Source of Truth)",
     description:
-      "Canonical inventory + intended config for managed devices (servers, BMCs, network gear). Bring your own Nautobot URL + API token, or click 'Provision hosted' if the operator has enabled hosted Nautobot on this deploy. The API token needs at least DCIM + IPAM + ConfigContext view/add/change/delete scoped to your tenant.",
+      "Canonical inventory + intended config for managed devices (servers, BMCs, network gear). Bring your own Nautobot URL + API token, or use hosted Nautobot if your plan includes it. The API token needs at least DCIM + IPAM + ConfigContext view/add/change/delete scoped to your tenant.",
     category: "sot",
     icon: GitPullRequest,
     provider: "nautobot",
@@ -293,7 +293,7 @@ export const STEPS: IntegrationStep[] = [
     id: "cluster",
     title: "Cluster tunnel (VPN)",
     description:
-      "Optional WireGuard tunnel from a customer cluster back to the operator. This step launches the dedicated VPN workflow inline.",
+      "Optional secure tunnel (WireGuard) from your cluster to Daalu, for clusters that aren't reachable from the internet. The setup opens right here.",
     category: "cluster",
     icon: Boxes,
     provider: null,
@@ -407,7 +407,7 @@ export function FieldInput({
         />
       )}
       {field.help && (
-        <div className="text-[10px] text-muted">{field.help}</div>
+        <div className="text-xs text-muted">{field.help}</div>
       )}
     </label>
   );
@@ -453,7 +453,7 @@ function ClusterPicker({
         />
         <div className="space-y-0.5">
           <div className="text-fg">Reachable via federation tunnel</div>
-          <div className="text-[10px] text-muted">
+          <div className="text-xs text-muted">
             Check this if your observability stack runs in a workload
             cluster that's not exposed publicly. Daalu will dial the URL
             through that cluster's daalu-edge proxy.
@@ -483,7 +483,7 @@ function ClusterPicker({
             ))}
           </select>
           {placeholderForCluster && (
-            <div className="text-[10px] text-muted">
+            <div className="text-xs text-muted">
               URL hint: <code className="font-mono">{placeholderForCluster}</code>
             </div>
           )}
@@ -498,8 +498,9 @@ function ClusterPicker({
 export function TestResult({ result }: { result: OnboardingTestResult }) {
   return (
     <div
-      className={`text-[11px] flex items-center gap-1.5 ${
-        result.ok ? "text-accent-emerald" : "text-red-500"
+      role="status"
+      className={`text-xs flex items-center gap-1.5 motion-enter ${
+        result.ok ? "text-accent-emerald" : "text-signal-critical"
       }`}
     >
       {result.ok ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
@@ -578,8 +579,8 @@ export function StepView({
       </div>
 
       {existing && existing.status === "connected" && showFields && (
-        <div className="text-[11px] text-accent-emerald flex items-center gap-1.5">
-          <Check className="h-3 w-3" /> Already configured. Edit any field to update.
+        <div className="text-xs text-accent-emerald flex items-center gap-1.5">
+          <Check className="h-3 w-3" aria-hidden /> Already configured. Edit any field to update.
         </div>
       )}
 
@@ -630,8 +631,8 @@ export function StepView({
       )}
 
       {state.error && (
-        <div className="text-[11px] text-red-500 flex items-start gap-1.5">
-          <X className="h-3 w-3 mt-0.5 shrink-0" /> {state.error}
+        <div role="alert" className="text-xs text-signal-critical flex items-start gap-1.5">
+          <X className="h-3 w-3 mt-0.5 shrink-0" aria-hidden /> {state.error}
         </div>
       )}
     </div>

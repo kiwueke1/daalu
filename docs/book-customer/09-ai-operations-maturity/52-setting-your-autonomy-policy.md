@@ -8,7 +8,7 @@ approved) to Level 3 and beyond, and the one that moves the
 **escalation rate** and, if a rule is too broad, the
 **change-failure rate** (chapter 55).
 
-URL: `https://daalu.example.com/autonomy` (sidebar: **AI Ops → Autonomy policy**).
+URL: `https://daalu.example.com/autonomy` (sidebar: **Automate → Autonomy policy**).
 
 ---
 

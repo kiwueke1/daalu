@@ -199,9 +199,9 @@ function IntroPanel({ onStart }: { onStart: () => void }) {
         <div>
           <div className="text-base font-medium">Cluster tunnel (VPN)</div>
           <p className="text-sm text-muted mt-0.5">
-            Establish a WireGuard tunnel from a customer Kubernetes cluster back
-            to the operator. The customer's cluster doesn't need to be
-            publicly routable — it dials out to the operator's hub.
+            Connect your Kubernetes cluster to Daalu over a private WireGuard
+            tunnel. Your cluster doesn't need a public address: it dials out to
+            Daalu, so nothing inbound has to be opened.
           </p>
         </div>
       </div>
@@ -213,17 +213,18 @@ function IntroPanel({ onStart }: { onStart: () => void }) {
         <ul className="text-sm space-y-1.5">
           <li className="flex items-start gap-2">
             <Circle className="h-2 w-2 mt-1.5 text-muted fill-current shrink-0" />
-            The customer has Helm installed and a kubeconfig for their cluster.
+            Helm is installed and you have a kubeconfig for the cluster.
           </li>
           <li className="flex items-start gap-2">
             <Circle className="h-2 w-2 mt-1.5 text-muted fill-current shrink-0" />
-            Outbound UDP/51820 from the customer cluster to the operator's
-            WireGuard hub is allowed.
+            The cluster can make outbound UDP connections on port 51820 to
+            Daalu.
           </li>
           <li className="flex items-start gap-2">
             <Circle className="h-2 w-2 mt-1.5 text-muted fill-current shrink-0" />
-            You can share a one-line install snippet with them over a secure
-            channel (Slack DM, password manager, etc.).
+            You can run a one-line install snippet on the cluster, or pass it
+            to whoever can over a secure channel (Slack DM, password manager,
+            etc.).
           </li>
         </ul>
       </div>

@@ -127,7 +127,7 @@ export function GreetingHero({
 
       {/* Foreground content */}
       <div className="relative md:max-w-[70%] z-[1]">
-        <div className="text-[10px] uppercase tracking-[0.22em] text-muted mb-3 flex items-center gap-2">
+        <div className="text-[11px] uppercase tracking-[0.22em] text-muted mb-3 flex items-center gap-2">
           <span
             className="inline-block h-1.5 w-1.5 rounded-full"
             style={{
@@ -195,8 +195,9 @@ function greetingFor(d: Date): "morning" | "afternoon" | "evening" {
 }
 
 /**
- * Particle field. 18 dots placed pseudo-randomly across the hero,
- * each on its own animation phase. Pure CSS — no canvas, no JS.
+ * Particle field. 18 dots placed pseudo-randomly across the hero, held
+ * still: a texture, not motion. They used to float on an endless loop,
+ * which drew the eye away from the greeting and served no purpose.
  */
 function ParticleField() {
   const particles = Array.from({ length: 18 }, (_, i) => i);
@@ -208,8 +209,6 @@ function ParticleField() {
         const x = (seed % 100) / 100;
         const y = ((seed * 17) % 100) / 100;
         const size = 1 + ((seed * 3) % 3);
-        const delay = ((seed * 7) % 100) / 25;
-        const dur = 4 + ((seed * 11) % 6);
         return (
           <span
             key={i}
@@ -222,26 +221,10 @@ function ParticleField() {
               background: "var(--accent)",
               boxShadow: "0 0 6px var(--accent-bloom)",
               opacity: 0.35,
-              animation: `particleFloat ${dur}s ease-in-out ${delay}s infinite alternate`,
             }}
           />
         );
       })}
-      <style jsx>{`
-        @keyframes particleFloat {
-          0% {
-            transform: translateY(0) translateX(0);
-            opacity: 0.2;
-          }
-          50% {
-            opacity: 0.5;
-          }
-          100% {
-            transform: translateY(-12px) translateX(6px);
-            opacity: 0.25;
-          }
-        }
-      `}</style>
     </div>
   );
 }

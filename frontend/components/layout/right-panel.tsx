@@ -16,7 +16,9 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { errorText } from "@/lib/errors";
 import { CopilotMarkdown } from "@/components/copilot/markdown";
+import { Button } from "@/components/ui/button";
 import { ThinkingDots } from "@/components/copilot/thinking-dots";
 import { formatRelative } from "@/lib/utils";
 
@@ -27,7 +29,7 @@ import { formatRelative } from "@/lib/utils";
  * a left edge glow tinted by severity instead of a hard border colour.
  *
  * Every section is collapsed by default so the main column gets the
- * width — the rail reduces to a slim strip of vertical pills (an
+ * width — the rail reduces to a slim strip of labelled pills (an
  * activity-bar) and only claims its full column once the operator opens
  * something. The choice is remembered per browser; first visit is
  * always fully collapsed.
@@ -40,18 +42,21 @@ const RAIL_STORAGE_KEY = "daalu-right-rail-open";
 const PANELS: {
   id: PanelId;
   label: string;
+  /** Fits under the icon in the collapsed strip. */
+  shortLabel: string;
   icon: LucideIcon;
   tint: string;
 }[] = [
-  { id: "copilot", label: "AI Assistant", icon: MessageSquare, tint: "var(--accent)" },
+  { id: "copilot", label: "AI Assistant", shortLabel: "Assistant", icon: MessageSquare, tint: "var(--accent)" },
   {
     id: "notifications",
     label: "Notifications",
+    shortLabel: "Alerts",
     icon: TriangleAlert,
     tint: "var(--warning)",
   },
-  { id: "sessions", label: "Active sessions", icon: ActivityIcon, tint: "var(--accent)" },
-  { id: "health", label: "System health", icon: Heart, tint: "var(--accent)" },
+  { id: "sessions", label: "Active sessions", shortLabel: "Sessions", icon: ActivityIcon, tint: "var(--accent)" },
+  { id: "health", label: "System health", shortLabel: "Health", icon: Heart, tint: "var(--accent)" },
 ];
 
 function isPanelId(v: unknown): v is PanelId {
@@ -123,12 +128,12 @@ export function RightPanel() {
               bloom={p.id === "copilot" || p.id === "health"}
               action={
                 p.id === "notifications" ? (
-                  <a
+                  <Link
                     href="/alerts"
-                    className="text-[11px] text-muted hover:text-[color:var(--text)]"
+                    className="text-xs text-muted hover:text-[color:var(--text)]"
                   >
                     View all
-                  </a>
+                  </Link>
                 ) : null
               }
               onCollapse={() => toggle(p.id)}
@@ -144,7 +149,7 @@ export function RightPanel() {
 
       <nav
         aria-label="Side panels"
-        className="relative w-[52px] shrink-0 py-6 flex flex-col items-center gap-2"
+        className="relative w-[76px] shrink-0 py-6 px-1.5 flex flex-col items-stretch gap-2"
       >
         {PANELS.map((p) => (
           <RailPill
@@ -160,11 +165,13 @@ export function RightPanel() {
 }
 
 /**
- * The collapsed affordance: an icon over a vertical label, so the
- * operator can tell what each strip entry is without opening it.
+ * The collapsed affordance: an icon over a short horizontal label, so the
+ * operator can tell what each strip entry is without opening it (vertical
+ * 10px text was hard to read).
  */
 function RailPill({
   label,
+  shortLabel,
   icon: Icon,
   tint,
   active,
@@ -172,6 +179,7 @@ function RailPill({
   id,
 }: {
   label: string;
+  shortLabel: string;
   icon: LucideIcon;
   tint: string;
   active: boolean;
@@ -180,10 +188,12 @@ function RailPill({
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       aria-expanded={active}
+      aria-label={label}
       title={active ? `Collapse ${label}` : `Expand ${label}`}
-      className="group relative flex flex-col items-center gap-2 rounded-full px-2 py-3 transition-colors"
+      className="motion-press group relative flex flex-col items-center gap-1.5 rounded-xl px-1 py-2.5 transition-colors"
       style={{
         background: active
           ? "rgba(var(--accent-rgb),0.10)"
@@ -194,14 +204,17 @@ function RailPill({
       }}
     >
       <Icon
+        aria-hidden
         className="h-4 w-4 shrink-0"
         style={{ color: active ? "var(--accent)" : tint }}
       />
       <span
-        className="text-[10px] uppercase tracking-[0.18em] text-muted group-hover:text-[color:var(--text)] transition-colors whitespace-nowrap"
-        style={{ writingMode: "vertical-rl" }}
+        aria-hidden
+        className={`text-[11px] font-medium leading-tight text-center transition-colors ${
+          active ? "text-[color:var(--text)]" : "text-muted group-hover:text-[color:var(--text)]"
+        }`}
       >
-        {label}
+        {shortLabel}
       </span>
       {id === "notifications" && !active && <OpenAlertDot />}
     </button>
@@ -228,7 +241,7 @@ function OpenAlertDot() {
   return (
     <span
       aria-hidden
-      className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full"
+      className="absolute top-1.5 right-2 h-2 w-2 rounded-full motion-attention"
       style={{ background: worst, boxShadow: `0 0 6px ${worst}` }}
     />
   );
@@ -256,18 +269,19 @@ function RailSection({
     <section className={`surface p-4 ${bloom ? "surface-bloom" : ""}`}>
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2 text-sm font-medium">
-          <Icon className="h-4 w-4" style={{ color: tint }} />
-          {label}
+          <Icon className="h-4 w-4" style={{ color: tint }} aria-hidden />
+          <h2>{label}</h2>
         </div>
         <div className="flex items-center gap-2">
           {action}
           <button
+            type="button"
             onClick={onCollapse}
             title={`Collapse ${label}`}
             aria-label={`Collapse ${label}`}
-            className="text-muted hover:text-[color:var(--text)] transition-colors"
+            className="motion-press h-7 w-7 -mr-1.5 inline-flex items-center justify-center rounded-md text-muted hover:text-[color:var(--text)] hover:bg-bg-elevated/60 transition-colors"
           >
-            <ChevronRight className="h-3.5 w-3.5" />
+            <ChevronRight className="h-3.5 w-3.5" aria-hidden />
           </button>
         </div>
       </div>
@@ -290,11 +304,26 @@ const PROMPTS = [
  *  suggested prompts and swallowed the message until the answer landed.
  *  A copilot turn can take tens of seconds (it makes real tool calls), which
  *  made that gap look like a dead chat. */
-type Turn = { q: string; a: string | null; error?: boolean };
+export type Turn = { q: string; a: string | null; error?: boolean };
 
-function CopilotBody() {
+/**
+ * `comfortable` is the phone size: readable text, 44px controls, and a 16px
+ * input, because iOS zooms the page when a smaller input takes focus. Pass
+ * `history`/`onHistoryChange` when the conversation must outlive this body.
+ */
+export function CopilotBody({
+  comfortable = false,
+  history: heldHistory,
+  onHistoryChange,
+}: {
+  comfortable?: boolean;
+  history?: Turn[];
+  onHistoryChange?: React.Dispatch<React.SetStateAction<Turn[]>>;
+} = {}) {
   const [q, setQ] = useState("");
-  const [history, setHistory] = useState<Turn[]>([]);
+  const [localHistory, setLocalHistory] = useState<Turn[]>([]);
+  const history = heldHistory ?? localHistory;
+  const setHistory = onHistoryChange ?? setLocalHistory;
   const pending = history.some((t) => t.a === null);
 
   async function send(prompt?: string) {
@@ -309,15 +338,15 @@ function CopilotBody() {
       const r = await api.copilot.ask(query);
       settle(r.answer?.trim() || "(the model returned an empty answer)");
     } catch (e) {
-      // Surface the real reason. A blanket "(copilot unavailable)" hid auth
-      // failures, timeouts and 500s behind one indistinguishable string.
-      const msg = e instanceof Error ? e.message : String(e);
-      settle(`Couldn't reach the copilot — ${msg}`, true);
+      // Surface the real reason as a plain sentence. A blanket "(copilot
+      // unavailable)" hid auth failures, timeouts and 500s behind one
+      // indistinguishable string.
+      settle(`The assistant couldn't answer. ${errorText(e)}`, true);
     }
   }
 
   return (
-    <div className="text-xs space-y-3">
+    <div className={comfortable ? "text-sm flex-1 min-h-0 flex flex-col gap-3" : "text-xs space-y-3"}>
       {history.length === 0 ? (
         <div className="space-y-2">
           <p className="text-muted leading-relaxed">
@@ -327,8 +356,11 @@ function CopilotBody() {
             {PROMPTS.map((p) => (
               <button
                 key={p}
+                type="button"
                 onClick={() => send(p)}
-                className="w-full text-left px-3 py-2 rounded-lg text-[12px] text-muted hover:text-[color:var(--text)] transition-colors"
+                className={`motion-press w-full text-left px-3 rounded-lg text-muted hover:text-[color:var(--text)] transition-colors ${
+                  comfortable ? "min-h-11 py-2.5 text-sm" : "py-2 text-xs"
+                }`}
                 style={{
                   background: "color-mix(in srgb, var(--text) 3%, transparent)",
                   boxShadow: "inset 0 1px 0 color-mix(in srgb, var(--text) 5%, transparent)",
@@ -340,9 +372,15 @@ function CopilotBody() {
           </div>
         </div>
       ) : (
-        <div className="max-h-[28rem] overflow-auto scrollbar-thin space-y-3">
+        <div
+          className={`overflow-auto scrollbar-thin space-y-3 ${comfortable ? "flex-1 min-h-0" : "max-h-[28rem]"}`}
+          aria-live="polite"
+          aria-relevant="additions text"
+          aria-label="Conversation with the assistant"
+          role="log"
+        >
           {history.map((m, i) => (
-            <div key={i} className="space-y-1">
+            <div key={i} className="space-y-1 motion-enter">
               <div className="text-muted">You · {m.q}</div>
               <div
                 className="rounded-lg px-3 py-2"
@@ -355,46 +393,55 @@ function CopilotBody() {
                 {m.a === null ? (
                   <ThinkingDots label="Querying your infrastructure…" />
                 ) : (
-                  <CopilotMarkdown>{m.a}</CopilotMarkdown>
+                  <div className="motion-enter">
+                    <CopilotMarkdown>{m.a}</CopilotMarkdown>
+                  </div>
                 )}
               </div>
             </div>
           ))}
         </div>
       )}
-      <div className="flex gap-2 pt-1">
+      <form
+        className={comfortable ? "pt-1 mt-auto" : "pt-1"}
+        onSubmit={(e) => {
+          e.preventDefault();
+          send();
+        }}
+      >
+        <label htmlFor="rail-copilot-input" className="sr-only">
+          Message the assistant
+        </label>
+        <div className="flex gap-2">
         <input
+          id="rail-copilot-input"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") send();
-          }}
-          placeholder="Message the copilot"
-          className="flex-1 rounded-lg px-2.5 py-1.5 outline-none transition-colors text-[color:var(--text)] placeholder:text-muted"
+          placeholder="Message the assistant"
+          className={`flex-1 min-w-0 rounded-lg px-2.5 transition-colors text-[color:var(--text)] placeholder:text-muted ${
+            comfortable ? "h-11 text-base" : "h-9 text-xs"
+          }`}
           style={{
             background: "color-mix(in srgb, var(--text) 3%, transparent)",
             boxShadow: "inset 0 1px 0 color-mix(in srgb, var(--text) 5%, transparent)",
           }}
         />
-        <button
-          onClick={() => send()}
-          className="rounded-lg px-2.5 transition-transform hover:scale-[1.04]"
-          style={{
-            background:
-              "linear-gradient(180deg, color-mix(in srgb, var(--accent) 95%, white) 0%, var(--accent) 100%)",
-            color: "var(--bg-base)",
-            boxShadow:
-              "inset 0 1px 0 rgba(255,255,255,0.35), 0 0 18px var(--accent-glow)",
-          }}
-        >
-          <Send className="h-3.5 w-3.5" />
-        </button>
-      </div>
+        <Button
+          type="submit"
+          variant="primary"
+          aria-label="Send message"
+          className={comfortable ? "h-11 w-11 px-0" : "w-9 px-0"}
+          disabled={!q.trim() || pending}
+          disabledReason={pending ? "Wait for the current answer" : "Type a message to send"}
+          icon={<Send className="h-3.5 w-3.5" aria-hidden />}
+        />
+        </div>
+      </form>
     </div>
   );
 }
 
-function NotificationsBody() {
+export function NotificationsBody() {
   const { data: alerts } = useQuery({
     queryKey: ["alerts", "open"],
     queryFn: () => api.alerts.list({ status: "open" }),
@@ -406,7 +453,10 @@ function NotificationsBody() {
     refetchInterval: 20_000,
   });
 
-  const open = alerts ?? [];
+  // Not "No critical alerts" until we actually know.
+  if (alerts === undefined) return <p className="text-xs text-muted">Loading…</p>;
+
+  const open = alerts;
   const critical = open.filter((a) => a.severity === "critical").slice(0, 2);
   const warning = open.filter((a) => a.severity === "warning").slice(0, 2);
   const aiGenerated = (recs ?? []).slice(0, 2);
@@ -470,7 +520,7 @@ function NotificationGroup({
     icon === "critical" ? AlertTriangle : icon === "warning" ? TriangleAlert : Sparkles;
   return (
     <div className="mb-3 last:mb-0">
-      <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.20em] text-muted mb-1.5">
+      <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.14em] text-muted mb-1.5">
         <span
           className="inline-block h-1.5 w-1.5 rounded-full"
           style={{ background: accent, boxShadow: `0 0 6px ${accent}` }}
@@ -478,7 +528,7 @@ function NotificationGroup({
         {label}
       </div>
       {items.length === 0 ? (
-        <div className="text-[11px] text-muted px-2 py-1">{emptyText}</div>
+        <div className="text-xs text-muted px-2 py-1">{emptyText}</div>
       ) : (
         <div className="space-y-1.5">
           {items.map((n) => (
@@ -506,10 +556,10 @@ function NotificationGroup({
                   }}
                 />
                 <div className="flex items-start gap-2 relative">
-                  <Icon className="h-3 w-3 mt-0.5 shrink-0" style={{ color: accent }} />
+                  <Icon className="h-3 w-3 mt-0.5 shrink-0" style={{ color: accent }} aria-hidden />
                   <div className="min-w-0">
                     <div className="font-medium leading-snug truncate">{n.title}</div>
-                    <div className="text-[10px] text-muted mt-0.5 truncate">
+                    <div className="text-xs text-muted mt-0.5 truncate">
                       {n.subtitle}
                     </div>
                   </div>
@@ -548,13 +598,13 @@ function ActiveSessionsBody() {
           <div className="flex items-center justify-between">
             <span className="font-medium truncate">{prettyName(w.workflow_name)}</span>
             <span
-              className="text-[10px] uppercase tracking-[0.18em]"
+              className="text-[11px] font-medium uppercase tracking-[0.12em]"
               style={{ color: "var(--accent)" }}
             >
               {w.status === "waiting_for_approval" ? "awaiting" : "running"}
             </span>
           </div>
-          <div className="text-[10px] text-muted mt-0.5">
+          <div className="text-xs text-muted mt-0.5">
             started {formatRelative(w.started_at)}
           </div>
         </div>
@@ -570,13 +620,16 @@ function prettyName(name: string) {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function SystemHealthBody() {
+export function SystemHealthBody() {
   const { data: alerts } = useQuery({
     queryKey: ["alerts", "all", "health"],
     queryFn: () => api.alerts.list(),
     refetchInterval: 30_000,
   });
-  const open = (alerts ?? []).filter((a) => a.status === "open");
+  // Not a reassuring 100% until we actually know.
+  if (alerts === undefined) return <p className="text-xs text-muted">Loading…</p>;
+
+  const open = alerts.filter((a) => a.status === "open");
   const score = Math.max(
     50,
     100 -
@@ -593,7 +646,7 @@ function SystemHealthBody() {
         </div>
         <div className="text-muted leading-snug mt-1">
           {open.length === 0
-            ? "All systems nominal."
+            ? "No open alerts."
             : `${open.length} signals being watched.`}
         </div>
       </div>

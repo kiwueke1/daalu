@@ -7,7 +7,7 @@ starts from what your team already knows instead of from scratch. And when
 the AI fixes something new and the fix is verified, it drafts a runbook for
 next time and leaves it for you to review.
 
-URL: `https://daalu.example.com/runbooks` (sidebar: **AI Ops → Runbooks**).
+URL: `https://daalu.example.com/runbooks` (sidebar: **Automate → Runbooks**).
 
 ---
 

@@ -32,21 +32,31 @@ import {
   type SotReconcileResult,
   type SotTransport,
 } from "@/lib/api";
+import { ApiError } from "@/lib/api";
+import { errorText } from "@/lib/errors";
+import { Button } from "@/components/ui/button";
+import { ConfirmButton } from "@/components/ui/confirm-button";
+import { LoadState } from "@/components/ui/load-state";
+import { useToast } from "@/components/ui/toast";
+import { SOT_NOT_SET_UP } from "@/components/operations/sot-not-set-up";
+import { useUnsavedGuard } from "@/components/ui/use-unsaved-guard";
 
 export default function DeviceDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
+  const toast = useToast();
 
-  const { data: device, isLoading: devLoading } = useQuery({
+  const deviceQ = useQuery({
     queryKey: ["sot-device", id],
     queryFn: () => api.sot.devices.get(id),
     enabled: !!id,
   });
+  const device = deviceQ.data;
   const { data: intent, isLoading: intentLoading } = useQuery({
     queryKey: ["sot-intent", id],
     queryFn: () =>
       api.sot.devices.intent(id).catch((e) => {
-        if (String(e).includes("404")) return null;
+        if (e instanceof ApiError && e.status === 404) return null;
         throw e;
       }),
     enabled: !!id,
@@ -54,27 +64,36 @@ export default function DeviceDetailPage() {
 
   const reconcile = useMutation({
     mutationFn: () => api.sot.devices.reconcile(id),
+    onSuccess: (r) =>
+      toast.success(
+        r.status === "in_sync"
+          ? "Device matches its intended config"
+          : r.status === "drift"
+            ? "Drift found: a change proposal is waiting for you"
+            : `Reconcile finished: ${r.status.replace(/_/g, " ")}`,
+      ),
+    onError: (err) => toast.error(errorText(err)),
   });
 
-  if (devLoading) {
-    return (
-      <div className="p-6 text-sm text-muted inline-flex items-center gap-2">
-        <Loader2 className="h-4 w-4 animate-spin" /> Loading device…
-      </div>
-    );
-  }
   if (!device) {
     return (
-      <div className="p-6 max-w-2xl">
+      <div className="max-w-2xl space-y-4">
         <Link
           href="/operations?tab=devices"
           className="text-sm text-muted hover:text-[color:var(--text)] inline-flex items-center gap-1.5"
         >
-          <ArrowLeft className="h-3.5 w-3.5" /> Back to devices
+          <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> Back to devices
         </Link>
-        <div className="mt-4 text-sm text-[color:var(--critical)]">
-          Device not found.
-        </div>
+        <LoadState
+          query={deviceQ}
+          loadingText="Loading device…"
+          notSetUp={SOT_NOT_SET_UP}
+          empty
+          emptyTitle="Device not found"
+          emptyHint="It may have been removed from Nautobot. Go back to the device list."
+        >
+          {null}
+        </LoadState>
       </div>
     );
   }
@@ -85,20 +104,20 @@ export default function DeviceDetailPage() {
         href="/operations?tab=devices"
         className="text-xs text-muted hover:text-[color:var(--text)] inline-flex items-center gap-1.5"
       >
-        <ArrowLeft className="h-3.5 w-3.5" /> Back to devices
+        <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> Back to devices
       </Link>
 
-      <section className="surface p-5">
+      <section className="surface p-5 motion-enter">
         <div className="flex flex-wrap items-start gap-3">
           <div
             className="h-10 w-10 rounded-lg flex items-center justify-center shrink-0"
             style={{ background: "color-mix(in srgb, var(--accent) 14%, transparent)" }}
           >
-            <HardDrive className="h-5 w-5 text-accent-cyan" />
+            <HardDrive className="h-5 w-5 text-accent-cyan" aria-hidden />
           </div>
           <div className="flex-1 min-w-0">
             <h1 className="text-lg font-semibold break-words">{device.name}</h1>
-            <div className="text-[11px] text-muted mt-0.5 break-words">
+            <div className="text-xs text-muted mt-0.5 break-words">
               <span className="font-mono break-all">{device.id}</span>
               <span className="mx-2">·</span>
               <span>{device.transport}</span>
@@ -107,30 +126,25 @@ export default function DeviceDetailPage() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-          <button
-            type="button"
-            onClick={() => reconcile.mutate()}
-            disabled={reconcile.isPending}
-            className="text-xs h-8 px-3 rounded-lg border border-line text-muted hover:text-[color:var(--text)] inline-flex items-center gap-1.5 disabled:opacity-50"
-          >
-            {reconcile.isPending ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <RefreshCw className="h-3.5 w-3.5" />
-            )}
-            Reconcile now
-          </button>
+          <ConfirmButton
+            label="Reconcile now"
+            confirmLabel="Check device now"
+            consequence="Connects to the device and compares it with its intended config. Differences open a proposal; nothing is pushed."
+            icon={<RefreshCw className="h-3.5 w-3.5" aria-hidden />}
+            pending={reconcile.isPending}
+            onConfirm={() => reconcile.mutate()}
+          />
           <Link
             href={`/operations?tab=proposals&device_id=${device.id}`}
             className="text-xs h-8 px-3 rounded-lg border border-line text-muted hover:text-[color:var(--text)] inline-flex items-center gap-1.5"
           >
-            <GitPullRequest className="h-3.5 w-3.5" /> Related proposals
+            <GitPullRequest className="h-3.5 w-3.5" aria-hidden /> Related proposals
           </Link>
           </div>
         </div>
         {reconcile.isError && (
-          <div className="mt-3 text-xs text-[color:var(--critical)]">
-            Reconcile failed: {String(reconcile.error)}
+          <div role="alert" className="mt-3 text-xs text-[color:var(--critical)]">
+            Reconcile failed: {errorText(reconcile.error)}
           </div>
         )}
         {reconcile.data && (
@@ -141,7 +155,7 @@ export default function DeviceDetailPage() {
       <section className="surface p-5 space-y-3">
         <div>
           <h2 className="text-base font-semibold">Intended config</h2>
-          <p className="text-[12px] text-muted mt-0.5">
+          <p className="text-xs text-muted mt-0.5">
             What Daalu keeps this device set to. Drift detection re-checks it
             every few minutes; if the device differs, a change proposal appears
             in{" "}
@@ -157,7 +171,7 @@ export default function DeviceDetailPage() {
 
         {intentLoading ? (
           <div className="text-xs text-muted inline-flex items-center gap-2">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading intended
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> Loading intended
             config…
           </div>
         ) : device.transport === "linux_ssh" ? (
@@ -219,11 +233,17 @@ function LinuxIntentEditor({
   initial: SotIntent | null | undefined;
 }) {
   const qc = useQueryClient();
+  const toast = useToast();
   const [form, setForm] = useState<LinuxFactsForm>(() => fromIntent(initial));
+  const [saved, setSaved] = useState<LinuxFactsForm>(() => fromIntent(initial));
 
   useEffect(() => {
     setForm(fromIntent(initial));
+    setSaved(fromIntent(initial));
   }, [initial]);
+
+  const dirty = JSON.stringify(form) !== JSON.stringify(saved);
+  useUnsavedGuard(dirty);
 
   const save = useMutation({
     mutationFn: () => {
@@ -236,9 +256,12 @@ function LinuxIntentEditor({
       };
       return api.sot.devices.updateIntent(deviceId, facts);
     },
-    onSuccess: () => {
+    onSuccess: (r) => {
+      setSaved(form);
       qc.invalidateQueries({ queryKey: ["sot-intent", deviceId] });
+      toast.success(`Saved revision ${r.revision}; it applies on the next reconcile`);
     },
+    onError: (err) => toast.error(errorText(err)),
   });
 
   return (
@@ -301,27 +324,29 @@ function LinuxIntentEditor({
       />
 
       <div className="flex flex-wrap justify-between items-center gap-3 pt-3 border-t border-line/40">
-        <div className="text-[11px] text-muted">
-          {save.isSuccess ? (
+        <div className="text-xs text-muted" role="status">
+          {dirty ? (
+            <span className="text-signal-warning">Unsaved changes</span>
+          ) : save.isSuccess ? (
             <span className="text-[color:var(--accent)] inline-flex items-center gap-1">
-              <Check className="h-3 w-3" /> Saved revision {save.data.revision}
+              <Check className="h-3 w-3 motion-success" aria-hidden /> Saved revision {save.data.revision}
             </span>
           ) : save.isError ? (
             <span className="text-[color:var(--critical)] inline-flex items-center gap-1">
-              <X className="h-3 w-3" /> {String(save.error)}
+              <X className="h-3 w-3" aria-hidden /> {errorText(save.error)}
             </span>
           ) : (
             "Daalu applies this to the device on the next reconcile."
           )}
         </div>
-        <button
-          type="button"
+        <Button
+          variant="primary"
           onClick={() => save.mutate()}
-          disabled={save.isPending}
-          className="text-xs h-9 px-4 rounded-lg bg-gradient-to-r from-accent-emerald to-accent-cyan text-bg-base disabled:opacity-50 inline-flex items-center gap-1.5"
+          pending={save.isPending}
+          icon={<Save className="h-3.5 w-3.5" aria-hidden />}
         >
-          <Save className="h-3.5 w-3.5" /> Save &amp; push to device
-        </button>
+          Save &amp; push to device
+        </Button>
       </div>
     </div>
   );
@@ -352,21 +377,26 @@ function RowList<T extends Record<string, string>>({
   return (
     <div className="space-y-1.5">
       <div className="text-xs text-muted uppercase tracking-wider">{label}</div>
-      {help && <div className="text-[10.5px] text-muted">{help}</div>}
+      {help && <div className="text-xs text-muted">{help}</div>}
       <div className="space-y-1.5">
         {rows.length === 0 && (
-          <div className="text-[11.5px] text-muted px-1">
-            None — Daalu won&apos;t touch these.
+          <div className="text-xs text-muted px-1">
+            None: Daalu won&apos;t touch these.
           </div>
         )}
         {rows.map((row, i) => (
-          <div key={i} className="flex gap-1.5 items-center">
+          <div key={i} className="flex gap-1.5 items-end">
             {fields.map((f) => (
-              <div
+              <label
                 key={f.key}
-                className="grow"
+                className="grow block"
                 style={{ flex: f.flex ?? 1 }}
               >
+                {/* Visible on the first row; the rest read as a table under it. */}
+                <span className={i === 0 ? "block text-[11px] text-muted mb-0.5" : "sr-only"}>
+                  {f.label}
+                  {i > 0 ? ` (row ${i + 1})` : ""}
+                </span>
                 {f.options ? (
                   <select
                     value={row[f.key] || f.options[0]}
@@ -375,7 +405,7 @@ function RowList<T extends Record<string, string>>({
                       next[i] = { ...row, [f.key]: e.target.value } as T;
                       onChange(next);
                     }}
-                    className="w-full h-8 px-2 rounded-md bg-bg-elevated/60 border border-line text-[12px]"
+                    className="w-full h-8 px-2 rounded-md bg-bg-elevated/60 border border-line text-xs"
                   >
                     {f.options.map((o) => (
                       <option key={o} value={o}>
@@ -393,19 +423,18 @@ function RowList<T extends Record<string, string>>({
                       onChange(next);
                     }}
                     placeholder={f.placeholder}
-                    className={`w-full h-8 px-2 rounded-md bg-bg-elevated/60 border border-line text-[12px] ${f.mono ? "font-mono" : ""}`}
+                    className={`w-full h-8 px-2 rounded-md bg-bg-elevated/60 border border-line text-xs ${f.mono ? "font-mono" : ""}`}
                   />
                 )}
-              </div>
+              </label>
             ))}
-            <button
-              type="button"
+            <Button
+              variant="icon"
+              size="sm"
+              aria-label={`Remove ${label} row ${i + 1}`}
               onClick={() => onChange(rows.filter((_, j) => j !== i))}
-              className="h-8 w-8 rounded-md text-muted hover:text-[color:var(--critical)] hover:bg-bg-elevated/60 inline-flex items-center justify-center"
-              title="Remove"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
+              icon={<X className="h-3.5 w-3.5" aria-hidden />}
+            />
           </div>
         ))}
       </div>
@@ -473,16 +502,25 @@ function JsonIntentEditor({
   initial: SotIntent | null | undefined;
 }) {
   const qc = useQueryClient();
-  const [text, setText] = useState(() =>
+  const toast = useToast();
+  const startText = () =>
     initial?.facts
       ? JSON.stringify(initial.facts, null, 2)
-      : TRANSPORT_PLACEHOLDER[transport],
-  );
+      : TRANSPORT_PLACEHOLDER[transport];
+  const [text, setText] = useState(startText);
+  const [savedText, setSavedText] = useState(startText);
   const [parseError, setParseError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (initial?.facts) setText(JSON.stringify(initial.facts, null, 2));
+    if (initial?.facts) {
+      const t = JSON.stringify(initial.facts, null, 2);
+      setText(t);
+      setSavedText(t);
+    }
   }, [initial]);
+
+  const dirty = text !== savedText;
+  useUnsavedGuard(dirty);
 
   const save = useMutation({
     mutationFn: () => {
@@ -490,52 +528,62 @@ function JsonIntentEditor({
       try {
         facts = JSON.parse(text);
       } catch (e) {
-        throw new Error(`Invalid JSON — ${String(e)}`);
+        throw new Error(
+          `That isn't valid JSON (${e instanceof Error ? e.message : "parse error"}). Fix it, then save.`,
+        );
       }
       return api.sot.devices.updateIntent(deviceId, facts);
     },
-    onSuccess: () => {
+    onSuccess: (r) => {
       setParseError(null);
+      setSavedText(text);
       qc.invalidateQueries({ queryKey: ["sot-intent", deviceId] });
+      toast.success(`Saved revision ${r.revision}; it applies on the next reconcile`);
     },
-    onError: (e) => setParseError(String(e)),
+    onError: (e) => {
+      setParseError(errorText(e));
+      toast.error(errorText(e));
+    },
   });
 
   return (
     <div className="space-y-3">
-      <div className="text-[12px] text-muted">
-        Edit the {transport} settings as JSON. Daalu checks the shape when you
+      <label htmlFor="intent-json" className="block text-xs text-muted">
+        Intended {transport} settings (JSON). Daalu checks the shape when you
         save and won&apos;t store anything it can&apos;t apply.
-      </div>
+      </label>
       <textarea
+        id="intent-json"
         value={text}
         onChange={(e) => setText(e.target.value)}
         rows={16}
         spellCheck={false}
-        className="w-full px-3 py-2 rounded-lg bg-bg-elevated/60 border border-line text-[12px] font-mono"
+        className="w-full px-3 py-2 rounded-lg bg-bg-elevated/60 border border-line text-xs font-mono"
       />
       <div className="flex flex-wrap justify-between items-center gap-3 pt-2">
-        <div className="text-[11px] text-muted">
-          {save.isSuccess ? (
-            <span className="text-[color:var(--accent)] inline-flex items-center gap-1">
-              <Check className="h-3 w-3" /> Saved revision {save.data.revision}
-            </span>
-          ) : parseError ? (
+        <div className="text-xs text-muted" role="status">
+          {parseError ? (
             <span className="text-[color:var(--critical)] inline-flex items-center gap-1">
-              <X className="h-3 w-3" /> {parseError}
+              <X className="h-3 w-3" aria-hidden /> {parseError}
+            </span>
+          ) : dirty ? (
+            <span className="text-signal-warning">Unsaved changes</span>
+          ) : save.isSuccess ? (
+            <span className="text-[color:var(--accent)] inline-flex items-center gap-1">
+              <Check className="h-3 w-3 motion-success" aria-hidden /> Saved revision {save.data.revision}
             </span>
           ) : (
             "Daalu applies this to the device on the next reconcile."
           )}
         </div>
-        <button
-          type="button"
+        <Button
+          variant="primary"
           onClick={() => save.mutate()}
-          disabled={save.isPending}
-          className="text-xs h-9 px-4 rounded-lg bg-gradient-to-r from-accent-emerald to-accent-cyan text-bg-base disabled:opacity-50 inline-flex items-center gap-1.5"
+          pending={save.isPending}
+          icon={<Save className="h-3.5 w-3.5" aria-hidden />}
         >
-          <Save className="h-3.5 w-3.5" /> Save &amp; push to device
-        </button>
+          Save &amp; push to device
+        </Button>
       </div>
     </div>
   );
@@ -558,26 +606,27 @@ function ReconcileBanner({ result }: { result: SotReconcileResult }) {
         : RefreshCw;
   return (
     <div
-      className="mt-3 px-3 py-2 rounded-lg border text-xs flex flex-wrap items-center gap-2"
+      role="status"
+      className="mt-3 px-3 py-2 rounded-lg border text-xs flex flex-wrap items-center gap-2 motion-enter"
       style={{
         borderColor: `color-mix(in srgb, ${accent} 38%, transparent)`,
         background: `color-mix(in srgb, ${accent} 10%, transparent)`,
         color: accent,
       }}
     >
-      <Icon className="h-3.5 w-3.5" />
-      <span className="font-semibold uppercase tracking-wider text-[10px]">
-        {result.status}
+      <Icon className="h-3.5 w-3.5" aria-hidden />
+      <span className="font-semibold uppercase tracking-wider text-[11px]">
+        {result.status.replace(/_/g, " ")}
       </span>
       <span className="text-fg/80">
-        {result.detail ?? "reconcile complete"}
+        {result.detail ?? "Reconcile complete."}
       </span>
       {result.proposal_id && (
         <Link
           href={`/proposals/${result.proposal_id}`}
           className="sm:ml-auto underline hover:text-[color:var(--text)]"
         >
-          open proposal
+          Open proposal
         </Link>
       )}
     </div>

@@ -18,6 +18,9 @@ import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast";
+import { errorText } from "@/lib/errors";
 
 type Tone = "critical" | "warning" | "accent" | "blue" | "muted";
 
@@ -36,6 +39,7 @@ export interface Section {
  */
 export function HeroBriefing({ channel = "infra" }: { channel?: string }) {
   const qc = useQueryClient();
+  const toast = useToast();
   const { data, isLoading } = useQuery({
     queryKey: ["briefing", "latest", channel],
     queryFn: () => api.briefings.latest(channel),
@@ -44,7 +48,12 @@ export function HeroBriefing({ channel = "infra" }: { channel?: string }) {
 
   const generate = useMutation({
     mutationFn: () => api.briefings.generate(channel),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["briefing"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["briefing"] });
+      qc.invalidateQueries({ queryKey: ["briefings"] });
+      toast.success("New briefing written from the latest events.");
+    },
+    onError: (e) => toast.error(`Couldn't write a briefing. ${errorText(e)}`),
   });
 
   const [showRest, setShowRest] = useState(false);
@@ -56,7 +65,7 @@ export function HeroBriefing({ channel = "infra" }: { channel?: string }) {
         ([, v]) => v !== 0 && v !== "0" && v !== null && v !== ""
       )
     : [];
-  const [headline, rest] = splitFirstSentence(data?.summary || data?.title || "");
+  const [headline, rest, fullHeadline] = shortHeadline(data?.summary || data?.title || "");
 
   return (
     <motion.section
@@ -70,8 +79,8 @@ export function HeroBriefing({ channel = "infra" }: { channel?: string }) {
       <div className="relative">
         {/* Header row */}
         <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-          <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] uppercase tracking-[0.18em] text-accent-blue">
-            <Sparkles className="h-3 w-3 animate-shimmer" /> AI briefing · {channel}
+          <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] uppercase tracking-[0.18em] text-accent-blue">
+            <Sparkles aria-hidden className="h-3 w-3" /> AI briefing · {channel}
             {data?.coverage_date && (
               <span className="text-muted normal-case tracking-normal">
                 · {data.coverage_date}
@@ -79,21 +88,28 @@ export function HeroBriefing({ channel = "infra" }: { channel?: string }) {
             )}
           </span>
           {!isLoading && (
-            <button
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => generate.mutate()}
-              disabled={generate.isPending}
+              pending={generate.isPending}
               title="Ask the agent to write a fresh briefing from the latest events"
-              className="text-xs flex items-center gap-1 text-muted hover:text-fg"
+              icon={<RotateCcw aria-hidden className="h-3.5 w-3.5" />}
             >
-              <RotateCcw
-                className={`h-3.5 w-3.5 ${generate.isPending ? "animate-spin" : ""}`}
-              />
-              {data ? "Regenerate" : "Generate today's briefing"}
-            </button>
+              {generate.isPending
+                ? "Writing a new briefing…"
+                : data
+                ? "Regenerate"
+                : "Generate today's briefing"}
+            </Button>
           )}
         </div>
 
-        {isLoading && <div className="animate-shimmer text-muted">Loading the latest briefing…</div>}
+        {isLoading && (
+          <div role="status" className="animate-shimmer text-muted">
+            Loading the latest briefing…
+          </div>
+        )}
 
         {!data && !isLoading && (
           <div>
@@ -116,12 +132,7 @@ export function HeroBriefing({ channel = "infra" }: { channel?: string }) {
         {data && (
           <>
             {/* Headline: the summary's first sentence. The rest is folded. */}
-            <h2
-              title={showRest ? undefined : headline}
-              className={`text-base md:text-lg lg:text-xl leading-snug font-semibold tracking-tight max-w-4xl ${
-                showRest ? "" : "line-clamp-3 md:line-clamp-2"
-              }`}
-            >
+            <h2 key={data.id} title={fullHeadline ?? undefined} className="motion-enter text-base md:text-lg lg:text-xl leading-snug font-semibold tracking-tight max-w-4xl">
               {headline}
             </h2>
             <div className="mt-1.5 mb-4 max-w-4xl">
@@ -134,11 +145,12 @@ export function HeroBriefing({ channel = "infra" }: { channel?: string }) {
                   {rest}
                 </p>
               )}
-              {(rest || headline.length > 140) && (
+              {rest && (
                 <button
                   type="button"
                   onClick={() => setShowRest((v) => !v)}
-                  className="mt-1 text-xs text-muted underline hover:text-fg"
+                  aria-expanded={showRest}
+                  className="mt-1 min-h-6 text-xs text-muted underline hover:text-fg"
                 >
                   {showRest ? "Show less" : "Read the full summary"}
                 </button>
@@ -147,16 +159,27 @@ export function HeroBriefing({ channel = "infra" }: { channel?: string }) {
 
             {/* Metric stat chips */}
             {metrics.length > 0 && (
-              <div className="flex flex-wrap gap-2.5 mb-5">
+              // Say whose window these figures cover, so they don't read as
+              // contradicting the live tiles below.
+              <div className="text-[11px] uppercase tracking-wider text-muted mb-1.5">
+                In this briefing&apos;s window
+                {data.coverage_date && (
+                  <span className="normal-case tracking-normal"> · {data.coverage_date}</span>
+                )}
+              </div>
+            )}
+            {metrics.length > 0 && (
+              // One swipeable row on a phone instead of four wrapped rows.
+              <div className="-mx-6 px-6 sm:mx-0 sm:px-0 flex flex-nowrap sm:flex-wrap gap-2.5 mb-5 overflow-x-auto sm:overflow-visible [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {metrics.map(([k, v]) => (
                   <div
                     key={k}
-                    className="flex items-baseline gap-2 rounded-lg border border-line bg-bg-elevated/50 px-3 py-1.5"
+                    className="shrink-0 flex items-baseline gap-2 rounded-lg border border-line bg-bg-elevated/50 px-3 py-1.5"
                   >
                     <span className="text-lg font-semibold leading-none tabular-nums">
                       {String(v)}
                     </span>
-                    <span className="text-[10px] uppercase tracking-wider text-muted">
+                    <span className="text-[11px] uppercase tracking-wider text-muted">
                       {k.replace(/_/g, " ")}
                     </span>
                   </div>
@@ -184,9 +207,9 @@ export function HeroBriefing({ channel = "infra" }: { channel?: string }) {
               <div className="mt-4">
                 <Link
                   href={`/reports/briefings/${data.id}`}
-                  className="inline-flex items-center gap-1 text-xs text-muted hover:text-fg transition-colors"
+                  className="inline-flex items-center gap-1 min-h-6 text-xs text-muted hover:text-fg transition-colors"
                 >
-                  Open the full briefing <ArrowRight className="h-3 w-3" />
+                  Open the full briefing <ArrowRight aria-hidden className="h-3 w-3" />
                 </Link>
               </div>
             )}
@@ -216,6 +239,7 @@ function SectionTile({ section }: { section: Section }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
         className="w-full text-left p-4 flex items-start gap-3 group"
       >
         <span
@@ -232,13 +256,14 @@ function SectionTile({ section }: { section: Section }) {
             <span className="flex items-center gap-2 shrink-0">
               {section.items > 0 && (
                 <span
-                  className="text-[10px] font-medium rounded-full px-2 py-0.5"
+                  className="text-[11px] font-medium rounded-full px-2 py-0.5"
                   style={{ background: meta.bg, color: meta.color }}
                 >
                   {section.items}
                 </span>
               )}
               <ChevronDown
+                aria-hidden
                 className={`h-4 w-4 text-muted transition-transform duration-200 ${
                   open ? "rotate-180" : ""
                 }`}
@@ -288,6 +313,21 @@ export function splitFirstSentence(text: string): [string, string] {
   const m = t.match(/^(.+?[.!?])\s+(?=[A-Z0-9"'(])/);
   if (!m) return [t, ""];
   return [m[1], t.slice(m[0].length).trim()];
+}
+
+/**
+ * The headline is the summary's complete first sentence. Only when that runs
+ * past `max` chars is it cut, at a word boundary, with a trailing "…"; the
+ * body then continues from the next sentence (it never starts with "…").
+ * The third value is the full first sentence when it was cut, for a tooltip.
+ */
+export function shortHeadline(text: string, max = 140): [string, string, string | null] {
+  const [first, rest] = splitFirstSentence(text);
+  if (first.length <= max) return [first, rest, null];
+  const cut = first.slice(0, max).lastIndexOf(" ");
+  if (cut <= 0) return [first, rest, null];
+  const headline = first.slice(0, cut).replace(/[,;:—\s]+$/, "") + "…";
+  return [headline, rest, first];
 }
 
 /**

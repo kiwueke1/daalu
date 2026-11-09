@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { LoadState } from "@/components/ui/load-state";
+import { SOT_NOT_SET_UP, isSotNotSetUp } from "@/components/operations/sot-not-set-up";
 
 interface OverviewViewProps {
   onJumpTo: (tabId: string) => void;
@@ -45,6 +46,25 @@ export function OverviewView({ onJumpTo }: OverviewViewProps) {
       : undefined;
   const pendingCount = pending?.length;
   const failed = [devicesQ, driftQ, pendingQ].find((q) => q.isError);
+  const needsDecision = (driftCount ?? 0) > 0;
+
+  // Without Nautobot there's nothing to count: show the setup step, not a
+  // red error above three dashes.
+  // Proposals don't depend on Nautobot, so pending ones keep their card.
+  if (devicesQ.isError && isSotNotSetUp(devicesQ.error)) {
+    return (
+      <div className="space-y-6">
+        <LoadState query={devicesQ} notSetUp={SOT_NOT_SET_UP}>
+          {null}
+        </LoadState>
+        {(pendingCount ?? 0) > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <ProposalsCard pendingCount={pendingCount} onOpen={() => onJumpTo("proposals")} />
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -77,65 +97,41 @@ export function OverviewView({ onJumpTo }: OverviewViewProps) {
           accent="var(--warning)"
           icon={AlertTriangle}
           onClick={() => onJumpTo("drift")}
+          attention={needsDecision}
           help={
             driftCount === undefined
               ? undefined
               : driftCount === 0
               ? "all clean"
-              : "needs an operator decision"
+              : "needs your decision · Review drift →"
           }
         />
       </div>
 
       {/* Secondary stats + jump-ins */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div className="surface p-4 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] uppercase tracking-wider text-muted">
-              Proposals
-            </span>
-            <Link
-              href="#"
-              onClick={(e) => {
-                e.preventDefault();
-                onJumpTo("proposals");
-              }}
-              className="text-[10px] text-muted hover:text-fg"
-            >
-              Open queue →
-            </Link>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-semibold">{pendingCount ?? "—"}</span>
-            <span className="text-xs text-muted">pending</span>
-          </div>
-          <p className="text-[11.5px] text-muted leading-relaxed">
-            Every proposal (drift, AI-suggested, manual, workflow) goes
-            through the same approve/reject queue. Nothing reaches a device
-            until someone approves it.
-          </p>
-        </div>
+        <ProposalsCard pendingCount={pendingCount} onOpen={() => onJumpTo("proposals")} />
 
         <div className="surface p-4 space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] uppercase tracking-wider text-muted">
+            <span className="text-[11px] uppercase tracking-wider text-muted">
               Onboarding
             </span>
             <Link
               href="/onboarding/sot"
-              className="text-[10px] text-muted hover:text-fg"
+              className="text-xs text-muted hover:text-fg"
             >
               SoT wizard →
             </Link>
           </div>
           <div className="flex items-center gap-2">
-            <GitPullRequest className="h-4 w-4 text-accent-blue" />
+            <GitPullRequest className="h-4 w-4 text-accent-blue" aria-hidden />
             <span className="text-sm">
               Use the <strong>Bulk import</strong> tab to seed Nautobot from a
               YAML or Excel spreadsheet.
             </span>
           </div>
-          <p className="text-[11.5px] text-muted leading-relaxed">
+          <p className="text-xs text-muted leading-relaxed">
             Already have your own Nautobot? Connect it via{" "}
             <Link
               href="/integrations"
@@ -182,6 +178,7 @@ function KpiCard({
   icon: Icon,
   onClick,
   help,
+  attention = false,
 }: {
   label: string;
   /** undefined while loading: shows a dash, never a misleading 0. */
@@ -190,22 +187,69 @@ function KpiCard({
   icon: typeof HardDrive;
   onClick: () => void;
   help?: string;
+  /** Needs the user: the help line turns into an accent call to action. */
+  attention?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      aria-label={`${label}: ${value ?? "loading"}${help ? `, ${help}` : ""}`}
       className="surface text-left p-4 hover:border-accent-blue/40 transition-colors"
       style={{ boxShadow: `inset 4px 0 0 ${accent}` }}
     >
-      <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-muted">
-        <Icon className="h-3 w-3" style={{ color: accent }} />
+      <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted">
+        <Icon className="h-3 w-3" style={{ color: accent }} aria-hidden />
         {label}
       </div>
       <div className="mt-1.5 flex items-baseline gap-2">
         <span className="text-3xl font-semibold">{value ?? "—"}</span>
-        {help && <span className="text-[11px] text-muted">{help}</span>}
+        {help && (
+          <span
+            className={
+              attention
+                ? "motion-attention rounded-full px-2 py-0.5 text-xs font-semibold bg-accent text-bg-base"
+                : "text-xs text-muted"
+            }
+          >
+            {help}
+          </span>
+        )}
       </div>
     </button>
+  );
+}
+
+function ProposalsCard({
+  pendingCount,
+  onOpen,
+}: {
+  pendingCount: number | undefined;
+  onOpen: () => void;
+}) {
+  return (
+    <div className="surface p-4 space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] uppercase tracking-wider text-muted">
+          Proposals
+        </span>
+        <button
+          type="button"
+          onClick={onOpen}
+          className="text-xs text-muted hover:text-fg"
+        >
+          Open queue →
+        </button>
+      </div>
+      <div className="flex items-baseline gap-2">
+        <span className="text-2xl font-semibold">{pendingCount ?? "—"}</span>
+        <span className="text-xs text-muted">pending</span>
+      </div>
+      <p className="text-xs text-muted leading-relaxed">
+        Every proposal (drift, AI-suggested, manual, workflow) goes
+        through the same approve/reject queue. Nothing reaches a device
+        until someone approves it.
+      </p>
+    </div>
   );
 }

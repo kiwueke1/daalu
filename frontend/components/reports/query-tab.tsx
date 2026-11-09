@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bookmark, Download, Pin, Play, Plus, Save, Sparkles, Trash2, X, Wand2 } from "lucide-react";
 import Link from "next/link";
@@ -11,6 +11,11 @@ import {
   type ReportsQueryResponse,
   type SavedReport,
 } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { ConfirmButton } from "@/components/ui/confirm-button";
+import { useToast } from "@/components/ui/toast";
+import { errorText } from "@/lib/errors";
+import { cn } from "@/lib/utils";
 
 // Example query definitions surfaced as "starter" chips. These are
 // client-side only; clicking one populates the builder, doesn't save
@@ -89,12 +94,12 @@ export function ReportsQueryTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-1 text-xs">
+      <div className="flex gap-1 text-xs" role="group" aria-label="Query mode">
         <ModeButton active={mode === "builder"} onClick={() => setMode("builder")}>
           Builder
         </ModeButton>
         <ModeButton active={mode === "ask"} onClick={() => setMode("ask")}>
-          <Sparkles className="h-3 w-3" /> Ask
+          <Sparkles className="h-3 w-3" aria-hidden /> Ask
         </ModeButton>
       </div>
 
@@ -120,7 +125,8 @@ function ModeButton({
     <button
       type="button"
       onClick={onClick}
-      className={`px-2.5 py-1 rounded-md inline-flex items-center gap-1 transition-colors ${
+      aria-pressed={active}
+      className={`motion-press h-8 px-3 rounded-md inline-flex items-center gap-1 transition-colors ${
         active
           ? "bg-bg-elevated text-[color:var(--text)] border border-line"
           : "text-muted hover:text-[color:var(--text)]"
@@ -137,6 +143,11 @@ function ModeButton({
 
 function BuilderMode({ entities }: { entities: ReportsEntityDescriptor[] }) {
   const qc = useQueryClient();
+  const toast = useToast();
+  const fieldId = useId();
+  // Naming a new saved report happens inline, not in a browser prompt.
+  const [naming, setNaming] = useState(false);
+  const [newName, setNewName] = useState("");
 
   const [entityName, setEntityName] = useState<string>("events");
   const entity = useMemo(
@@ -213,14 +224,20 @@ function BuilderMode({ entities }: { entities: ReportsEntityDescriptor[] }) {
       if (loadedSavedId) {
         return api.reports.saved.update(loadedSavedId, { definition: def });
       }
-      const name = window.prompt("Name this report:", `${entity?.name ?? "report"} query`);
-      if (!name) throw new Error("cancelled");
-      return api.reports.saved.create({ name, definition: def });
+      return api.reports.saved.create({ name: newName.trim(), definition: def });
     },
     onSuccess: (row) => {
       qc.invalidateQueries({ queryKey: ["reports-saved"] });
       setLoadedSavedId(row.id);
+      setNaming(false);
+      setNewName("");
+      toast.success(
+        loadedSavedId
+          ? `Saved report "${row.name}" updated.`
+          : `Saved as "${row.name}". Add it to a dashboard or a schedule.`
+      );
     },
+    onError: (e) => toast.error(errorText(e)),
   });
 
   const deleteSaved = useMutation({
@@ -228,7 +245,9 @@ function BuilderMode({ entities }: { entities: ReportsEntityDescriptor[] }) {
     onSuccess: (_v, id) => {
       qc.invalidateQueries({ queryKey: ["reports-saved"] });
       if (loadedSavedId === id) setLoadedSavedId(null);
+      toast.success("Saved report deleted.");
     },
+    onError: (e) => toast.error(errorText(e)),
   });
 
   const { data: result, isFetching, error } = useQuery<ReportsQueryResponse>({
@@ -271,11 +290,14 @@ function BuilderMode({ entities }: { entities: ReportsEntityDescriptor[] }) {
 
       <div className="rounded-xl border border-line bg-bg-card p-4 space-y-4">
         <div>
-          <div className="text-xs uppercase tracking-wider text-muted mb-2">From</div>
+          <label htmlFor={`${fieldId}-from`} className="block text-xs uppercase tracking-wider text-muted mb-2">
+            From
+          </label>
           {entities.length === 0 ? (
             <div className="text-sm text-muted">Loading entities…</div>
           ) : (
             <select
+              id={`${fieldId}-from`}
               value={entityName}
               onChange={(e) => setEntityName(e.target.value)}
               className="bg-bg-elevated border border-line rounded-lg px-2 py-1.5 text-sm"
@@ -296,6 +318,7 @@ function BuilderMode({ entities }: { entities: ReportsEntityDescriptor[] }) {
               {filters.map((row, i) => (
                 <div key={i} className="flex gap-2 items-center">
                   <select
+                    aria-label={`Filter ${i + 1} field`}
                     value={row.key}
                     onChange={(e) => updateFilter(i, { key: e.target.value, value: "" })}
                     className="bg-bg-elevated border border-line rounded-lg px-2 py-1.5 text-xs"
@@ -309,19 +332,19 @@ function BuilderMode({ entities }: { entities: ReportsEntityDescriptor[] }) {
                   <span className="text-xs text-muted">=</span>
                   <input
                     type="text"
+                    aria-label={`Value for ${row.key}`}
                     value={row.value}
                     onChange={(e) => updateFilter(i, { value: e.target.value })}
                     placeholder="value"
                     className="flex-1 bg-bg-elevated border border-line rounded-lg px-2 py-1.5 text-xs"
                   />
-                  <button
-                    type="button"
+                  <Button
+                    variant="icon"
+                    size="sm"
                     onClick={() => removeFilter(i)}
-                    className="p-1.5 text-muted hover:text-[color:var(--text)]"
-                    aria-label="Remove filter"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
+                    aria-label={`Remove filter on ${row.key}`}
+                    icon={<X className="h-3.5 w-3.5" aria-hidden />}
+                  />
                 </div>
               ))}
               {filters.length < entity.filter_fields.length && (
@@ -330,7 +353,7 @@ function BuilderMode({ entities }: { entities: ReportsEntityDescriptor[] }) {
                   onClick={addFilter}
                   className="text-xs inline-flex items-center gap-1 text-muted hover:text-[color:var(--text)]"
                 >
-                  <Plus className="h-3.5 w-3.5" /> Add filter
+                  <Plus className="h-3.5 w-3.5" aria-hidden /> Add filter
                 </button>
               )}
               {ENTITY_HAS_TIME(entity.time_field) && (
@@ -356,43 +379,39 @@ function BuilderMode({ entities }: { entities: ReportsEntityDescriptor[] }) {
         )}
 
         <div>
-          <div className="text-xs uppercase tracking-wider text-muted mb-2">Display</div>
-          <div className="flex gap-3 text-xs">
+          <div id={`${fieldId}-display-label`} className="text-xs uppercase tracking-wider text-muted mb-2">Display</div>
+          <div className="flex gap-3 text-sm" role="radiogroup" aria-labelledby={`${fieldId}-display-label`}>
             <label className="flex items-center gap-1.5">
-              <input type="radio" checked={display === "table"} onChange={() => setDisplay("table")} />
+              <input type="radio" name={`${fieldId}-display`} checked={display === "table"} onChange={() => setDisplay("table")} />
               <span>table</span>
             </label>
             <label className="flex items-center gap-1.5">
-              <input type="radio" checked={display === "count"} onChange={() => setDisplay("count")} />
+              <input type="radio" name={`${fieldId}-display`} checked={display === "count"} onChange={() => setDisplay("count")} />
               <span>count</span>
             </label>
           </div>
         </div>
 
-        <div className="pt-1 flex items-center gap-2">
-          <button
-            type="button"
+        <div className="pt-1 flex flex-wrap items-center gap-2">
+          <Button
+            size="sm"
+            variant="primary"
             onClick={run}
-            disabled={isFetching || !entity}
-            className="text-xs inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-accent-blue/60 text-accent-blue hover:bg-accent-blue/10 transition-colors disabled:opacity-50"
+            pending={isFetching}
+            disabled={!entity}
+            icon={<Play className="h-3.5 w-3.5" aria-hidden />}
           >
-            <Play className="h-3.5 w-3.5" />
-            {isFetching ? "Running…" : "Run"}
-          </button>
-          <button
-            type="button"
-            onClick={() => saveReport.mutate()}
-            disabled={saveReport.isPending || !entity}
-            className="text-xs inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-line text-muted hover:text-[color:var(--text)] hover:bg-bg-elevated/60 transition-colors disabled:opacity-50"
+            {isFetching ? "Running…" : "Run query"}
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => (loadedSavedId ? saveReport.mutate() : setNaming(true))}
+            pending={saveReport.isPending}
+            disabled={!entity}
+            icon={<Save className="h-3.5 w-3.5" aria-hidden />}
           >
-            <Save className="h-3.5 w-3.5" />
-            {loadedSavedId ? "Update saved" : "Save…"}
-          </button>
-          {saveReport.error && (
-            <span className="text-xs text-[color:var(--critical)]">
-              {(saveReport.error as Error).message}
-            </span>
-          )}
+            {loadedSavedId ? "Update saved report" : "Save as report…"}
+          </Button>
           {result && (
             <>
               <ExportButton
@@ -415,8 +434,46 @@ function BuilderMode({ entities }: { entities: ReportsEntityDescriptor[] }) {
         </div>
       </div>
 
+      {naming && !loadedSavedId && (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (newName.trim()) saveReport.mutate();
+          }}
+          className="motion-enter rounded-xl border border-line bg-bg-card p-4 flex flex-wrap items-end gap-2"
+        >
+          <div className="flex-1 min-w-[200px]">
+            <label htmlFor={`${fieldId}-name`} className="block text-xs font-medium mb-1">
+              Report name
+            </label>
+            <input
+              id={`${fieldId}-name`}
+              autoFocus
+              type="text"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder={`e.g. ${entity?.name ?? "events"} this week`}
+              className="w-full bg-bg-elevated border border-line rounded-lg px-3 py-1.5 text-sm"
+            />
+          </div>
+          <Button
+            type="submit"
+            size="sm"
+            variant="primary"
+            pending={saveReport.isPending}
+            disabled={!newName.trim()}
+            disabledReason="Name the report"
+          >
+            Save report
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setNaming(false)}>
+            Cancel
+          </Button>
+        </form>
+      )}
+
       {runRequest && (
-        <ResultPanel result={result} error={error as Error | null} isFetching={isFetching} />
+        <ResultPanel key={JSON.stringify(runRequest)} result={result} error={error} isFetching={isFetching} />
       )}
     </div>
   );
@@ -430,9 +487,13 @@ function ExportButton({
   format: "csv" | "json";
 }) {
   const [busy, setBusy] = useState(false);
+  const toast = useToast();
   return (
-    <button
-      type="button"
+    <Button
+      size="sm"
+      aria-label={`Export as ${format.toUpperCase()}`}
+      pending={busy}
+      icon={<Download className="h-3.5 w-3.5" aria-hidden />}
       onClick={async () => {
         const def = getDefinition();
         if (!def) return;
@@ -447,16 +508,15 @@ function ExportButton({
           a.click();
           a.remove();
           URL.revokeObjectURL(url);
+        } catch (e) {
+          toast.error(errorText(e));
         } finally {
           setBusy(false);
         }
       }}
-      disabled={busy}
-      className="text-xs inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-line text-muted hover:text-[color:var(--text)] hover:bg-bg-elevated/60 transition-colors disabled:opacity-50"
     >
-      <Download className="h-3.5 w-3.5" />
       {format.toUpperCase()}
-    </button>
+    </Button>
   );
 }
 
@@ -475,51 +535,50 @@ function SavedChipRail({
     <div className="space-y-2">
       {saved.length > 0 && (
         <div>
-          <div className="text-[10px] uppercase tracking-wider text-muted mb-1.5 flex items-center gap-1.5">
-            <Bookmark className="h-3 w-3" /> Saved
+          <div className="text-[11px] uppercase tracking-wider text-muted mb-1.5 flex items-center gap-1.5">
+            <Bookmark className="h-3 w-3" aria-hidden /> Saved
           </div>
           <div className="flex flex-wrap gap-2">
             {saved.map((s) => (
               <div
                 key={s.id}
-                className={`group inline-flex items-center gap-1 rounded-lg border text-xs ${
-                  loadedSavedId === s.id
-                    ? "border-accent-blue/60 bg-accent-blue/10"
-                    : "border-line hover:border-accent-blue/40"
-                }`}
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-lg border text-xs",
+                  loadedSavedId === s.id ? "border-accent/60 bg-accent/10" : "border-line hover:border-accent/40"
+                )}
               >
                 <button
                   type="button"
                   onClick={() => onLoad(s.definition, s.id)}
-                  className="px-2.5 py-1 inline-flex items-center gap-1"
+                  aria-pressed={loadedSavedId === s.id}
+                  className="h-7 px-2.5 inline-flex items-center gap-1"
                 >
-                  {s.pinned && <Pin className="h-3 w-3 text-accent-blue" />}
+                  {s.pinned && <Pin className="h-3 w-3 text-accent" aria-label="Pinned" />}
                   {s.name}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (window.confirm(`Delete "${s.name}"?`)) onDelete(s.id);
-                  }}
-                  className="opacity-0 group-hover:opacity-100 px-1.5 py-1 text-muted hover:text-[color:var(--critical)]"
-                  aria-label={`Delete ${s.name}`}
-                >
-                  <Trash2 className="h-3 w-3" />
-                </button>
+                <ConfirmButton
+                  label={<span className="sr-only">Delete {s.name}</span>}
+                  confirmLabel="Delete"
+                  consequence={`Delete "${s.name}"? Dashboards and schedules using it lose it.`}
+                  icon={<Trash2 className="h-3 w-3" aria-hidden />}
+                  onConfirm={() => onDelete(s.id)}
+                  tone="danger"
+                  className="h-7 border-0 px-1.5 text-muted hover:text-[color:var(--critical)]"
+                />
               </div>
             ))}
           </div>
         </div>
       )}
       <div>
-        <div className="text-[10px] uppercase tracking-wider text-muted mb-1.5">Examples</div>
+        <div className="text-[11px] uppercase tracking-wider text-muted mb-1.5">Examples</div>
         <div className="flex flex-wrap gap-2">
           {EXAMPLES.map((ex) => (
             <button
               key={ex.name}
               type="button"
               onClick={() => onLoad(ex.definition, null)}
-              className="text-xs px-2.5 py-1 rounded-lg border border-line text-muted hover:text-[color:var(--text)] hover:border-accent-blue/40 transition-colors"
+              className="text-xs px-2.5 py-1 rounded-lg border border-line text-muted hover:text-[color:var(--text)] hover:border-accent/40 transition-colors"
             >
               {ex.name}
             </button>
@@ -538,6 +597,7 @@ function AskMode({ entities }: { entities: ReportsEntityDescriptor[] }) {
   const [question, setQuestion] = useState<string>("");
   const [request, setRequest] = useState<ReportsQueryRequest | null>(null);
   const [rationale, setRationale] = useState<string>("");
+  const askId = useId();
 
   const translate = useMutation({
     mutationFn: () => api.reports.translate({ question }),
@@ -567,50 +627,54 @@ function AskMode({ entities }: { entities: ReportsEntityDescriptor[] }) {
   return (
     <div className="space-y-4">
       <form onSubmit={submit} className="rounded-xl border border-line bg-bg-card p-4 space-y-3">
-        <label className="text-xs uppercase tracking-wider text-muted block">
+        <label htmlFor={askId} className="text-xs uppercase tracking-wider text-muted block">
           Ask in plain English
         </label>
         <textarea
+          id={askId}
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
           placeholder={`e.g. critical events from prometheus in the last hour\n     count open alerts in infra\n     change proposals waiting for approval`}
           rows={3}
           className="w-full bg-bg-elevated border border-line rounded-lg px-3 py-2 text-sm font-mono"
         />
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="text-xs text-muted">
             Entities the assistant knows about: {entitySuggestions}
           </div>
-          <button
+          <Button
             type="submit"
-            disabled={translate.isPending || !question.trim()}
-            className="text-xs inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-accent-blue/60 text-accent-blue hover:bg-accent-blue/10 transition-colors disabled:opacity-50"
+            size="sm"
+            variant="primary"
+            pending={translate.isPending}
+            disabled={!question.trim()}
+            disabledReason="Type a question first"
+            icon={<Wand2 className="h-3.5 w-3.5" aria-hidden />}
           >
-            <Wand2 className="h-3.5 w-3.5" />
             {translate.isPending ? "Thinking…" : "Translate & run"}
-          </button>
+          </Button>
         </div>
         {translate.error && (
-          <div className="text-xs text-[color:var(--critical)]">
-            {(translate.error as Error).message}
+          <div role="alert" className="text-sm text-[color:var(--critical)]">
+            {errorText(translate.error)}
           </div>
         )}
       </form>
 
       {request && (
-        <div className="rounded-xl border border-line bg-bg-card p-3 space-y-2">
-          <div className="text-[10px] uppercase tracking-wider text-muted">
+        <div key={JSON.stringify(request)} className="motion-enter rounded-xl border border-line bg-bg-card p-3 space-y-2">
+          <div className="text-[11px] uppercase tracking-wider text-muted">
             Interpreted as
           </div>
-          {rationale && <div className="text-xs text-muted italic">{rationale}</div>}
-          <pre className="text-[11px] bg-bg-elevated rounded-md p-2 overflow-x-auto">
+          {rationale && <div className="text-sm text-muted italic">{rationale}</div>}
+          <pre className="text-xs bg-bg-elevated rounded-md p-2 overflow-x-auto">
 {JSON.stringify(request, null, 2)}
           </pre>
         </div>
       )}
 
       {request && (
-        <ResultPanel result={result} error={runError as Error | null} isFetching={isFetching} />
+        <ResultPanel key={JSON.stringify(request)} result={result} error={runError} isFetching={isFetching} />
       )}
     </div>
   );
@@ -626,26 +690,26 @@ function ResultPanel({
   isFetching,
 }: {
   result?: ReportsQueryResponse;
-  error: Error | null;
+  error: unknown;
   isFetching: boolean;
 }) {
   if (error) {
     return (
-      <div className="rounded-xl border border-line bg-bg-card p-4 text-sm text-[color:var(--critical)]">
-        {error.message}
+      <div role="alert" className="motion-enter rounded-xl border border-line bg-bg-card p-4 text-sm text-[color:var(--critical)]">
+        Couldn&apos;t run this query. {errorText(error)}
       </div>
     );
   }
   if (!result) {
     return (
-      <div className="rounded-xl border border-line bg-bg-card p-4 text-sm text-muted">
+      <div role="status" className="rounded-xl border border-line bg-bg-card p-4 text-sm text-muted">
         {isFetching ? "Running…" : "No result yet."}
       </div>
     );
   }
   if (result.display === "count") {
     return (
-      <div className="rounded-xl border border-line bg-bg-card p-6 text-center">
+      <div className="motion-enter rounded-xl border border-line bg-bg-card p-6 text-center">
         <div className="text-3xl font-semibold">{result.total}</div>
         <div className="text-xs text-muted mt-1">{result.entity} matching</div>
       </div>
@@ -653,13 +717,14 @@ function ResultPanel({
   }
   if (result.rows.length === 0) {
     return (
-      <div className="rounded-xl border border-line bg-bg-card p-4 text-sm text-muted">
-        No rows.
+      <div role="status" className="motion-enter rounded-xl border border-line bg-bg-card p-4 text-sm text-muted">
+        Nothing matched. Try a longer time window, remove a filter, or check a
+        filter value&apos;s spelling (values match exactly).
       </div>
     );
   }
   return (
-    <div className="rounded-xl border border-line bg-bg-card overflow-hidden">
+    <div className="motion-enter rounded-xl border border-line bg-bg-card overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-bg-elevated/60 text-muted text-xs uppercase tracking-wider">

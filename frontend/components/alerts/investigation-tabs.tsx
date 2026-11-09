@@ -33,7 +33,10 @@ import {
   type AlertChatMessage,
 } from "@/lib/api";
 import { Accordion, AccordionItem } from "@/components/ui/accordion";
-import { TabBar, useUrlTab, type TabDef } from "@/components/ui/tabs";
+import { TabBar, TabPanel, useUrlTab, type TabDef } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast";
+import { errorText } from "@/lib/errors";
 import { ActionPolicyInfo } from "@/components/aiops/action-policy";
 import { useAuth } from "@/lib/auth";
 import { AlertInvestigationPanel } from "@/components/aiops/investigation-panel";
@@ -62,6 +65,21 @@ type TabId = (typeof TAB_IDS)[number];
  * `[operator]` (the operator does it). Evidence comes from the agent's read
  * tool calls (logs, events, pod state, deployment, metrics).
  */
+/**
+ * How many proposed writes on this alert wait for the user's approval.
+ * Shares the investigation's chat query, so the header CTA and the tab badge
+ * always agree.
+ */
+export function usePendingApprovalCount(alertId: string): number {
+  const { data: messages } = useQuery({
+    queryKey: ["alert-chat", alertId],
+    queryFn: () => api.alerts.chat.list(alertId),
+    refetchOnWindowFocus: false,
+    enabled: !!alertId,
+  });
+  return useMemo(() => groupActions(messages ?? []).pendingWrites.length, [messages]);
+}
+
 export function InvestigationTabs(props: InvestigationTabsProps) {
   // useUrlTab reads ?tab=, which needs a Suspense boundary.
   return (
@@ -73,6 +91,7 @@ export function InvestigationTabs(props: InvestigationTabsProps) {
 
 function InvestigationTabsInner({ alert, details }: InvestigationTabsProps) {
   const qc = useQueryClient();
+  const toast = useToast();
   const { data: messages, isLoading } = useQuery({
     queryKey: ["alert-chat", alert.id],
     queryFn: () => api.alerts.chat.list(alert.id),
@@ -82,7 +101,11 @@ function InvestigationTabsInner({ alert, details }: InvestigationTabsProps) {
   const triage = useMutation({
     mutationFn: (opts: { force?: boolean } = {}) =>
       api.alerts.chat.triage(alert.id, opts),
-    onSuccess: (data) => qc.setQueryData(["alert-chat", alert.id], data),
+    onSuccess: (data, opts) => {
+      qc.setQueryData(["alert-chat", alert.id], data);
+      if (opts?.force) toast.success("Re-triage finished. The findings below are fresh.");
+    },
+    onError: (e) => toast.error(`Triage didn't finish. ${errorText(e)}`),
   });
 
   // Fire the kickoff exactly once per page mount. The backend will
@@ -104,8 +127,8 @@ function InvestigationTabsInner({ alert, details }: InvestigationTabsProps) {
 
   if (isLoading) {
     return (
-      <div className="text-[12px] text-muted flex items-center gap-2">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+      <div role="status" className="text-[12px] text-muted flex items-center gap-2">
+        <Loader2 aria-hidden className="h-3.5 w-3.5 animate-spin" />
         Loading investigation…
       </div>
     );
@@ -120,12 +143,13 @@ function InvestigationTabsInner({ alert, details }: InvestigationTabsProps) {
   const ran = groups.executedWrites.length;
 
   const tabs: TabDef<TabId>[] = [
-    { id: "root-cause", label: "Root cause", shortLabel: "Cause", icon: Sparkles },
-    { id: "background", label: "Background", shortLabel: "Context", icon: BookOpen },
+    // Same labels at every width: the bar scrolls (with an edge fade) on a
+    // phone rather than renaming tabs.
+    { id: "root-cause", label: "Root cause", icon: Sparkles },
+    { id: "background", label: "Background", icon: BookOpen },
     {
       id: "workflow",
       label: "Remediation workflow",
-      shortLabel: "Workflow",
       icon: Workflow,
       badge: toApprove ? `${toApprove} to approve` : ran ? `${ran} ran` : undefined,
       badgeTone: toApprove ? "accent" : "muted",
@@ -140,34 +164,25 @@ function InvestigationTabsInner({ alert, details }: InvestigationTabsProps) {
   ];
 
   return (
-    <div className="space-y-4">
-      <TabBar
-        tabs={tabs}
-        active={tab}
-        onChange={setTab}
-        ariaLabel="Investigation"
-        trailing={
-          <button
-            type="button"
-            onClick={() => triage.mutate({ force: true })}
-            disabled={triageInFlight}
-            className="text-[11px] h-7 px-2 rounded-md border border-line text-muted hover:text-[color:var(--text)] inline-flex items-center gap-1.5 disabled:opacity-50"
-            title="Re-run the autonomous triage pass"
-            aria-label="Re-triage"
-          >
-            {triageInFlight ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : (
-              <RefreshCw className="h-3 w-3" />
-            )}
-            <span className="hidden sm:inline">
-              {triageInFlight ? "Triaging…" : "Re-triage"}
-            </span>
-          </button>
-        }
-      />
+    <div className="space-y-3">
+      {/* Re-triage sits above the tabs, not in the tab row, so it never
+       *  collides with the "to approve" badge on a narrow screen. */}
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] uppercase tracking-wider text-muted">Investigation</span>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => triage.mutate({ force: true })}
+          pending={triageInFlight}
+          title="Re-run the autonomous triage pass"
+          icon={<RefreshCw aria-hidden className="h-3.5 w-3.5" />}
+        >
+          {triageInFlight ? "Triaging…" : "Re-triage"}
+        </Button>
+      </div>
+      <TabBar tabs={tabs} active={tab} onChange={setTab} ariaLabel="Investigation" />
 
-      <div role="tabpanel">
+      <TabPanel id={tab} className="pt-1">
         {tab === "root-cause" && (
           <div className="space-y-4">
             <NarrativePanel
@@ -205,7 +220,7 @@ function InvestigationTabsInner({ alert, details }: InvestigationTabsProps) {
           />
         )}
         {tab === "details" && details}
-      </div>
+      </TabPanel>
 
       <RemediationStyles />
     </div>
@@ -228,7 +243,7 @@ function NarrativePanel({
   const hasBody = !!body && body.trim() !== "—";
   return (
     <section className="surface p-5">
-      <div className="text-[10px] uppercase tracking-wider text-muted mb-2">
+      <div className="text-[11px] uppercase tracking-wider text-muted mb-2">
         {subtitle}
       </div>
       {hasBody ? (
@@ -437,7 +452,7 @@ function StepTag({ tag }: { tag: StepTagKind }) {
   const operator = tag === "operator";
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
+      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider"
       style={
         operator
           ? { background: "var(--warning)", color: "var(--bg-base)" }
@@ -485,6 +500,7 @@ function ApprovalCard({
 }) {
   const qc = useQueryClient();
   const router = useRouter();
+  const toast = useToast();
   const { user } = useAuth();
   // Under a multi-approver policy the same person can't approve twice (the
   // API answers 409), so once you've added yours the button goes away.
@@ -511,17 +527,23 @@ function ApprovalCard({
       qc.setQueryData(["alert-chat", alert.id], data.messages);
       qc.invalidateQueries({ queryKey: ["aiops-investigation-by-alert", alert.id] });
       if (!data.workflow_run_id) {
-        setWaitingFor(data.approvals_remaining ?? 1);
+        const left = data.approvals_remaining ?? 1;
+        setWaitingFor(left);
+        toast.success(`Approval recorded. Waiting for ${left} more approver${left === 1 ? "" : "s"}.`);
         return;
       }
       setWaitingFor(null);
+      toast.success("Approved. The workflow is running; opening it now.");
       qc.invalidateQueries({ queryKey: ["workflow-runs"] });
       router.push(`/workflows/${data.workflow_run_id}`);
     },
   });
   const rejectOne = useMutation({
     mutationFn: (actionId: string) => api.alerts.chat.reject(alert.id, actionId),
-    onSuccess: (data) => qc.setQueryData(["alert-chat", alert.id], data),
+    onSuccess: (data) => {
+      qc.setQueryData(["alert-chat", alert.id], data);
+      toast.success("Action rejected. Nothing ran.");
+    },
   });
 
   // "Approve all" runs every pending write in sequence. The backend exposes
@@ -540,11 +562,20 @@ function ApprovalCard({
         if (!res.workflow_run_id) stillWaiting += 1;
       }
       qc.invalidateQueries({ queryKey: ["alert-chat", alert.id] });
+    } catch (e) {
+      toast.error(`Couldn't approve every action. ${errorText(e)}`);
+      qc.invalidateQueries({ queryKey: ["alert-chat", alert.id] });
+      return;
     } finally {
       setBulkApproving(false);
     }
-    if (firstRunId) router.push(`/workflows/${firstRunId}`);
-    else if (stillWaiting) setWaitingFor(stillWaiting);
+    if (firstRunId) {
+      toast.success("All actions approved. The workflow is running; opening it now.");
+      router.push(`/workflows/${firstRunId}`);
+    } else if (stillWaiting) {
+      setWaitingFor(stillWaiting);
+      toast.success(`Approvals recorded. ${stillWaiting} action${stillWaiting === 1 ? "" : "s"} still need another approver.`);
+    }
   };
 
   const busy = approveOne.isPending || rejectOne.isPending || bulkApproving;
@@ -552,7 +583,7 @@ function ApprovalCard({
     approveOne.isPending ||
     bulkApproving ||
     (approveOne.isSuccess && !!approveOne.data?.workflow_run_id);
-  const failure = (approveOne.error ?? rejectOne.error) as Error | null;
+  const failure = approveOne.error ?? rejectOne.error;
 
   return (
     <div
@@ -563,15 +594,15 @@ function ApprovalCard({
         boxShadow: "inset 4px 0 0 var(--accent), 0 4px 18px -10px var(--accent-glow)",
       }}
     >
-      <div className="flex items-center gap-2 mb-3">
-        <Sparkles className="h-3.5 w-3.5" style={{ color: "var(--accent)" }} />
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <Sparkles aria-hidden className="h-3.5 w-3.5 motion-success" style={{ color: "var(--accent)" }} />
         <div
           className="text-[12px] font-semibold uppercase tracking-wider"
           style={{ color: "var(--accent)" }}
         >
           {pendingWrites.length} action{pendingWrites.length === 1 ? "" : "s"} waiting for your approval
         </div>
-        <span className="text-[11px] text-muted ml-auto">
+        <span className="text-xs text-muted sm:ml-auto">
           Changes the cluster — nothing runs until you approve.
         </span>
       </div>
@@ -614,7 +645,7 @@ function ApprovalCard({
           }}
         >
           <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" style={{ color: "var(--critical)" }} />
-          <span>Couldn&apos;t start it: {failure.message}</span>
+          <span>Couldn&apos;t start it. {errorText(failure)}</span>
         </div>
       )}
       <div className="space-y-2">
@@ -622,92 +653,72 @@ function ApprovalCard({
           <div key={a.id} className="rounded-md border border-line bg-bg-base/40 px-3 py-2">
             <div className="flex items-center gap-2 text-[12px]">
               <span className="font-mono font-semibold">{a.tool_name}</span>
-              <span className="text-muted font-mono text-[11px] truncate">
+              <span className="text-muted font-mono text-xs truncate">
                 {argTarget(a.tool_input)}
               </span>
             </div>
             {/* Why this action, and what happens when it runs: the agent's
                 `reason` argument, else the prose it wrote around the call,
                 else a mechanical summary. */}
-            <div className="text-[12px] text-fg/80 mt-1.5 whitespace-pre-wrap">
+            <div className="text-[12px] text-fg mt-1.5 whitespace-pre-wrap">
               {actionReason(a) ?? actionRationale(a, contentById) ?? describeAction(a)}
             </div>
             <ActionPolicyInfo action={a} />
             <details className="mt-1.5 group">
-              <summary className="cursor-pointer text-[11px] text-muted hover:text-[color:var(--text)] inline-flex items-center gap-1">
-                <ChevronRight className="h-3 w-3 transition-transform group-open:rotate-90" />
+              <summary className="cursor-pointer min-h-6 text-xs text-muted hover:text-[color:var(--text)] inline-flex items-center gap-1">
+                <ChevronRight aria-hidden className="h-3 w-3 transition-transform group-open:rotate-90" />
                 Show exact command
               </summary>
-              <pre className="mt-1 text-[11px] font-mono bg-bg-base/60 border border-line rounded p-2 overflow-x-auto whitespace-pre-wrap break-all">
+              <pre className="mt-1 text-xs font-mono bg-bg-base/60 border border-line rounded p-2 overflow-x-auto whitespace-pre-wrap break-all">
                 {a.tool_name}({JSON.stringify(commandArgs(a.tool_input), null, 2)})
               </pre>
             </details>
             <div className="flex items-center gap-2 mt-2 flex-wrap justify-end">
-              <button
-                type="button"
+              <Button
+                size="sm"
                 disabled={busy}
                 onClick={() => rejectOne.mutate(a.id)}
-                className="h-8 px-3 rounded-md border border-line text-muted hover:text-[color:var(--text)] disabled:opacity-40 inline-flex items-center gap-1.5 text-[12px]"
+                pending={rejectOne.isPending && rejectOne.variables === a.id}
+                icon={<X aria-hidden className="h-3.5 w-3.5" />}
               >
-                <X className="h-3.5 w-3.5" /> Reject
-              </button>
+                Reject
+              </Button>
               {approvedByMe(a) ? (
                 <span className="h-8 px-3 rounded-md border border-line text-muted inline-flex items-center gap-1.5 text-[12px]">
                   <Check className="h-3.5 w-3.5" /> You approved · waiting for{" "}
                   {Math.max((a.approvals_required ?? 1) - (a.approvals?.length ?? 0), 1)} more
                 </span>
               ) : (
-              <button
-                type="button"
-                disabled={busy}
+              <Button
+                variant="primary"
+                size="sm"
+                disabled={busy && !(approveOne.isPending && approveOne.variables === a.id)}
+                pending={approveOne.isPending && approveOne.variables === a.id}
                 onClick={() => approveOne.mutate(a.id)}
-                className="h-8 px-3 rounded-md text-bg-base disabled:opacity-40 inline-flex items-center gap-1.5 text-[12px] font-semibold"
-                style={{
-                  background:
-                    "linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #000))",
-                }}
+                icon={<Check aria-hidden className="h-3.5 w-3.5" />}
               >
-                {approveOne.isPending && approveOne.variables === a.id ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Starting…
-                  </>
-                ) : (a.approvals_required ?? 1) - (a.approvals?.length ?? 0) > 1 ? (
-                  <>
-                    <Check className="h-3.5 w-3.5" /> Add my approval
-                  </>
-                ) : (
-                  <>
-                    <Check className="h-3.5 w-3.5" /> Approve & run
-                  </>
-                )}
-              </button>
+                {approveOne.isPending && approveOne.variables === a.id
+                  ? "Starting…"
+                  : (a.approvals_required ?? 1) - (a.approvals?.length ?? 0) > 1
+                  ? "Add my approval"
+                  : "Approve & run"}
+              </Button>
               )}
             </div>
           </div>
         ))}
       </div>
       {pendingWrites.filter((a) => !approvedByMe(a)).length > 1 && (
-        <button
-          type="button"
-          disabled={bulkApproving}
+        <Button
+          variant="primary"
+          disabled={busy && !bulkApproving}
+          pending={bulkApproving}
           onClick={approveAll}
-          className="mt-3 w-full h-10 rounded-lg text-bg-base disabled:opacity-50 inline-flex items-center justify-center gap-2 text-[13px] font-semibold"
-          style={{
-            background:
-              "linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #000))",
-            boxShadow: "0 4px 18px -6px var(--accent-glow)",
-          }}
+          className="mt-3 w-full h-10"
+          icon={<Check aria-hidden className="h-4 w-4" />}
         >
-          {bulkApproving ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" /> Starting workflow…
-            </>
-          ) : (
-            <>
-              <Check className="h-4 w-4" /> Approve all and run workflow
-            </>
-          )}
-        </button>
+          {bulkApproving ? "Starting workflow…" : "Approve all and run workflow"}
+        </Button>
       )}
     </div>
   );
@@ -852,7 +863,7 @@ function EvidencePanel({
                       <span className="font-mono">{a.tool_name}</span>
                       <span className="text-muted truncate">{renderArgs(a.tool_input)}</span>
                       <span
-                        className="ml-auto text-[10px] uppercase tracking-wider"
+                        className="ml-auto text-[11px] uppercase tracking-wider"
                         style={{
                           color: a.status === "failed" ? "var(--critical)" : "var(--accent)",
                         }}
@@ -1601,7 +1612,7 @@ function ExecutedActionsList({ actions }: { actions: AlertAction[] }) {
                 {renderArgs(a.tool_input)}
               </span>
               <span
-                className="text-[10px] uppercase tracking-wider font-semibold shrink-0"
+                className="text-[11px] uppercase tracking-wider font-semibold shrink-0"
                 style={{
                   color:
                     a.status === "failed"

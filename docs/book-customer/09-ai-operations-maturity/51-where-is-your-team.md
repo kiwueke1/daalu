@@ -6,7 +6,7 @@ It measures what happened over a window (the last 7, 30 or 90 days), reports
 the metrics, and uses thresholds on those metrics to place you on the AI-Ops
 Maturity Model ladder from Level 0 to Level 5.
 
-URL: `https://daalu.example.com/maturity` (sidebar: **AI Ops → Maturity**).
+URL: `https://daalu.example.com/maturity` (sidebar: **Insights → Maturity**).
 
 ---
 

@@ -189,9 +189,11 @@ export function FabricGraph({
               type="button"
               onClick={() => onSelect(node.id)}
               title={node.note || node.name}
+              aria-label={`${node.name} (${TIER_LABEL[node.tier]}), ${dot.title}`}
+              aria-pressed={active}
               className={cn(
                 "absolute text-left rounded-xl border bg-bg-elevated px-3 py-2.5 transition-all duration-200",
-                "hover:-translate-y-0.5 focus:outline-none",
+                "hover:-translate-y-0.5",
                 active
                   ? "border-accent-emerald/70 shadow-glow"
                   : "border-line hover:border-accent-emerald/40"
@@ -213,7 +215,7 @@ export function FabricGraph({
                 />
               </div>
               <div className="mt-1 flex items-center justify-between">
-                <span className="text-[10px] uppercase tracking-wider text-muted">
+                <span className="text-[11px] uppercase tracking-wider text-muted">
                   {TIER_LABEL[node.tier]}
                 </span>
                 <span className="truncate text-[11px] text-muted">

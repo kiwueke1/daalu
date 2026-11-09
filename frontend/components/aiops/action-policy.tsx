@@ -30,10 +30,10 @@ export function ActionPolicyInfo({
   if (!hasAnything) return null;
 
   return (
-    <div className="mt-2 space-y-1.5 text-[11px]">
+    <div className="mt-2 space-y-1.5 text-xs">
       <div className="flex flex-wrap items-center gap-1.5">
         {action.auto_executed ? (
-          <Chip tone="accent" title={action.policy_reason}>
+          <Chip tone="accent">
             <Zap className="h-3 w-3" /> Auto-executed by policy
             {action.policy_rule ? ` ${action.policy_rule}` : ""}
           </Chip>
@@ -48,7 +48,7 @@ export function ActionPolicyInfo({
           <span className="text-muted">
             {action.policy_rule ? (
               <>
-                rule <span className="font-mono text-fg/80">{action.policy_rule}</span>
+                rule <span className="font-mono text-fg">{action.policy_rule}</span>
               </>
             ) : (
               "policy defaults"
@@ -76,8 +76,12 @@ export function ActionPolicyInfo({
           </Chip>
         )}
       </div>
-      {!compact && action.policy_reason && (
-        <div className="text-muted">Why: {action.policy_reason}</div>
+      {/* The policy's reason is shown, not hidden in a tooltip: it's the
+          answer to "why did this run on its own / why does it need me?" */}
+      {action.policy_reason && (
+        <div className={compact ? "text-muted line-clamp-2" : "text-muted"}>
+          Why: {action.policy_reason}
+        </div>
       )}
       {approvals.length > 0 && (
         <div className="text-muted">

@@ -5,7 +5,6 @@ import Link from "next/link";
 import { HUB } from "@/lib/hub-routes";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Boxes,
   CheckCircle2,
   ChevronRight,
   Copy,
@@ -27,6 +26,10 @@ import {
   IntegrationStep,
 } from "@/components/integrations/steps";
 import { ConnectModal } from "@/components/integrations/connect-modal";
+import { Button } from "@/components/ui/button";
+import { ConfirmButton } from "@/components/ui/confirm-button";
+import { useToast } from "@/components/ui/toast";
+import { errorText } from "@/lib/errors";
 
 // ── Sections of providers surfaced on this page ─────────────────────────
 //
@@ -96,8 +99,8 @@ const STATUS_BADGE: Record<ClusterStatus, { dot: string; label: string }> = {
 function ClusterStatusBadge({ status }: { status: ClusterStatus }) {
   const s = STATUS_BADGE[status];
   return (
-    <span className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-muted">
-      <span className={`h-2 w-2 rounded-full ${s.dot}`} />
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] uppercase tracking-wider text-muted">
+      <span aria-hidden className={`h-2 w-2 rounded-full ${s.dot}`} />
       {s.label}
     </span>
   );
@@ -116,7 +119,7 @@ function ProviderStatusBadge({
 }) {
   if (!existing) {
     return (
-      <span className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-muted">
+      <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] uppercase tracking-wider text-muted">
         <span className="h-2 w-2 rounded-full bg-muted/60" />
         not connected
       </span>
@@ -124,7 +127,7 @@ function ProviderStatusBadge({
   }
   if (existing.status === "connected") {
     return (
-      <span className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-accent-emerald">
+      <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] uppercase tracking-wider text-accent-emerald">
         <span className="h-2 w-2 rounded-full bg-accent-emerald" />
         connected
       </span>
@@ -137,7 +140,7 @@ function ProviderStatusBadge({
     return (
       <span
         title={existing.last_error || undefined}
-        className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-signal-critical"
+        className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] uppercase tracking-wider text-signal-critical"
       >
         <span className="h-2 w-2 rounded-full bg-signal-critical" />
         error
@@ -145,7 +148,7 @@ function ProviderStatusBadge({
     );
   }
   return (
-    <span className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-accent-amber">
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] uppercase tracking-wider text-accent-amber">
       <span className="h-2 w-2 rounded-full bg-accent-amber" />
       {existing.status || "configured"}
     </span>
@@ -159,6 +162,16 @@ function timeAgo(iso: string | null): string {
   if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
   if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
   return `${Math.floor(sec / 86400)}d ago`;
+}
+
+/** Long in-cluster URLs read as noise in a table: show just the host. */
+function shortSummary(value: string): string {
+  try {
+    const u = new URL(value);
+    return u.host;
+  } catch {
+    return value;
+  }
 }
 
 function summaryFor(
@@ -175,6 +188,7 @@ function summaryFor(
 
 export default function ManagedInfraPage() {
   const qc = useQueryClient();
+  const toast = useToast();
 
   // Clusters (VPN-onboarded).
   const { data: clusters, isLoading: clustersLoading } = useQuery({
@@ -208,12 +222,17 @@ export default function ManagedInfraPage() {
       setCreated(res);
       setShowClusterForm(false);
       qc.invalidateQueries({ queryKey: ["clusters"] });
+      toast.success(`Cluster ${res.slug} created. Run the install snippet on it.`);
     },
   });
 
   const removeCluster = useMutation({
     mutationFn: (slug: string) => api.clusters.remove(slug),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["clusters"] }),
+    onSuccess: (_res, slug) => {
+      qc.invalidateQueries({ queryKey: ["clusters"] });
+      toast.success(`Cluster ${slug} torn down.`);
+    },
+    onError: (err) => toast.error(errorText(err)),
   });
 
   // Disconnect a provider integration (prometheus / loki / kubernetes / …):
@@ -224,19 +243,17 @@ export default function ManagedInfraPage() {
   const removeConfig = useMutation({
     mutationFn: (vars: { provider: string; clusterId?: string }) =>
       api.integrations.deleteConfig(vars.provider, vars.clusterId),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: ["integrations", "config"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["integrations", "config"] });
+      toast.success("Disconnected. Daalu deleted the saved credentials.");
+    },
+    onError: (err) => toast.error(errorText(err)),
   });
 
+  // Confirmation happens in place (ConfirmButton in the row).
   const handleDeleteConfig = (step: IntegrationStep) => {
     if (!step.provider) return;
-    if (
-      confirm(
-        `Disconnect ${step.title}? Daalu deletes the saved credentials and stops reading from it until you reconnect.`
-      )
-    ) {
-      removeConfig.mutate({ provider: step.provider });
-    }
+    removeConfig.mutate({ provider: step.provider });
   };
 
   const cloudSteps: IntegrationStep[] = CLOUD_PROVIDER_IDS.map(
@@ -249,11 +266,8 @@ export default function ManagedInfraPage() {
   return (
     <div className="space-y-8 max-w-[1200px]">
       <div>
-        <h1 className="text-2xl font-semibold flex items-start gap-2">
-          <Boxes className="h-5 w-5 mt-1.5 shrink-0 text-accent-cyan" /> Clusters
-          &amp; observability
-        </h1>
-        <p className="text-muted text-sm mt-1">
+        {/* The tab bar already names this page; no duplicate H1. */}
+        <p className="text-muted text-sm">
           Cloud accounts, observability stacks and Kubernetes clusters Daalu
           reads from. Connect one here, or set everything up in order on the{" "}
           <Link href={HUB.onboarding} className="underline">
@@ -307,12 +321,15 @@ export default function ManagedInfraPage() {
             title="Kubernetes clusters"
             subtitle="Clusters reached over a private tunnel. Onboarding gives you a one-time install snippet to run on the cluster."
           />
-          <button
+          <Button
+            variant="primary"
+            size="sm"
             onClick={() => setShowClusterForm(true)}
-            className="text-xs h-9 px-3 rounded-lg bg-accent-cyan/15 border border-accent-cyan/40 text-accent-cyan hover:bg-accent-cyan/25 flex items-center gap-1.5 shrink-0"
+            icon={<Plus className="h-3.5 w-3.5" aria-hidden />}
+            className="shrink-0"
           >
-            <Plus className="h-3.5 w-3.5" /> Onboard cluster
-          </button>
+            Onboard cluster
+          </Button>
         </div>
 
         {showClusterForm && (
@@ -320,7 +337,7 @@ export default function ManagedInfraPage() {
             onClose={() => setShowClusterForm(false)}
             onSubmit={(slug, name) => onboardCluster.mutate({ slug, name })}
             submitting={onboardCluster.isPending}
-            error={onboardCluster.error?.message ?? null}
+            error={onboardCluster.error ? errorText(onboardCluster.error) : null}
           />
         )}
 
@@ -369,7 +386,7 @@ export default function ManagedInfraPage() {
                       <span className="font-medium group-hover:text-accent-cyan group-hover:underline">
                         {c.name}
                       </span>
-                      <span className="text-[11px] text-muted">{c.slug}</span>
+                      <span className="text-xs text-muted">{c.slug}</span>
                     </Link>
                   </td>
                   <td className="px-4 py-3">
@@ -381,18 +398,17 @@ export default function ManagedInfraPage() {
                   <td className="px-4 py-3 text-muted text-xs">
                     {timeAgo(c.last_handshake_at)}
                   </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex items-center justify-end gap-3">
-                      <button
-                        onClick={() => {
-                          if (confirm(`Tear down cluster ${c.slug}?`))
-                            removeCluster.mutate(c.slug);
-                        }}
-                        className="text-muted hover:text-signal-critical"
-                        title="Tear down"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                  <td className="px-4 py-3 text-right whitespace-nowrap">
+                    <div className="inline-flex flex-nowrap items-center justify-end gap-3">
+                      <ConfirmButton
+                        tone="danger"
+                        label="Tear down"
+                        icon={<Trash2 className="h-3.5 w-3.5" aria-hidden />}
+                        confirmLabel={`Tear down ${c.slug}`}
+                        consequence="Removes the tunnel; Daalu stops reaching this cluster."
+                        onConfirm={() => removeCluster.mutate(c.slug)}
+                        pending={removeCluster.isPending && removeCluster.variables === c.slug}
+                      />
                       <Link
                         href={`/clusters/${c.slug}`}
                         className="text-muted hover:text-accent-cyan inline-flex items-center gap-1 text-xs"
@@ -456,6 +472,24 @@ function SectionHeader({
 // Provider, Status, the key identifier (region/project/url), and an
 // action button.
 
+function ProviderName({ step }: { step: IntegrationStep }) {
+  const Icon = step.icon;
+  return (
+    <div className="flex items-center gap-3 min-w-0">
+      <div
+        className="h-8 w-8 rounded-lg flex items-center justify-center shrink-0"
+        style={{ background: "color-mix(in srgb, var(--accent) 12%, transparent)" }}
+      >
+        <Icon className="h-4 w-4 text-accent-cyan" aria-hidden />
+      </div>
+      <div className="min-w-0">
+        <div className="font-medium">{step.title}</div>
+        <div className="text-xs text-muted">{step.provider}</div>
+      </div>
+    </div>
+  );
+}
+
 function ProviderTable({
   steps,
   configByProvider,
@@ -466,8 +500,8 @@ function ProviderTable({
   steps: IntegrationStep[];
   configByProvider: Record<string, IntegrationConfig>;
   onConnect: (step: IntegrationStep) => void;
-  // When supplied, connected rows get a Disconnect (trash) action that
-  // deletes the saved config so the provider can be re-added from scratch.
+  // When supplied, connected rows get a Disconnect action (confirmed in
+  // place) that deletes the saved config so the provider can be re-added.
   onDelete?: (step: IntegrationStep) => void;
   // When supplied and it returns a path for a connected provider, the row
   // gets an "Open" link into a detail console (e.g. /observability/loki).
@@ -476,106 +510,103 @@ function ProviderTable({
     existing: IntegrationConfig | undefined
   ) => string | null;
 }) {
+  const rows = steps.map((step) => {
+    const existing = step.provider ? configByProvider[step.provider] : undefined;
+    const summary = summaryFor(step, existing);
+    const label = SUMMARY_LABEL[step.id];
+    // One line, truncated; the full value is in the tooltip.
+    const detail = summary ? (
+      <span title={summary} className="block min-w-0 truncate">
+        <span className="text-muted">{label}: </span>
+        <span className="font-mono">{shortSummary(summary)}</span>
+      </span>
+    ) : null;
+    const href = detailHref?.(step, existing) ?? null;
+    const actions = (
+      <div className="inline-flex flex-nowrap items-center justify-end gap-2 whitespace-nowrap">
+        {href && (
+          <Link
+            href={href}
+            className="text-xs h-8 px-3 rounded-lg border border-line text-muted hover:text-accent-cyan hover:border-accent-cyan/40 inline-flex items-center gap-1.5"
+          >
+            Open <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+          </Link>
+        )}
+        <Button
+          size="sm"
+          onClick={() => onConnect(step)}
+          icon={
+            existing ? (
+              <Settings className="h-3.5 w-3.5" aria-hidden />
+            ) : (
+              <Plus className="h-3.5 w-3.5" aria-hidden />
+            )
+          }
+        >
+          {existing ? "Edit" : "Connect"}
+        </Button>
+        {existing && onDelete && (
+          <ConfirmButton
+            tone="danger"
+            label={<span className="sr-only">Disconnect {step.title}</span>}
+            icon={<Trash2 className="h-3.5 w-3.5" aria-hidden />}
+            confirmLabel={`Disconnect ${step.title}`}
+            consequence={`Disconnect ${step.title} — the agent loses read access.`}
+            onConfirm={() => onDelete(step)}
+            className="px-2 hover:text-signal-critical hover:border-signal-critical/40"
+          />
+        )}
+      </div>
+    );
+    return { step, existing, detail, actions };
+  });
+
   return (
-    <div className="rounded-2xl border border-line bg-bg-card overflow-x-auto">
-      <table className="w-full min-w-[640px] text-sm">
-        <thead className="bg-bg-elevated/40 text-[11px] uppercase tracking-wider text-muted">
-          <tr>
-            <th className="text-left px-4 py-2 font-normal w-[34%]">Provider</th>
-            <th className="text-left px-4 py-2 font-normal">Status</th>
-            <th className="text-left px-4 py-2 font-normal">Detail</th>
-            <th className="text-right px-4 py-2 font-normal"></th>
-          </tr>
-        </thead>
-        <tbody>
-          {steps.map((step) => {
-            const existing = step.provider
-              ? configByProvider[step.provider]
-              : undefined;
-            const summary = summaryFor(step, existing);
-            const label = SUMMARY_LABEL[step.id];
-            const Icon = step.icon;
-            return (
+    <>
+      {/* Below md: stacked cards, so Detail and the actions stay visible. */}
+      <ul className="md:hidden space-y-2">
+        {rows.map(({ step, existing, detail, actions }) => (
+          <li key={step.id} className="rounded-2xl border border-line bg-bg-card p-3 space-y-2">
+            <div className="flex items-start justify-between gap-3">
+              <ProviderName step={step} />
+              <ProviderStatusBadge existing={existing} />
+            </div>
+            {detail && <div className="text-xs">{detail}</div>}
+            <div className="flex justify-end">{actions}</div>
+          </li>
+        ))}
+      </ul>
+      <div className="hidden md:block rounded-2xl border border-line bg-bg-card relative overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-bg-elevated/40 text-[11px] uppercase tracking-wider text-muted">
+            <tr>
+              <th className="text-left px-4 py-2 font-normal w-[34%]">Provider</th>
+              <th className="text-left px-4 py-2 font-normal">Status</th>
+              <th className="text-left px-4 py-2 font-normal">Detail</th>
+              <th className="text-right px-4 py-2 font-normal">
+                <span className="sr-only">Actions</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ step, existing, detail, actions }) => (
               <tr key={step.id} className="border-t border-line">
                 <td className="px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="h-8 w-8 rounded-lg flex items-center justify-center shrink-0"
-                      style={{
-                        background:
-                          "color-mix(in srgb, var(--accent) 12%, transparent)",
-                      }}
-                    >
-                      <Icon className="h-4 w-4 text-accent-cyan" />
-                    </div>
-                    <div>
-                      <div className="font-medium">{step.title}</div>
-                      <div className="text-[11px] text-muted">
-                        {step.provider}
-                      </div>
-                    </div>
-                  </div>
+                  <ProviderName step={step} />
                 </td>
                 <td className="px-4 py-3">
                   <ProviderStatusBadge existing={existing} />
                 </td>
-                <td className="px-4 py-3 text-xs">
-                  {summary ? (
-                    <>
-                      <span className="text-muted">{label}: </span>
-                      <span className="font-mono">{summary}</span>
-                    </>
-                  ) : (
-                    <span className="text-muted">—</span>
-                  )}
+                <td className="px-4 py-3 text-xs max-w-[18rem]">
+                  {detail ?? <span className="text-muted">—</span>}
                 </td>
-                <td className="px-4 py-3 text-right whitespace-nowrap">
-                  <div className="inline-flex items-center gap-2">
-                    {(() => {
-                      const href = detailHref?.(step, existing);
-                      return href ? (
-                        <Link
-                          href={href}
-                          className="text-xs h-8 px-3 rounded-lg border border-line text-muted hover:text-accent-cyan hover:border-accent-cyan/40 inline-flex items-center gap-1.5"
-                        >
-                          Open <ChevronRight className="h-3.5 w-3.5" />
-                        </Link>
-                      ) : null;
-                    })()}
-                    <button
-                      type="button"
-                      onClick={() => onConnect(step)}
-                      className="text-xs h-8 px-3 rounded-lg border border-line text-muted hover:text-fg inline-flex items-center gap-1.5"
-                    >
-                      {existing ? (
-                        <>
-                          <Settings className="h-3.5 w-3.5" /> Edit
-                        </>
-                      ) : (
-                        <>
-                          <Plus className="h-3.5 w-3.5" /> Connect
-                        </>
-                      )}
-                    </button>
-                    {existing && onDelete && (
-                      <button
-                        type="button"
-                        onClick={() => onDelete(step)}
-                        title="Disconnect"
-                        aria-label={`Disconnect ${step.title}`}
-                        className="text-xs h-8 px-2 rounded-lg border border-line text-muted hover:text-signal-critical hover:border-signal-critical/40 inline-flex items-center"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                  </div>
-                </td>
+                <td className="px-4 py-3 text-right whitespace-nowrap w-px">{actions}</td>
               </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
 
@@ -606,13 +637,12 @@ function OnboardForm({
         <div className="text-sm font-medium flex items-center gap-2">
           <Server className="h-4 w-4 text-accent-cyan" /> Onboard new cluster
         </div>
-        <button
-          type="button"
+        <Button
+          variant="icon"
+          aria-label="Close onboarding form"
           onClick={onClose}
-          className="text-muted hover:text-fg"
-        >
-          <X className="h-4 w-4" />
-        </button>
+          icon={<X className="h-4 w-4" aria-hidden />}
+        />
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <label className="text-xs space-y-1">
@@ -637,22 +667,21 @@ function OnboardForm({
           />
         </label>
       </div>
-      {error && <div className="text-[11px] text-signal-critical">{error}</div>}
+      {error && <div role="alert" className="text-xs text-signal-critical">{error}</div>}
       <div className="flex items-center gap-2">
-        <button
+        <Button
           type="submit"
-          disabled={submitting || !slug || !name}
-          className="text-xs h-9 px-3 rounded-lg bg-accent-cyan/15 border border-accent-cyan/40 text-accent-cyan disabled:opacity-50"
+          variant="primary"
+          size="sm"
+          pending={submitting}
+          disabled={!slug || !name}
+          disabledReason={!slug || !name ? "Fill in the slug and display name" : undefined}
         >
-          {submitting ? "Creating…" : "Create"}
-        </button>
-        <button
-          type="button"
-          onClick={onClose}
-          className="text-xs h-9 px-3 rounded-lg border border-line text-muted hover:text-fg"
-        >
+          Create cluster &amp; get install snippet
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onClose}>
           Cancel
-        </button>
+        </Button>
       </div>
     </form>
   );
@@ -681,9 +710,12 @@ function CreatedSnippet({
             cluster to get a fresh one.
           </p>
         </div>
-        <button onClick={onClose} className="text-muted hover:text-fg">
-          <X className="h-4 w-4" />
-        </button>
+        <Button
+          variant="icon"
+          aria-label="Close install snippet"
+          onClick={onClose}
+          icon={<X className="h-4 w-4" aria-hidden />}
+        />
       </div>
       <div className="relative">
         <pre className="text-xs bg-bg-elevated/60 border border-line rounded-lg p-3 overflow-x-auto whitespace-pre">
@@ -695,12 +727,12 @@ function CreatedSnippet({
             setCopied(true);
             setTimeout(() => setCopied(false), 1500);
           }}
-          className="absolute top-2 right-2 text-[11px] h-7 px-2 rounded-md bg-bg-card border border-line hover:bg-bg-elevated/60 flex items-center gap-1"
+          className="absolute top-2 right-2 text-xs h-7 px-2 rounded-md bg-bg-card border border-line hover:bg-bg-elevated/60 flex items-center gap-1"
         >
           <Copy className="h-3 w-3" /> {copied ? "Copied" : "Copy"}
         </button>
       </div>
-      <div className="text-[11px] text-muted">
+      <div className="text-xs text-muted">
         Tunnel IP: <code className="font-mono">{created.tunnel_ip}</code>
         {" · "}
         Operator pubkey:{" "}

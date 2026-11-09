@@ -9,6 +9,9 @@ import { Check, Send, ShieldAlert, Sparkles, Terminal, X } from "lucide-react";
 import { api, type AlertAction, type AlertChatMessage } from "@/lib/api";
 import { ActionPolicyInfo } from "@/components/aiops/action-policy";
 import { useAuth } from "@/lib/auth";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast";
+import { errorText } from "@/lib/errors";
 
 interface AlertChatProps {
   alertId: string;
@@ -26,6 +29,7 @@ interface AlertChatProps {
 export function AlertChat({ alertId }: AlertChatProps) {
   const qc = useQueryClient();
   const router = useRouter();
+  const toast = useToast();
   const [draft, setDraft] = useState("");
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -68,6 +72,7 @@ export function AlertChat({ alertId }: AlertChatProps) {
     onSuccess: (data) => {
       qc.setQueryData(["alert-chat", alertId], data);
     },
+    onError: (e) => toast.error(`Message not sent. ${errorText(e)}`),
   });
 
   // A multi-approver policy may only record this approval
@@ -79,17 +84,25 @@ export function AlertChat({ alertId }: AlertChatProps) {
       qc.setQueryData(["alert-chat", alertId], data.messages);
       qc.invalidateQueries({ queryKey: ["aiops-investigation-by-alert", alertId] });
       if (!data.workflow_run_id) {
-        setWaitingFor(data.approvals_remaining ?? 1);
+        const left = data.approvals_remaining ?? 1;
+        setWaitingFor(left);
+        toast.success(`Approval recorded. Waiting for ${left} more approver${left === 1 ? "" : "s"}.`);
         return;
       }
       setWaitingFor(null);
+      toast.success("Approved. The workflow is running; opening it now.");
       router.push(`/workflows/${data.workflow_run_id}`);
     },
+    onError: (e) => toast.error(`Couldn't approve it. ${errorText(e)}`),
   });
 
   const reject = useMutation({
     mutationFn: (actionId: string) => api.alerts.chat.reject(alertId, actionId),
-    onSuccess: (data) => qc.setQueryData(["alert-chat", alertId], data),
+    onSuccess: (data) => {
+      qc.setQueryData(["alert-chat", alertId], data);
+      toast.success("Action rejected. Nothing ran.");
+    },
+    onError: (e) => toast.error(`Couldn't reject it. ${errorText(e)}`),
   });
 
   // Auto-scroll to bottom on new messages.
@@ -118,7 +131,7 @@ export function AlertChat({ alertId }: AlertChatProps) {
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 pb-3 space-y-3">
         {isLoading && (
-          <div className="text-xs text-muted">Loading conversation…</div>
+          <div role="status" className="text-xs text-muted">Loading conversation…</div>
         )}
         {!isLoading && messages.length === 0 && (
           <div className="text-[12px] text-muted leading-relaxed">
@@ -165,7 +178,11 @@ export function AlertChat({ alertId }: AlertChatProps) {
         className="px-6 py-3 flex gap-2 items-end"
         style={{ borderTop: "1px solid var(--line)" }}
       >
+        <label htmlFor="alert-chat-input" className="sr-only">
+          Ask the AI SRE about this alert
+        </label>
         <textarea
+          id="alert-chat-input"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
@@ -176,16 +193,20 @@ export function AlertChat({ alertId }: AlertChatProps) {
           }}
           rows={2}
           placeholder="Ask the AI SRE — e.g. 'what's in the logs?'"
-          className="flex-1 resize-none rounded-lg bg-bg-elevated/60 border border-line px-3 py-2 text-[13px] focus:outline-none focus:border-accent-blue/60"
+          className="flex-1 resize-none rounded-lg bg-bg-elevated/60 border border-line px-3 py-2 text-[13px] focus:border-accent/60"
           disabled={busy}
         />
-        <button
+        <Button
           type="submit"
+          variant="primary"
           disabled={!draft.trim() || busy}
-          className="h-10 px-3 rounded-lg bg-gradient-to-r from-accent-emerald to-accent-cyan text-bg-base text-[13px] disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+          pending={send.isPending}
+          disabledReason={busy ? "Waiting for the current reply" : "Type a question first"}
+          className="h-10"
+          icon={<Send aria-hidden className="h-3.5 w-3.5" />}
         >
-          <Send className="h-3.5 w-3.5" /> Send
-        </button>
+          Send
+        </Button>
       </form>
     </div>
   );
@@ -234,7 +255,7 @@ function ChatBubble({
             color: "color-mix(in srgb, var(--text) 80%, transparent)",
           }}
         >
-          <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted mb-1 font-sans">
+          <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-muted mb-1 font-sans">
             <Terminal className="h-3 w-3" /> tool output
           </div>
           {message.content}
@@ -323,10 +344,10 @@ function ActionCard({ action, onApprove, onReject, busy }: ActionCardProps) {
       ? "var(--critical)"
       : "var(--info)";
   const accentSoft = isWrite
-    ? "rgba(245,158,11,0.10)"
+    ? "color-mix(in srgb, var(--warning) 10%, transparent)"
     : isFailed
-      ? "rgba(239,68,68,0.10)"
-      : "rgba(var(--accent-rgb),0.08)";
+      ? "color-mix(in srgb, var(--critical) 10%, transparent)"
+      : "color-mix(in srgb, var(--accent) 8%, transparent)";
 
   return (
     <div
@@ -348,7 +369,7 @@ function ActionCard({ action, onApprove, onReject, busy }: ActionCardProps) {
           ({renderArgs(action.tool_input)})
         </span>
         <span
-          className="ml-auto text-[10px] uppercase tracking-wider"
+          className="ml-auto text-[11px] uppercase tracking-wider"
           style={{ color: accent }}
         >
           {action.status}
@@ -387,7 +408,7 @@ function ActionCard({ action, onApprove, onReject, busy }: ActionCardProps) {
       )}
 
       {isPending && isWrite && approvedByMe && (
-        <div className="px-3 py-2 text-muted text-[11px]" style={{ borderTop: "1px solid var(--line)" }}>
+        <div className="px-3 py-2 text-muted text-xs" style={{ borderTop: "1px solid var(--line)" }}>
           You approved this. It runs when the policy&apos;s approver count is reached.
         </div>
       )}
@@ -396,28 +417,26 @@ function ActionCard({ action, onApprove, onReject, busy }: ActionCardProps) {
           className="px-3 py-2 flex items-center gap-2"
           style={{ borderTop: "1px solid var(--line)" }}
         >
-          <span className="text-muted text-[11px] flex-1">
+          <span className="text-muted text-xs flex-1">
             This action mutates cluster state.
           </span>
-          <button
-            type="button"
+          <Button
+            size="sm"
             disabled={busy}
             onClick={onReject}
-            className="h-7 px-2 rounded-md border border-line text-muted hover:text-[color:var(--text)] disabled:opacity-40 flex items-center gap-1"
+            icon={<X aria-hidden className="h-3 w-3" />}
           >
-            <X className="h-3 w-3" /> Reject
-          </button>
-          <button
-            type="button"
+            Reject
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
             disabled={busy}
             onClick={onApprove}
-            className="h-7 px-2 rounded-md text-bg-base disabled:opacity-40 flex items-center gap-1"
-            style={{
-              background: `linear-gradient(90deg, ${accent}, color-mix(in srgb, ${accent} 70%, #000))`,
-            }}
+            icon={<Check aria-hidden className="h-3 w-3" />}
           >
-            <Check className="h-3 w-3" /> Approve & run
-          </button>
+            Approve & run
+          </Button>
         </div>
       )}
     </div>

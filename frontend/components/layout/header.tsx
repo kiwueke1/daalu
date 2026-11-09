@@ -3,11 +3,12 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Bell, LogOut, Menu, Moon, ShieldCheck, Sun } from "lucide-react";
+import { AlertTriangle, Bell, LogOut, Menu, Moon, PauseCircle, ShieldCheck, Sun } from "lucide-react";
 import { CommandBar } from "@/components/command-bar";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useTheme } from "@/lib/theme";
+import { useAutomationState } from "@/lib/use-automation-state";
 
 export function Header({ onMobileNavOpen }: { onMobileNavOpen?: () => void } = {}) {
   const { user, logout } = useAuth();
@@ -42,7 +43,16 @@ export function Header({ onMobileNavOpen }: { onMobileNavOpen?: () => void } = {
         ? { tone: "var(--critical)", text: `${critical} critical alert${critical === 1 ? "" : "s"}` }
         : warning
           ? { tone: "var(--warning)", text: `${warning} warning${warning === 1 ? "" : "s"}` }
-          : { tone: "var(--accent)", text: "All systems nominal" };
+          : { tone: "var(--accent)", text: "No open alerts" };
+
+  // Automation state, shown on every page: when someone pauses the AI or a
+  // circuit breaker trips, everyone should see it without opening /autonomy.
+  const { paused, tripped } = useAutomationState();
+  const automation = paused
+    ? { text: "Automation paused", tone: "var(--warning)" }
+    : tripped
+      ? { text: `${tripped} breaker${tripped === 1 ? "" : "s"} tripped`, tone: "var(--warning)" }
+      : null;
 
   return (
     <header
@@ -78,14 +88,38 @@ export function Header({ onMobileNavOpen }: { onMobileNavOpen?: () => void } = {
         {status && (
           <Link
             href="/alerts"
-            className="hidden md:flex items-center gap-2 text-xs text-muted hover:text-fg"
+            aria-label={status.text}
+            className="flex items-center gap-2 text-xs text-muted hover:text-fg shrink-0"
           >
             {critical || warning ? (
-              <AlertTriangle className="h-4 w-4" style={{ color: status.tone }} />
+              <AlertTriangle aria-hidden className="h-4 w-4" style={{ color: status.tone }} />
             ) : (
-              <ShieldCheck className="h-4 w-4" style={{ color: status.tone }} />
+              <ShieldCheck aria-hidden className="h-4 w-4" style={{ color: status.tone }} />
             )}
-            <span>{status.text}</span>
+            {/* Full text from md up; on a phone just the count, so the
+                alert signal never disappears. */}
+            <span className="hidden md:inline">{status.text}</span>
+            {(critical > 0 || warning > 0) && (
+              <span className="md:hidden font-semibold tabular-nums" style={{ color: status.tone }}>
+                {critical || warning}
+              </span>
+            )}
+          </Link>
+        )}
+        {automation && (
+          <Link
+            href="/autonomy"
+            role="status"
+            aria-label={`${automation.text}. Open the autonomy policy.`}
+            className="motion-attention shrink-0 inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-xs font-medium border"
+            style={{
+              color: automation.tone,
+              borderColor: `color-mix(in srgb, ${automation.tone} 45%, var(--line))`,
+              background: `color-mix(in srgb, ${automation.tone} 10%, transparent)`,
+            }}
+          >
+            <PauseCircle aria-hidden className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">{automation.text}</span>
           </Link>
         )}
         <div className="flex-1 min-w-0 max-w-xl mx-auto">
@@ -112,7 +146,8 @@ export function Header({ onMobileNavOpen }: { onMobileNavOpen?: () => void } = {
             <Bell className="h-4 w-4" />
             {(critical > 0 || warning > 0) && (
               <span
-                className="absolute top-2 right-2 h-1.5 w-1.5 rounded-full animate-pulseSoft"
+                aria-hidden
+                className="absolute top-2 right-2 h-1.5 w-1.5 rounded-full motion-attention"
                 style={{
                   background: critical ? "var(--critical)" : "var(--warning)",
                   boxShadow: `0 0 6px ${critical ? "var(--critical)" : "var(--warning)"}`,
@@ -127,7 +162,7 @@ export function Header({ onMobileNavOpen }: { onMobileNavOpen?: () => void } = {
               style={{
                 background:
                   "linear-gradient(140deg, var(--accent), color-mix(in srgb, var(--accent) 55%, var(--bg-base)))",
-                color: "#031814",
+                color: "var(--bg-base)",
                 boxShadow: "0 0 16px var(--accent-glow)",
               }}
               aria-label="Account menu"

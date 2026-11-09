@@ -52,7 +52,7 @@ export default function WorkflowDetailPage() {
           <div>
             <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-2xl font-semibold flex items-center gap-2">
-                <WorkflowIcon className="h-5 w-5 text-accent-cyan" />
+                <WorkflowIcon className="h-5 w-5 text-accent" />
                 {run.workflow_name}
               </h1>
               <StatusBadge status={run.status} />
@@ -71,7 +71,7 @@ export default function WorkflowDetailPage() {
               {run.alert_id && (
                 <Link
                   href={`/alerts/${run.alert_id}`}
-                  className="inline-flex items-center gap-1 hover:text-accent-cyan hover:underline"
+                  className="inline-flex items-center gap-1 hover:text-accent hover:underline"
                 >
                   <AlertTriangle className="h-3.5 w-3.5" />
                   {run.alert_title ?? "source alert"}
@@ -81,7 +81,7 @@ export default function WorkflowDetailPage() {
           </div>
 
           {run.error_message && (
-            <div className="rounded-xl border border-accent-red/40 bg-accent-red/5 p-3 text-sm text-accent-red">
+            <div className="rounded-xl border border-signal-critical/40 bg-signal-critical/5 p-3 text-sm text-signal-critical">
               {run.error_message}
             </div>
           )}
@@ -121,7 +121,7 @@ function StepCard({ step }: { step: WorkflowStep }) {
       <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-line/60">
         <div className="flex items-center gap-3 min-w-0">
           <span
-            className="h-7 w-7 rounded-lg flex items-center justify-center shrink-0 text-[11px] font-mono text-muted"
+            className="h-7 w-7 rounded-lg flex items-center justify-center shrink-0 text-xs font-mono text-muted"
             style={{
               background: "color-mix(in srgb, var(--accent) 10%, transparent)",
             }}
@@ -130,7 +130,7 @@ function StepCard({ step }: { step: WorkflowStep }) {
           </span>
           <div className="min-w-0">
             <div className="text-sm font-medium truncate">{step.title}</div>
-            <div className="text-[11px] text-muted flex items-center gap-1">
+            <div className="text-xs text-muted flex items-center gap-1">
               <KindIcon className="h-3 w-3" />
               <span className="font-mono">
                 {step.tool}({renderArgs(step.input)})
@@ -139,15 +139,15 @@ function StepCard({ step }: { step: WorkflowStep }) {
           </div>
         </div>
         {isError ? (
-          <XCircle className="h-4 w-4 text-accent-red shrink-0" />
+          <XCircle className="h-4 w-4 text-signal-critical shrink-0" />
         ) : (
-          <CheckCircle2 className="h-4 w-4 text-accent-emerald shrink-0" />
+          <CheckCircle2 className="h-4 w-4 text-accent shrink-0" />
         )}
       </div>
       {step.output && (
         <pre
           className={`text-xs px-4 py-3 overflow-x-auto whitespace-pre-wrap font-mono ${
-            isError ? "text-accent-red" : "text-fg/80"
+            isError ? "text-signal-critical" : "text-fg/80"
           }`}
         >
           {step.output}

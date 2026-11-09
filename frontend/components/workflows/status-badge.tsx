@@ -6,12 +6,12 @@
 export function StatusBadge({ status }: { status: string }) {
   return (
     <span
-      className={`text-[10px] uppercase tracking-wider rounded px-1.5 py-0.5 ${
+      className={`text-[11px] font-semibold uppercase tracking-wider rounded px-1.5 py-0.5 ${
         status === "succeeded"
-          ? "bg-accent-emerald/15 text-accent-emerald"
+          ? "bg-accent/15 text-accent"
           : status === "failed"
-          ? "bg-accent-red/15 text-accent-red"
-          : "bg-accent-blue/15 text-accent-blue"
+          ? "bg-signal-critical/15 text-signal-critical"
+          : "bg-bg-elevated text-muted"
       }`}
     >
       {status}

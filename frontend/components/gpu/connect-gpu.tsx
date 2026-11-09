@@ -28,6 +28,9 @@ import {
 import { api, type GpuCluster, type GpuServing } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { ConfirmButton } from "@/components/ui/confirm-button";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast";
+import { errorText } from "@/lib/errors";
 
 /** SRE-agent models Daalu knows how to serve (core/model_catalog.py). */
 export const SERVE_MODELS = [
@@ -62,13 +65,13 @@ export function LocalGpuPill({
   if (!configured) {
     return (
       <div className="text-xs text-muted border border-line rounded-full px-3 py-1.5 flex items-center gap-2">
-        <CloudOff className="h-3.5 w-3.5" /> Local GPU not configured
+        <CloudOff aria-hidden className="h-3.5 w-3.5" /> Local GPU not configured
       </div>
     );
   }
   const tone = healthy
     ? "border-accent-blue/40 text-[color:var(--text)] bg-accent-blue/15"
-    : "border-signal-critical/40 text-[color:var(--critical)] bg-signal-critical/10";
+    : "border-signal-critical/40 text-signal-critical bg-signal-critical/10";
   return (
     <div
       className={cn(
@@ -76,7 +79,7 @@ export function LocalGpuPill({
         tone
       )}
     >
-      <Cpu className="h-3.5 w-3.5" />
+      <Cpu aria-hidden className="h-3.5 w-3.5" />
       Local GPU {healthy ? "online" : "offline"} · {model || "—"}
     </div>
   );
@@ -99,6 +102,7 @@ export function GpuOnboardingCard({
   onDone?: () => void;
 } = {}) {
   const qc = useQueryClient();
+  const toast = useToast();
   const status = useQuery({
     queryKey: ["gpu", "status"],
     queryFn: api.onboarding.gpu.status,
@@ -172,11 +176,14 @@ export function GpuOnboardingCard({
       setOpen(false);
       setHfToken("");
       onDone?.();
+      toast.success("GPU connected. The model is deploying; progress shows below.");
       qc.invalidateQueries({ queryKey: ["gpu"] });
       qc.invalidateQueries({ queryKey: ["billing", "localGpu"] });
     },
-    onError: (e: unknown) =>
-      setErr(e instanceof Error ? e.message : "provisioning failed"),
+    onError: (e: unknown) => {
+      setErr(errorText(e));
+      toast.error(errorText(e));
+    },
   });
 
   const remove = useMutation({
@@ -187,7 +194,9 @@ export function GpuOnboardingCard({
       // AI Factory polls every 15–30 s; without this the removed card
       // lingers on screen after a successful Disconnect.
       qc.invalidateQueries({ queryKey: ["aiFactory"] });
+      toast.success("GPU disconnected. Inference now uses external models.");
     },
+    onError: (e) => toast.error(errorText(e)),
   });
 
   const s = status.data;
@@ -233,13 +242,14 @@ export function GpuOnboardingCard({
           />
         ) : (
           !open && (
-            <button
-              type="button"
+            <Button
+              variant="primary"
+              size="sm"
               onClick={() => setOpen(true)}
-              className="text-xs h-8 px-3 rounded-lg bg-gradient-to-r from-accent-emerald to-accent-cyan text-bg-base inline-flex items-center gap-1.5"
+              icon={<Plus className="h-3.5 w-3.5" aria-hidden />}
             >
-              <Plus className="h-3.5 w-3.5" /> Connect your GPU
-            </button>
+              Connect your GPU
+            </Button>
           )
         )}
       </div>
@@ -267,8 +277,8 @@ export function GpuOnboardingCard({
         </div>
       )}
       {configured && s?.last_error && !s.healthy && (
-        <div className="mt-2 text-[11px] text-[color:var(--critical)] flex items-center gap-1.5">
-          <AlertTriangle className="h-3 w-3" /> {s.last_error}
+        <div role="alert" className="mt-2 text-xs text-[color:var(--critical)] flex items-center gap-1.5 break-words">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden /> {s.last_error}
         </div>
       )}
 
@@ -279,18 +289,18 @@ export function GpuOnboardingCard({
 
       {/* Onboarding form */}
       {open && !configured && (
-        <div className="mt-4 rounded-lg border border-line bg-bg-base/40 p-4 space-y-3">
+        <div className="mt-4 rounded-lg border border-line bg-bg-base/40 p-4 space-y-3 motion-enter">
           <div className="flex items-center justify-between">
             <div className="text-xs font-semibold uppercase tracking-wider text-muted">
               Connect a GPU
             </div>
-            <button
-              type="button"
+            <Button
+              variant="icon"
+              size="sm"
+              aria-label="Close the connect-GPU form"
               onClick={() => setOpen(false)}
-              className="text-muted hover:text-[color:var(--text)]"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
+              icon={<X className="h-3.5 w-3.5" aria-hidden />}
+            />
           </div>
 
           <label className="block text-xs">
@@ -399,30 +409,28 @@ export function GpuOnboardingCard({
           </div>
 
           {err && (
-            <div className="text-[11px] text-[color:var(--critical)] flex items-center gap-1.5">
-              <AlertTriangle className="h-3 w-3" /> {err}
+            <div role="alert" className="text-xs text-[color:var(--critical)] flex items-center gap-1.5">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden /> {err}
             </div>
           )}
 
-          <div className="flex items-center gap-2 pt-1">
-            <button
-              type="button"
-              disabled={provision.isPending || noGpu}
-              title={noGpu ? "No GPU node on this cluster" : undefined}
-              onClick={() => provision.mutate()}
-              className="text-xs h-8 px-3 rounded-lg bg-gradient-to-r from-accent-emerald to-accent-cyan text-bg-base inline-flex items-center gap-1.5 disabled:opacity-60"
-            >
-              {provision.isPending ? (
-                <>
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Deploying
-                  vLLM… (this can take a few minutes)
-                </>
-              ) : (
-                <>
-                  <Check className="h-3.5 w-3.5" /> Deploy &amp; connect
-                </>
-              )}
-            </button>
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <ConfirmButton
+              label={
+                provision.isPending
+                  ? "Deploying vLLM… (this can take a few minutes)"
+                  : "Deploy & connect"
+              }
+              confirmLabel="Deploy & connect"
+              consequence={`Deploys ${model} onto ${gpuNode ?? "the GPU node"} and routes your AI requests to it.`}
+              onConfirm={() => provision.mutate()}
+              pending={provision.isPending}
+              disabled={noGpu}
+              icon={<Check className="h-3.5 w-3.5" aria-hidden />}
+            />
+            {noGpu && (
+              <span className="text-xs text-muted">No GPU node on this cluster.</span>
+            )}
           </div>
         </div>
       )}
@@ -520,7 +528,7 @@ export function GpuProgressPanel() {
 
           {events.length > 0 && (
             <div>
-              <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted">
+              <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted">
                 Events
               </div>
               <div className="max-h-48 overflow-y-auto rounded border border-line bg-bg-elevated/40">
@@ -551,7 +559,7 @@ export function GpuProgressPanel() {
 
           {logs && (
             <div>
-              <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted">
+              <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted">
                 vLLM logs
               </div>
               <pre className="max-h-64 overflow-auto rounded border border-line bg-bg-elevated/40 px-2 py-1.5 font-mono text-[11px] leading-relaxed text-[color:var(--text)]">
@@ -572,6 +580,7 @@ export function GpuProgressPanel() {
  */
 export function DisconnectGpuButton({ hostname }: { hostname: string }) {
   const qc = useQueryClient();
+  const toast = useToast();
   const status = useQuery({
     queryKey: ["gpu", "status"],
     queryFn: api.onboarding.gpu.status,
@@ -582,7 +591,9 @@ export function DisconnectGpuButton({ hostname }: { hostname: string }) {
       qc.invalidateQueries({ queryKey: ["gpu"] });
       qc.invalidateQueries({ queryKey: ["billing", "localGpu"] });
       qc.invalidateQueries({ queryKey: ["aiFactory"] });
+      toast.success("GPU disconnected. Inference now uses external models.");
     },
+    onError: (e) => toast.error(errorText(e)),
   });
   const s = status.data;
   if (!s?.configured) return null;
@@ -630,7 +641,7 @@ export function GpuServingPanel({
         <>
           {s.hf_model}
           {s.open_weights && (
-            <span className="ml-2 rounded-full border border-accent-emerald/40 px-1.5 py-px text-[10px] text-accent-emerald">
+            <span className="ml-2 rounded-full border border-accent-emerald/40 px-1.5 py-px text-[11px] text-accent-emerald">
               open weights
             </span>
           )}
@@ -673,7 +684,7 @@ export function GpuServingPanel({
             this card.
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <span
             className={cn(
               "text-[11px] rounded-full px-2.5 py-1 border inline-flex items-center gap-1.5",

@@ -8,10 +8,10 @@ Daalu measures for you from what actually happened, and uses thresholds on
 those metrics to place your team on **six levels**. Practices you keep as code
 (an autonomy policy, runbooks, eval scenarios) are how you move the numbers.
 
-This part of the handbook is for the operators who use it day to day. Every
-page it describes lives under the **AI Ops** section of the sidebar:
-**Maturity**, **Autonomy policy**, **Investigations**, **Runbooks**,
-**Evals** and **Audit log**.
+This part of the handbook is for the operators who use it day to day. The
+pages it describes are in three sections of the sidebar: **Respond** →
+Investigations; **Automate** → Autonomy policy and Runbooks; **Insights** →
+Maturity, Evals and Audit log.
 
 ---
 

@@ -1,6 +1,7 @@
 # 49. Fabric topology — the live network map
 
-**Topology** in the sidebar (`https://ops.example.com/network/topology`) is a
+**Topology** (`https://ops.example.com/network/topology`, opened from
+**Managed infra → Network & servers → your environment → Consoles**) is a
 live map of your network fabric: every device in your source of truth,
 drawn as a graph whose links are coloured by what Daalu can actually
 *observe* on the wire — not just what the cabling records say should be
@@ -101,8 +102,7 @@ diffed, approved, and auditable.
 
 The topology plane is gated by the `network_topology_enabled` feature
 flag on your tenant. If it isn't on, the page says so — ask your Daalu
-contact to enable it. The sidebar entry is always visible so you know the
-feature exists.
+contact to enable it.
 
 ---
 

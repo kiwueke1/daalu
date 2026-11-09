@@ -30,13 +30,15 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
-  Loader2,
   Workflow,
   X,
 } from "lucide-react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { HUB } from "@/lib/hub-routes";
+import { errorText } from "@/lib/errors";
+import { Button, buttonClass } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast";
 import { ClusterWorkflow } from "@/components/onboarding/cluster-workflow";
 import { OnboardingHeader } from "@/components/onboarding/onboarding-header";
 import {
@@ -53,6 +55,7 @@ const TOTAL_STEPS = STEPS.length + 1;
 
 export default function OnboardingPage() {
   const qc = useQueryClient();
+  const toast = useToast();
   const { data: status } = useQuery({
     queryKey: ["onboarding", "status"],
     queryFn: () => api.onboarding.status(),
@@ -189,7 +192,7 @@ export default function OnboardingPage() {
       });
       update(step.id, { test: result, error: result.ok ? null : result.message });
     } catch (e) {
-      update(step.id, { error: (e as Error).message });
+      update(step.id, { error: errorText(e) });
     }
   }
 
@@ -216,9 +219,11 @@ export default function OnboardingPage() {
         cluster_tunnel_id: state.clusterTunnelId,
       });
       update(step.id, { saved: true, error: null });
+      toast.success(`${step.title} saved.`);
       return true;
     } catch (e) {
-      update(step.id, { error: (e as Error).message });
+      update(step.id, { error: errorText(e) });
+      toast.error(errorText(e));
       return false;
     }
   }
@@ -233,17 +238,19 @@ export default function OnboardingPage() {
     setStepIdx(prevIdx(stepIdx));
   }
 
+  // One list drives every count on the page (header, welcome card, button),
+  // so "N of M" always matches the rows the user can see.
   const doneCount = STEPS.filter((s) => isDone(s.id)).length;
   const progress =
     stepIdx < 0
-      ? status && status.total > 0
-        ? status.completed / status.total
+      ? status
+        ? doneCount / STEPS.length
         : 0
       : (stepIdx + 1) / TOTAL_STEPS;
   const progressLabel =
     stepIdx < 0
       ? status
-        ? `${status.completed} of ${status.total} configured`
+        ? `${doneCount} of ${STEPS.length} set up`
         : "Checking what's already set up…"
       : stepIdx < STEPS.length
         ? `Step ${stepIdx + 1} of ${STEPS.length}: ${STEPS[stepIdx].title}`
@@ -258,9 +265,9 @@ export default function OnboardingPage() {
         action={
           <Link
             href="/managed-infra?tab=integrations"
-            className="whitespace-nowrap text-xs h-9 px-3 rounded-lg border border-line text-muted hover:text-fg flex items-center gap-1.5"
+            className={buttonClass("secondary", "sm")}
           >
-            Open Integrations <ArrowRight className="h-3.5 w-3.5" />
+            Open Integrations <ArrowRight className="h-3.5 w-3.5" aria-hidden />
           </Link>
         }
         progress={{ value: progress, label: progressLabel }}
@@ -318,56 +325,47 @@ export default function OnboardingPage() {
 
       {stepIdx >= 0 && (
         <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
-          <button
-            type="button"
+          <Button
+            variant="ghost"
             onClick={goBack}
             disabled={stepIdx < 0}
-            className="text-xs h-9 px-3 rounded-lg border border-line text-muted hover:text-fg disabled:opacity-50 flex items-center gap-1.5"
+            icon={<ChevronLeft className="h-3.5 w-3.5" aria-hidden />}
           >
-            <ChevronLeft className="h-3.5 w-3.5" /> Back
-          </button>
+            Back
+          </Button>
           {stepIdx < STEPS.length ? (
             STEPS[stepIdx].id === "cluster" ? (
               // The cluster step advances itself via onComplete on the
               // <ClusterWorkflow />. Offer a "Skip" affordance so users
               // who don't want the VPN can move on.
               !states.cluster.enabled || states.cluster.saved ? (
-                <button
-                  type="button"
-                  onClick={() => setStepIdx(nextIdx(stepIdx))}
-                  className="text-xs h-9 px-3 rounded-lg bg-accent-cyan/15 border border-accent-cyan/40 text-accent-cyan flex items-center gap-1.5"
-                >
+                <Button variant="primary" onClick={() => setStepIdx(nextIdx(stepIdx))}>
                   {states.cluster.saved ? "Continue" : "Skip cluster tunnel"}
-                  <ChevronRight className="h-3.5 w-3.5" />
-                </button>
+                  <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+                </Button>
               ) : (
-                <div className="text-[11px] text-muted">
+                <div className="text-xs text-muted">
                   Finish the cluster workflow above, or untick the toggle to skip.
                 </div>
               )
             ) : (
-              <button
-                type="button"
+              <Button
+                variant="primary"
                 onClick={goNext}
-                disabled={putIntegration.isPending || testIntegration.isPending}
-                className="text-xs h-9 px-3 rounded-lg bg-accent-cyan/15 border border-accent-cyan/40 text-accent-cyan disabled:opacity-50 flex items-center gap-1.5"
+                pending={putIntegration.isPending}
+                disabled={testIntegration.isPending}
+                disabledReason={testIntegration.isPending ? "Waiting for the connection test" : undefined}
               >
-                {putIntegration.isPending && (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                )}
                 {states[STEPS[stepIdx].id].enabled
                   ? "Save & continue"
                   : "Skip & continue"}
-                <ChevronRight className="h-3.5 w-3.5" />
-              </button>
+                <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+              </Button>
             )
           ) : (
-            <a
-              href="/"
-              className="text-xs h-9 px-3 rounded-lg bg-accent-cyan/15 border border-accent-cyan/40 text-accent-cyan flex items-center gap-1.5"
-            >
-              Go to dashboard <ChevronRight className="h-3.5 w-3.5" />
-            </a>
+            <Link href="/" className={buttonClass("primary")}>
+              Go to dashboard <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+            </Link>
           )}
         </div>
       )}
@@ -402,22 +400,26 @@ function WelcomeStep({
         </Link>
         .
       </p>
+      {/* To-do first, done after (dimmed), so the eye lands on what's left. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-        {STEPS.map((step, i) => {
+        {STEPS.map((step, i) => ({ step, i, done: isDone(step.id) }))
+          .sort((a, b) => Number(a.done) - Number(b.done) || a.i - b.i)
+          .map(({ step, i, done }) => {
           const Icon = step.icon;
-          const done = isDone(step.id);
           return (
             <button
               key={step.id}
               type="button"
               onClick={() => onOpen(i)}
-              className="group text-left flex items-center gap-2 rounded-lg border border-line bg-bg-elevated/30 px-3 py-2 hover:border-accent/50 hover:bg-bg-elevated/60 transition-colors"
+              className={`group text-left flex items-center gap-2 rounded-lg border px-3 py-2 hover:border-accent/50 hover:bg-bg-elevated/60 transition-colors ${
+                done ? "border-line bg-transparent text-muted" : "border-line-strong bg-bg-elevated/30"
+              }`}
             >
-              <Icon className="h-4 w-4 text-accent shrink-0" />
+              <Icon className={`h-4 w-4 shrink-0 ${done ? "text-muted" : "text-accent"}`} aria-hidden />
               <span className="flex-1 min-w-0">{step.title}</span>
               {done ? (
-                <span className="text-[10px] uppercase tracking-wider text-accent flex items-center gap-1 shrink-0">
-                  <Check className="h-3 w-3" /> done
+                <span className="text-[11px] uppercase tracking-wider text-accent flex items-center gap-1 shrink-0">
+                  <Check className="h-3 w-3" aria-hidden /> Done
                 </span>
               ) : (
                 <ChevronRight className="h-3.5 w-3.5 text-muted group-hover:text-fg shrink-0" />
@@ -428,15 +430,15 @@ function WelcomeStep({
       </div>
       <div className="sticky bottom-0 -mx-4 sm:mx-0 -mb-4 sm:mb-0 px-4 sm:px-0 py-3 sm:py-0 sm:pt-2 bg-bg-card border-t border-line sm:border-0 flex flex-wrap items-center justify-end gap-2">
         {remaining > 0 ? (
-          <button
-            type="button"
+          <Button
+            variant="primary"
             onClick={onStartRemaining}
             disabled={!loaded}
-            className="text-xs h-9 px-3 rounded-lg bg-accent/15 border border-accent/40 text-accent disabled:opacity-50 flex items-center gap-1.5"
+            disabledReason={loaded ? undefined : "Checking what's already set up"}
           >
             {loaded ? `Set up the ${remaining} remaining` : "Loading…"}
-            <ChevronRight className="h-3.5 w-3.5" />
-          </button>
+            <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+          </Button>
         ) : (
           <span className="text-xs text-muted">
             Everything is set up. Pick a step above to change it.
@@ -516,9 +518,9 @@ function DoneStep({ states }: { states: Record<string, StepState> }) {
   const enabled = STEPS.filter((s) => states[s.id].enabled);
   const skipped = STEPS.filter((s) => !states[s.id].enabled);
   return (
-    <div className="rounded-2xl border border-line bg-bg-card p-6 space-y-4">
+    <div className="rounded-2xl border border-line bg-bg-card p-6 space-y-4 motion-enter">
       <div className="text-base font-medium flex items-center gap-2">
-        <Check className="h-4 w-4 text-accent-emerald" /> Onboarding complete
+        <Check className="h-4 w-4 text-accent-emerald motion-success" aria-hidden /> Onboarding complete
       </div>
       <p className="text-sm text-muted">
         You can change any of these later from{" "}

@@ -146,7 +146,7 @@ daalu fault drill openstack/gameday --env openstack-lab
 ```
 
 It ends with a table of time to recover per incident, saved as JSON under
-`~/.daalu/faults/drills/`. Put that next to Daalu's **AI Ops → Metrics** for the
+`~/.daalu/faults/drills/`. Put that next to Daalu's **Insights → Maturity** for the
 same window. The drill's numbers are ground truth that Daalu didn't produce, so
 they're how you check the dashboard (S3-09) and how you compare models fairly
 (S1-11, S4-04).

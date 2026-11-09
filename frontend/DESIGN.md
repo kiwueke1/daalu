@@ -46,10 +46,56 @@ or change the rule here — don't leave both.
 - Never render an empty state or a zero metric while the query is still loading or
   has failed: wrap it in `LoadState` (or check `isLoading`/`isError` first).
 - An empty state says where the data comes from or what to do next, with a link.
-- Status copy is computed from data ("2 critical alerts"), never a static "All systems
-  nominal".
+- Status copy is computed from data ("2 critical alerts", "No open alerts"), never a
+  static "All systems nominal". Two numbers about the same thing on one screen come from
+  the same source.
 - No developer text in the product: no mock/adapter internals, feature-flag names,
   raw backend reason strings, private-repo links, or stale model names.
+
+## 4c. Accessibility (WCAG 2.2 AA)
+
+- Text colours clear 4.5:1 on every surface in both themes (the tokens are tuned for
+  it; don't fade them further with `/60`-style opacity on body text). Nothing smaller
+  than 12px for anything a user must read; 11px only for uppercase micro-labels.
+- Every control has a name: icon-only buttons get `aria-label` (use `Button
+  variant="icon"`, which requires it); every input has a visible label above it, never
+  a placeholder alone.
+- Everything works by keyboard. Clickable rows put a real `<Link>` or `<button>` in the
+  row; never `onClick` on a `<div>`/`<tr>` alone. The global `:focus-visible` ring is
+  the focus style; don't remove outlines without a replacement.
+- Overlays use `Dialog` (role, label, Escape, focus trap, focus return).
+- Status is never colour alone: pair the dot/colour with a word.
+- Results of async actions are announced: `useToast()` (aria-live) or `role="status"`.
+- Tap targets are at least 24×24px (36px for primary touch actions).
+
+## 4d. Motion with a purpose
+
+Motion is allowed only when it does one of three jobs. If you can't name the job in a
+sentence, don't animate.
+
+| Job | Use | Where |
+|---|---|---|
+| Confirm an action | `motion-press` (buttons), `useToast()`, `motion-success` tick | every button via `Button`; after a mutation succeeds |
+| Direct attention | `motion-attention` (pops in, rings twice, stops), `motion-update` (a changed number tints once) | "needs you" badges, the header automation-paused pill, a metric that just changed, a new row from a run |
+| Soften a transition | `motion-enter` (content arriving), `.collapse-grid` (accordion height), `motion-dialog`/`motion-drawer`/`motion-sheet` | loaded content replacing `LoadState`, tab panels, route changes (app shell does this), accordions, overlays |
+
+- Nothing loops for decoration. Loops are only for "in progress" (spinners, a
+  "listening"/"loading" shimmer) and stop when the work stops.
+- Durations come from `--dur-fast` (120ms), `--dur` (200ms), `--dur-slow` (320ms)
+  with `--ease-out`. Under 400ms, always.
+- `prefers-reduced-motion` turns it all off (globals.css); don't add motion that
+  bypasses it (no JS-driven animation loops).
+
+## 4e. Errors and copy
+
+- Errors shown to people go through `errorText()` (`lib/errors.ts`): FastAPI's
+  `detail` when it's a sentence, otherwise a plain sentence by status. Never
+  `String(err)`, `err.message` or a raw body.
+- A "not set up yet" answer (e.g. 409 "no nautobot integration") is not an error:
+  `LoadState notSetUp={…}` shows a neutral next step with a link.
+- A button that can't work right now is disabled and says why (`disabledReason`).
+- Buttons say what happens ("Authorize this terminal", "Switch to Hybrid · $99/mo"),
+  never "Submit"/"OK"; error copy says what to do next.
 
 ## 5. Layout
 
@@ -59,9 +105,24 @@ or change the rule here — don't leave both.
 - Headers and action rows `flex-wrap`, so nothing overflows at 390px.
 - Tables sit in `overflow-x-auto` wrappers (never `overflow-hidden`), or become stacked
   cards below `md`, so action columns stay reachable on a phone.
+- Those wrappers are also `relative`. An `sr-only` table header is absolutely positioned, so
+  without it the label escapes the scroller and widens the whole page.
 - Colours with opacity use the named tokens (`bg-signal-critical/10`, `text-fg/80`);
   `bg-[color:var(--x)]/10` compiles to nothing.
 - Tab bars scroll sideways on narrow screens; the active tab scrolls into view.
+
+## 5b. Navigation
+
+- The sidebar is grouped by what you came to do: **Respond**, **Automate**,
+  **Infrastructure**, **Insights**. A new page joins a group; it doesn't get a new one
+  without a mockup. The list fits 1440×900 without scrolling, so count rows before adding.
+- An entry's badge is something a person can act on, in words ("1 to approve", "Paused"),
+  from the same query as the page it points to. Nothing shows until the query has answered.
+- Below `xl` the right rail becomes the Assistant button and bottom sheet
+  (`AssistantSheet`). State that must outlive the sheet is held above it, because `Dialog`
+  unmounts its children on close. Full-screen tools hide the button (`hidesAssistantButton`).
+- Phone inputs are at least 16px, or iOS zooms the page when they take focus. Sheets don't
+  focus a field on open, so the keyboard doesn't cover what the person opened it to read.
 
 ## 6. New screens start as a mockup
 
@@ -86,7 +147,10 @@ intended change.
 | `TabBar`, `useUrlTab` | `components/ui/tabs.tsx` | Page-level sections |
 | `Accordion`, `AccordionItem` | `components/ui/accordion.tsx` | Folded lists, one open at a time |
 | `ConfirmButton` | `components/ui/confirm-button.tsx` | One-click changes/removals: asks in place, says the consequence |
-| `LoadState` | `components/ui/load-state.tsx` | Loading / error / empty for a query; never show "0" or "none" while loading |
-
-Pages still hand-rolling the same underline tab bar (`/managed-infra`, `/operations`,
-`/settings`) should move to `TabBar` when next touched.
+| `LoadState` | `components/ui/load-state.tsx` | Loading / error / empty / not-set-up for a query; never show "0" or "none" while loading |
+| `Button`, `buttonClass` | `components/ui/button.tsx` | Every button: primary / secondary / danger / ghost / icon, press feedback, `disabledReason` |
+| `Dialog` | `components/ui/dialog.tsx` | Modals, side drawers and phone bottom sheets (`variant="sheet"`): labelled, Escape, focus trap and return, scroll lock, motion |
+| `useToast` | `components/ui/toast.tsx` | Confirming what just happened (with an optional Undo/View), announcing failures |
+| `errorText` | `lib/errors.ts` | The only way an error reaches the screen |
+| `useUnsavedGuard` | `components/ui/use-unsaved-guard.ts` | Any editor or form: warns before reload/close while there are unsaved edits |
+| `useAutomationState` | `lib/use-automation-state.ts` | Whether the AI can act (paused, breakers tripped), so every surface agrees |

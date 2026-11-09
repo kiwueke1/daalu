@@ -38,7 +38,7 @@ function Stat({ label, value, accent }: { label: string; value: number; accent: 
   return (
     <div className="rounded-lg bg-bg-elevated/70 py-3">
       <div className={`text-xl font-semibold ${accent}`}>{value}</div>
-      <div className="text-[10px] uppercase tracking-wider text-muted mt-0.5">{label}</div>
+      <div className="text-[11px] uppercase tracking-wider text-muted mt-0.5">{label}</div>
     </div>
   );
 }

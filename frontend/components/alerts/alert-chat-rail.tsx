@@ -46,12 +46,14 @@ export function AlertChatRail({ alertId }: { alertId: string }) {
         type="button"
         onClick={() => setOpen(!open)}
         title={open ? "Collapse remediation chat" : "Open remediation chat"}
-        className="chat-rail-chevron relative z-10 self-end m-2 h-8 w-8 rounded-md inline-flex items-center justify-center"
+        aria-label={open ? "Collapse remediation chat" : "Open remediation chat"}
+        aria-expanded={open}
+        className="motion-press chat-rail-chevron relative z-10 self-end m-2 h-8 w-8 rounded-md inline-flex items-center justify-center"
       >
         {open ? (
-          <ChevronRight className="h-4 w-4" />
+          <ChevronRight aria-hidden className="h-4 w-4" />
         ) : (
-          <ChevronLeft className="h-4 w-4" />
+          <ChevronLeft aria-hidden className="h-4 w-4" />
         )}
       </button>
 
@@ -72,7 +74,7 @@ export function AlertChatRail({ alertId }: { alertId: string }) {
             />
           </span>
           <span
-            className="text-[10px] uppercase tracking-[0.20em] font-semibold text-[color:var(--text)]"
+            className="text-[11px] uppercase tracking-[0.20em] font-semibold text-[color:var(--text)]"
             style={{ writingMode: "vertical-rl", textOrientation: "mixed" }}
           >
             Remediation copilot
@@ -80,17 +82,14 @@ export function AlertChatRail({ alertId }: { alertId: string }) {
         </button>
       )}
 
+      {/* Theme tokens only: --surface-top/--surface-bot and the hairlines
+          already differ per theme, so no light-mode override is needed. */}
       <style jsx>{`
         .chat-rail-chevron {
-          background:
-            linear-gradient(
-              180deg,
-              rgba(20, 32, 28, 0.85) 0%,
-              rgba(12, 22, 18, 0.92) 100%
-            );
+          background: linear-gradient(180deg, var(--surface-top) 0%, var(--surface-bot) 100%);
           color: var(--text);
           box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.08),
+            inset 0 1px 0 var(--hairline-strong),
             inset 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent),
             0 0 14px -4px var(--accent-glow);
           backdrop-filter: blur(4px);
@@ -102,55 +101,31 @@ export function AlertChatRail({ alertId }: { alertId: string }) {
         .chat-rail-chevron:hover {
           transform: translateY(-1px);
           box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.12),
+            inset 0 1px 0 var(--hairline-strong),
             inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent),
             0 0 22px -4px var(--accent-glow);
         }
-        :global([data-theme="light"]) .chat-rail-chevron {
-          background:
-            linear-gradient(
-              180deg,
-              rgba(255, 255, 255, 0.96) 0%,
-              rgba(244, 248, 250, 0.90) 100%
-            );
-          box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.9),
-            inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent),
-            0 1px 0 rgba(15, 30, 24, 0.06);
-        }
 
         .chat-rail-toggle {
-          background:
-            linear-gradient(
-              180deg,
-              rgba(20, 32, 28, 0.55) 0%,
-              rgba(12, 22, 18, 0.62) 100%
-            );
+          background: linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--surface-top) 70%, transparent) 0%,
+            color-mix(in srgb, var(--surface-bot) 75%, transparent) 100%
+          );
           backdrop-filter: blur(4px) saturate(1.05);
           -webkit-backdrop-filter: blur(4px) saturate(1.05);
           box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.06),
-            inset 0 0 0 1px color-mix(in srgb, var(--accent) 16%, rgba(255, 255, 255, 0.04));
+            inset 0 1px 0 var(--hairline),
+            inset 0 0 0 1px color-mix(in srgb, var(--accent) 16%, var(--hairline));
           transition:
             box-shadow 220ms ease,
             transform 220ms ease;
         }
         .chat-rail-toggle:hover {
           box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.10),
-            inset 0 0 0 1px color-mix(in srgb, var(--accent) 38%, rgba(255, 255, 255, 0.06)),
+            inset 0 1px 0 var(--hairline-strong),
+            inset 0 0 0 1px color-mix(in srgb, var(--accent) 38%, var(--hairline-strong)),
             0 0 18px -4px var(--accent-glow);
-        }
-        :global([data-theme="light"]) .chat-rail-toggle {
-          background:
-            linear-gradient(
-              180deg,
-              rgba(255, 255, 255, 0.82) 0%,
-              rgba(244, 248, 250, 0.75) 100%
-            );
-          box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.9),
-            inset 0 0 0 1px color-mix(in srgb, var(--accent) 20%, rgba(15, 30, 24, 0.05));
         }
 
         .chat-rail-msg-chip {

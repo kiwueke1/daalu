@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -40,9 +40,12 @@ export function ConfirmButton({
   className?: string;
 }) {
   const [asking, setAsking] = useState(false);
+  const confirmRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (!asking) return;
-    const t = window.setTimeout(() => setAsking(false), 6000);
+    // Keyboard users land on the confirm button; Escape backs out.
+    confirmRef.current?.focus();
+    const t = window.setTimeout(() => setAsking(false), 8000);
     return () => window.clearTimeout(t);
   }, [asking]);
 
@@ -58,11 +61,11 @@ export function ConfirmButton({
           setAsking(true);
         }}
         className={cn(
-          "h-8 px-3 rounded-lg border border-line text-xs inline-flex items-center gap-1.5 hover:bg-bg-elevated/60 disabled:opacity-50",
+          "motion-press h-8 px-3 rounded-lg border border-line text-xs inline-flex items-center gap-1.5 whitespace-nowrap hover:bg-bg-elevated/60 disabled:opacity-50",
           className
         )}
       >
-        {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : icon}
+        {pending ? <Loader2 aria-hidden className="h-3.5 w-3.5 animate-spin" /> : icon}
         {label}
       </button>
     );
@@ -70,17 +73,23 @@ export function ConfirmButton({
 
   return (
     <span
-      className="inline-flex flex-wrap items-center gap-2 text-xs"
+      role="group"
+      aria-label={confirmLabel}
+      className="motion-enter inline-flex flex-wrap items-center gap-2 text-xs"
       onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") setAsking(false);
+      }}
     >
-      <span className="text-muted">{consequence}</span>
+      <span className="text-muted" aria-live="polite">{consequence}</span>
       <button
         type="button"
         onClick={() => {
           setAsking(false);
           onConfirm();
         }}
-        className="h-8 px-3 rounded-lg font-semibold inline-flex items-center gap-1.5"
+        ref={confirmRef}
+        className="motion-press h-8 px-3 rounded-lg font-semibold inline-flex items-center gap-1.5 whitespace-nowrap"
         style={{ background: color, color: "var(--bg-base)" }}
       >
         {icon}
@@ -89,7 +98,7 @@ export function ConfirmButton({
       <button
         type="button"
         onClick={() => setAsking(false)}
-        className="h-8 px-2 rounded-lg text-muted hover:text-fg"
+        className="motion-press h-8 px-2 rounded-lg text-muted hover:text-fg"
       >
         Cancel
       </button>

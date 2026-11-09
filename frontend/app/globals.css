@@ -43,7 +43,7 @@
   --accent-soft: rgba(34, 211, 166, 0.14);
   --accent-glow: rgba(34, 211, 166, 0.30);
   --accent-bloom: rgba(34, 211, 166, 0.45);
-  --critical: #ef4444;
+  --critical: #f26161; /* 5.3:1+ on every dark surface (WCAG AA) */
   --warning: #f59e0b;
   --info: #22d3a6;
 
@@ -86,16 +86,18 @@ html[data-theme="light"] {
   --hairline-strong: rgba(15, 30, 24, 0.14);
 
   --text: #0a1612;
-  --text-muted: #5e6d68;
+  --text-muted: #56655f; /* 4.9:1+ on every light surface */
 
-  --accent: #0f9d75;
-  --accent-rgb: 15, 157, 117;
-  --accent-soft: rgba(15, 157, 117, 0.10);
-  --accent-glow: rgba(15, 157, 117, 0.22);
-  --accent-bloom: rgba(15, 157, 117, 0.32);
-  --critical: #dc2626;
-  --warning: #d97706;
-  --info: #0f9d75;
+  /* Text-grade colours: each clears WCAG AA 4.5:1 for normal text on every
+     light surface, and white/base text on them clears it too. */
+  --accent: #087556;
+  --accent-rgb: 8, 117, 86;
+  --accent-soft: rgba(8, 117, 86, 0.10);
+  --accent-glow: rgba(8, 117, 86, 0.22);
+  --accent-bloom: rgba(8, 117, 86, 0.32);
+  --critical: #b91c1c;
+  --warning: #a34a06;
+  --info: #087556;
 
   --bg-surface: #ffffff;
   --bg-card: #ffffff;
@@ -303,15 +305,15 @@ html[data-theme="light"] .sidebar-bg-light {
 html[data-theme="dark"] .sidebar-tint {
   background: linear-gradient(
     180deg,
-    rgba(7, 14, 12, 0.10) 0%,
-    rgba(5, 11, 9, 0.22) 100%
+    rgba(7, 14, 12, 0.50) 0%,
+    rgba(5, 11, 9, 0.60) 100%
   );
 }
 html[data-theme="light"] .sidebar-tint {
   background: linear-gradient(
     180deg,
-    rgba(244, 248, 250, 0.04) 0%,
-    rgba(232, 240, 244, 0.08) 100%
+    rgba(244, 248, 250, 0.55) 0%,
+    rgba(232, 240, 244, 0.65) 100%
   );
 }
 
@@ -352,41 +354,10 @@ html[data-theme="light"] .sidebar-specular {
  * Every nav link sits on a frosted chip so the label reads clearly
  * over the photographic circuit pattern. Three states:
  *
- *   .sidebar-nav-chip  — always on, the base "I'm a button" frosted
- *                        surface. backdrop-blur softens the
- *                        circuit pattern directly behind the text
- *                        without hiding it; a faint border + sheen
- *                        keeps the chip readable on both themes.
  *   .sidebar-nav-hover — additive accent wash, applied on hover.
  *   .sidebar-nav-active — strong accent fill + glow, applied on the
  *                         current route.
  */
-.sidebar-nav-chip {
-  background:
-    linear-gradient(
-      180deg,
-      rgba(20, 32, 28, 0.55) 0%,
-      rgba(12, 22, 18, 0.62) 100%
-    );
-  backdrop-filter: blur(4px) saturate(1.05);
-  -webkit-backdrop-filter: blur(4px) saturate(1.05);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.04),
-    0 1px 0 rgba(0, 0, 0, 0.25);
-}
-html[data-theme="light"] .sidebar-nav-chip {
-  background:
-    linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.78) 0%,
-      rgba(244, 248, 250, 0.70) 100%
-    );
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9),
-    inset 0 0 0 1px rgba(15, 30, 24, 0.05),
-    0 1px 0 rgba(15, 30, 24, 0.04);
-}
 .sidebar-nav-hover {
   background:
     linear-gradient(
@@ -499,4 +470,179 @@ html[data-theme="light"] .daalu-mark-light {
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+}
+
+/* ── Motion with a purpose ───────────────────────────────────────────────
+ *
+ * Every animation here does one of three jobs, and nothing loops for
+ * decoration:
+ *   1. confirm an action   (press, toast, success tick)
+ *   2. direct attention    (a "needs you" badge arriving, a value changing)
+ *   3. soften a transition (content arriving, tab/accordion/dialog changes)
+ * All of it switches off under prefers-reduced-motion (bottom of file).
+ */
+:root {
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-fast: 120ms;
+  --dur: 200ms;
+  --dur-slow: 320ms;
+}
+
+/* 3. Content arriving: a loaded panel or a new tab fades up 4px, so the
+      swap from "Loading…" to data reads as one change, not a jump. */
+@keyframes motion-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+.motion-enter {
+  animation: motion-enter var(--dur) var(--ease-out) both;
+}
+
+/* 2. Something needs the user (a badge like "1 to approve" appearing):
+      it pops in and rings twice, then stays still. */
+@keyframes motion-attention-pop {
+  0% { transform: scale(0.6); opacity: 0; }
+  60% { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1); }
+}
+@keyframes motion-attention-ring {
+  0% { box-shadow: 0 0 0 0 var(--accent-glow); }
+  100% { box-shadow: 0 0 0 8px transparent; }
+}
+.motion-attention {
+  animation:
+    motion-attention-pop var(--dur-slow) var(--ease-out) both,
+    motion-attention-ring 900ms var(--ease-out) 2 var(--dur-slow);
+}
+
+/* 2. A number that just changed (a metric refreshed): one brief tint. */
+@keyframes motion-update {
+  from { background-color: var(--accent-soft); }
+  to { background-color: transparent; }
+}
+.motion-update {
+  animation: motion-update 900ms var(--ease-out);
+  border-radius: 6px;
+}
+
+/* 1. Press feedback on buttons: the control visibly takes the click. */
+.motion-press {
+  transition: transform var(--dur-fast) var(--ease-out), background-color var(--dur-fast), border-color var(--dur-fast), opacity var(--dur-fast);
+}
+.motion-press:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* 1. Success tick after an action completes. */
+@keyframes motion-success {
+  0% { transform: scale(0.4); opacity: 0; }
+  70% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); }
+}
+.motion-success {
+  animation: motion-success var(--dur-slow) var(--ease-out) both;
+}
+
+/* 3. Accordion body: height eases open from 0, so the eye follows where the
+      detail came from. Wrap the body in .collapse-grid > .collapse-inner. */
+.collapse-grid {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--dur) var(--ease-out);
+}
+.collapse-grid[data-open="true"] {
+  grid-template-rows: 1fr;
+}
+.collapse-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 3. Dialogs: the backdrop fades, the panel settles in from 97 %. */
+@keyframes motion-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes motion-dialog {
+  from { opacity: 0; transform: translateY(6px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes motion-drawer {
+  from { transform: translateX(16px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+.motion-overlay { animation: motion-fade var(--dur) var(--ease-out) both; }
+.motion-dialog { animation: motion-dialog var(--dur) var(--ease-out) both; }
+.motion-drawer { animation: motion-drawer var(--dur-slow) var(--ease-out) both; }
+@keyframes motion-sheet {
+  from { transform: translateY(24px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+.motion-sheet { animation: motion-sheet var(--dur-slow) var(--ease-out) both; }
+
+/* 1. Toasts confirm what just happened: slide up in, fade out. */
+@keyframes motion-toast-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes motion-toast-out {
+  to { opacity: 0; transform: translateY(6px); }
+}
+.motion-toast-in { animation: motion-toast-in var(--dur-slow) var(--ease-out) both; }
+.motion-toast-out { animation: motion-toast-out var(--dur) var(--ease-in-out) both; }
+
+/* ── Keyboard focus ──────────────────────────────────────────────────────
+ * One visible ring for every focusable thing, shown for keyboard focus
+ * only (WCAG 2.4.7 / 2.4.11). Inputs keep their border cue as well.
+ */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline-offset: 0;
+}
+
+/* Skip link: the first thing a keyboard user reaches; hidden until focused. */
+.skip-link {
+  position: fixed;
+  left: 12px;
+  top: -48px;
+  z-index: 100;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  border: 1px solid var(--accent);
+  font-size: 14px;
+  transition: top var(--dur-fast) var(--ease-out);
+}
+.skip-link:focus {
+  top: 12px;
+}
+
+/* ── Reduced motion ──────────────────────────────────────────────────────
+ * Respect the OS setting: no movement, no loops. Spinners keep turning
+ * (they are the only sign that work is in progress), slowed down.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .animate-spin {
+    animation-duration: 1.6s !important;
+    animation-iteration-count: infinite !important;
+  }
+  .motion-press:active:not(:disabled) {
+    transform: none;
+  }
 }

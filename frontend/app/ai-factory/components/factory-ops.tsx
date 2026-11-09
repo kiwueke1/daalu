@@ -12,7 +12,10 @@ import {
   Stethoscope,
 } from "lucide-react";
 import { api } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { cn, formatRelative } from "@/lib/utils";
+import { errorText } from "@/lib/errors";
+import { useToast } from "@/components/ui/toast";
+import { RUN_STATE_LABEL, type RunState } from "./run-state";
 
 /**
  * Factory operations — the main-page launcher for tests that act on the WHOLE
@@ -68,6 +71,7 @@ function Tile({
   icon,
   title,
   desc,
+  tool,
   badge,
   onRun,
   running,
@@ -77,6 +81,8 @@ function Tile({
   icon: React.ReactNode;
   title: string;
   desc: string;
+  /** The tool behind it, shown small under the plain-English line. */
+  tool?: string;
   badge?: React.ReactNode;
   onRun?: () => void;
   running?: boolean;
@@ -91,22 +97,27 @@ function Tile({
         </div>
         {badge}
       </div>
-      <p className="text-[11px] text-muted mt-1.5 flex-1">{desc}</p>
-      <div className="mt-3 flex items-center justify-between">
+      <p className="text-xs text-muted mt-1.5 flex-1">
+        {desc}
+        {tool && <span className="block mt-1 text-[11px] font-mono opacity-90">{tool}</span>}
+      </p>
+      <div className="mt-3 flex items-center justify-between gap-2">
         <Link
           href={href}
-          className="text-[11px] text-accent-emerald inline-flex items-center gap-1 hover:underline"
+          className="text-xs text-accent-emerald inline-flex items-center gap-1 hover:underline"
+          aria-label={`Open ${title}`}
         >
-          Open <ArrowUpRight className="h-3 w-3" />
+          Open <ArrowUpRight className="h-3 w-3" aria-hidden />
         </Link>
         {onRun && (
           <button
             type="button"
             onClick={onRun}
             disabled={running}
-            className="text-[11px] h-7 px-2.5 rounded-lg border border-line text-muted hover:text-[color:var(--text)] hover:border-accent-emerald/40 inline-flex items-center gap-1 disabled:opacity-50"
+            aria-busy={running || undefined}
+            className="motion-press text-xs h-8 px-3 rounded-lg border border-line text-muted hover:text-[color:var(--text)] hover:border-accent-emerald/40 inline-flex items-center gap-1 disabled:opacity-50"
           >
-            <Play className="h-3 w-3" /> {running ? "Starting…" : runLabel}
+            <Play className="h-3 w-3" aria-hidden /> {running ? "Starting…" : runLabel}
           </button>
         )}
       </div>
@@ -116,8 +127,17 @@ function Tile({
 
 // ── last-run pill (state only — never the output) ─────────────────────────
 
-function StatePill({ state, when }: { state?: string; when?: string | null }) {
-  if (!state) return <span className="text-[10px] text-muted">no runs yet</span>;
+function StatePill({
+  state,
+  when,
+  loading,
+}: {
+  state?: string;
+  when?: string | null;
+  loading?: boolean;
+}) {
+  if (loading) return <span className="text-[11px] text-muted">Loading…</span>;
+  if (!state) return <span className="text-[11px] text-muted">No runs yet</span>;
   const tone =
     state === "passed"
       ? "border-accent-emerald/40 text-accent-emerald"
@@ -127,13 +147,13 @@ function StatePill({ state, when }: { state?: string; when?: string | null }) {
   return (
     <span
       className={cn(
-        "text-[10px] rounded-full px-2 py-0.5 border inline-flex items-center gap-1 whitespace-nowrap",
+        "text-[11px] rounded-full px-2 py-0.5 border inline-flex items-center gap-1 whitespace-nowrap",
         tone,
       )}
       title={when ? new Date(when).toLocaleString() : undefined}
     >
-      {state}
-      {when && <span className="text-muted">· {timeAgo(when)}</span>}
+      {RUN_STATE_LABEL[state as RunState] ?? state}
+      {when && <span className="text-muted">· {formatRelative(when)}</span>}
     </span>
   );
 }
@@ -151,24 +171,28 @@ function DiagnosticsTile() {
     refetchInterval: 30_000,
   });
   const last = (runs.data?.runs ?? []).find((r) => DIAG_KINDS.has(r.kind));
+  const toast = useToast();
   const run = useMutation({
     mutationFn: () =>
       api.aiFactory.runDiagnostic({ kind: "dcgmi_diag", level: 1 }),
     onSuccess: () => {
+      toast.success("Quick health check started. Results appear on the Diagnostics page.");
       qc.invalidateQueries({ queryKey: ["aiFactory", "diagnostics"] });
       router.push("/ai-factory/diagnostics");
     },
+    onError: (e) => toast.error(errorText(e)),
   });
   return (
     <Tile
       href="/ai-factory/diagnostics"
       icon={<Stethoscope className="h-4 w-4" />}
       title="Diagnostics"
-      desc="dcgmi diag & NCCL — on-demand GPU health and interconnect checks."
-      badge={<StatePill state={last?.state} when={last?.finished_at ?? last?.started_at} />}
+      desc="Check each GPU's health and the links between GPUs."
+      tool="dcgmi diag · NCCL tests"
+      badge={<StatePill loading={runs.isLoading} state={last?.state} when={last?.finished_at ?? last?.started_at} />}
       onRun={() => run.mutate()}
       running={run.isPending}
-      runLabel="Quick dcgmi"
+      runLabel="Run health check"
     />
   );
 }
@@ -184,23 +208,27 @@ function ObservabilityTile() {
   const last = (runs.data?.runs ?? []).find(
     (r) => (r.kind as string) === "observability_validate",
   );
+  const toast = useToast();
   const run = useMutation({
     mutationFn: () => api.aiFactory.validateObservability(),
     onSuccess: () => {
+      toast.success("Observability check started. Results appear on its page.");
       qc.invalidateQueries({ queryKey: ["aiFactory", "diagnostics"] });
       router.push("/ai-factory/observability");
     },
+    onError: (e) => toast.error(errorText(e)),
   });
   return (
     <Tile
       href="/ai-factory/observability"
       icon={<ShieldCheck className="h-4 w-4" />}
       title="Observability check"
-      desc="End-to-end self-check of the metrics pipeline (exporters, scrape, queryability)."
-      badge={<StatePill state={last?.state} when={last?.finished_at ?? last?.started_at} />}
+      desc="Make sure GPU metrics are being collected and can be charted."
+      tool="exporters · scrape · query self-check"
+      badge={<StatePill loading={runs.isLoading} state={last?.state} when={last?.finished_at ?? last?.started_at} />}
       onRun={() => run.mutate()}
       running={run.isPending}
-      runLabel="Validate"
+      runLabel="Run self-check"
     />
   );
 }
@@ -217,8 +245,9 @@ function BenchmarkTile() {
       href="/ai-factory/benchmark"
       icon={<Gauge className="h-4 w-4" />}
       title="Benchmark"
-      desc="AIPerf concurrency sweep — TTFT, inter-token latency, throughput. Configure the sweep on its page."
-      badge={<StatePill state={last?.state} when={last?.finished_at ?? last?.started_at} />}
+      desc="Measure how fast your model answers as more users send requests at once."
+      tool="AIPerf · time to first token, throughput"
+      badge={<StatePill loading={runs.isLoading} state={last?.state} when={last?.finished_at ?? last?.started_at} />}
     />
   );
 }
@@ -235,35 +264,22 @@ function ReliabilityTile() {
       href="/ai-factory/reliability"
       icon={<Activity className="h-4 w-4" />}
       title="Reliability"
-      desc="NVSentinel auto-remediation posture & cuda-checkpoint status across the factory."
+      desc="See whether GPU faults are fixed automatically and jobs can resume after one."
+      tool="NVSentinel · cuda-checkpoint"
       badge={
         rel.data ? (
           <span
             className={cn(
-              "text-[10px] rounded-full px-2 py-0.5 border whitespace-nowrap",
+              "text-[11px] rounded-full px-2 py-0.5 border whitespace-nowrap",
               active
                 ? "border-accent-emerald/40 text-accent-emerald"
                 : "border-line text-muted",
             )}
           >
-            NVSentinel {active ? "active" : "not active"}
+            {active ? "Auto-fix on" : "Auto-fix off"}
           </span>
         ) : undefined
       }
     />
   );
-}
-
-// ── helpers ─────────────────────────────────────────────────────────────
-
-function timeAgo(iso: string): string {
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return "";
-  const secs = Math.max(0, Math.floor((Date.now() - then) / 1000));
-  if (secs < 60) return `${secs}s ago`;
-  const mins = Math.floor(secs / 60);
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
 }

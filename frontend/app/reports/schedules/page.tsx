@@ -5,13 +5,20 @@ import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Clock, Plus, Trash2 } from "lucide-react";
 import { api, type ReportSchedule, type SavedReport } from "@/lib/api";
+import { Button, buttonClass } from "@/components/ui/button";
+import { ConfirmButton } from "@/components/ui/confirm-button";
+import { LoadState } from "@/components/ui/load-state";
+import { useToast } from "@/components/ui/toast";
+import { errorText } from "@/lib/errors";
 
 export default function SchedulesPage() {
   const qc = useQueryClient();
-  const { data: schedules = [], isLoading } = useQuery({
+  const toast = useToast();
+  const schedulesQ = useQuery({
     queryKey: ["report-schedules"],
     queryFn: () => api.reports.schedules.list(),
   });
+  const schedules = schedulesQ.data ?? [];
   const { data: saved = [] } = useQuery({
     queryKey: ["reports-saved"],
     queryFn: () => api.reports.saved.list(),
@@ -21,13 +28,21 @@ export default function SchedulesPage() {
 
   const remove = useMutation({
     mutationFn: (id: string) => api.reports.schedules.remove(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["report-schedules"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["report-schedules"] });
+      toast.success("Schedule deleted. It won't send again.");
+    },
+    onError: (e) => toast.error(errorText(e)),
   });
 
   const toggle = useMutation({
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
       api.reports.schedules.update(id, { enabled }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["report-schedules"] }),
+    onSuccess: (_d, v) => {
+      qc.invalidateQueries({ queryKey: ["report-schedules"] });
+      toast.success(v.enabled ? "Schedule enabled." : "Schedule paused. Nothing sends until you enable it.");
+    },
+    onError: (e) => toast.error(errorText(e)),
   });
 
   return (
@@ -37,22 +52,23 @@ export default function SchedulesPage() {
           href="/reports?tab=query"
           className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-[color:var(--text)] transition-colors"
         >
-          <ArrowLeft className="h-3.5 w-3.5" /> Back to Reports
+          <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> Back to Reports
         </Link>
         {!creating && saved.length > 0 && (
-          <button
-            type="button"
+          <Button
+            size="sm"
+            variant="primary"
             onClick={() => setCreating(true)}
-            className="text-xs inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-accent-blue/60 text-accent-blue hover:bg-accent-blue/10 transition-colors disabled:opacity-50"
+            icon={<Plus className="h-3.5 w-3.5" aria-hidden />}
           >
-            <Plus className="h-3.5 w-3.5" /> New schedule
-          </button>
+            New schedule
+          </Button>
         )}
       </div>
 
       <header>
         <h1 className="text-2xl font-semibold inline-flex items-center gap-2">
-          <Clock className="h-5 w-5 text-accent-blue" /> Scheduled reports
+          <Clock className="h-5 w-5 text-accent" aria-hidden /> Scheduled reports
         </h1>
         <p className="text-muted text-sm mt-1">
           Send a saved report to Slack or email on a schedule.
@@ -66,40 +82,49 @@ export default function SchedulesPage() {
           onSaved={() => {
             qc.invalidateQueries({ queryKey: ["report-schedules"] });
             setCreating(false);
+            toast.success("Schedule created. It sends at the next matching time.");
           }}
         />
       )}
 
-      {isLoading ? (
-        <div className="text-sm text-muted">Loading…</div>
-      ) : schedules.length === 0 ? (
-        <div className="rounded-xl border border-line bg-bg-card p-6 text-sm text-muted">
-          No schedules yet.{" "}
-          {saved.length === 0 && (
-            <span>
-              Save a query first from the{" "}
-              <Link href="/reports?tab=query" className="text-accent-blue hover:underline">
-                Query tab
-              </Link>{" "}
-              — schedules wrap saved reports.
-            </span>
-          )}
-        </div>
-      ) : (
+      <LoadState
+        query={schedulesQ}
+        loadingText="Loading schedules…"
+        empty={schedules.length === 0}
+        emptyTitle="No schedules yet"
+        emptyHint={
+          saved.length === 0
+            ? "Schedules send a saved report. Run a query on the Query tab, save it, then schedule it here."
+            : "Pick one of your saved reports and choose when and where it's sent."
+        }
+        emptyAction={
+          saved.length === 0 ? (
+            <Link href="/reports?tab=query" className={buttonClass("primary", "sm")}>
+              Go to Query
+            </Link>
+          ) : (
+            !creating && (
+              <Button size="sm" variant="primary" onClick={() => setCreating(true)}>
+                New schedule
+              </Button>
+            )
+          )
+        }
+      >
         <ul className="space-y-3">
           {schedules.map((s) => (
             <ScheduleRow
               key={s.id}
               schedule={s}
               savedName={saved.find((r) => r.id === s.saved_report_id)?.name}
-              onDelete={() => {
-                if (window.confirm(`Delete schedule "${s.name}"?`)) remove.mutate(s.id);
-              }}
+              onDelete={() => remove.mutate(s.id)}
+              deleting={remove.isPending && remove.variables === s.id}
               onToggle={() => toggle.mutate({ id: s.id, enabled: !s.enabled })}
+              toggling={toggle.isPending && toggle.variables?.id === s.id}
             />
           ))}
         </ul>
-      )}
+      </LoadState>
     </div>
   );
 }
@@ -109,26 +134,30 @@ function ScheduleRow({
   savedName,
   onDelete,
   onToggle,
+  deleting,
+  toggling,
 }: {
   schedule: ReportSchedule;
   savedName?: string;
   onDelete: () => void;
   onToggle: () => void;
+  deleting?: boolean;
+  toggling?: boolean;
 }) {
   const status = schedule.last_status || (schedule.last_run_at ? "?" : "—");
   const statusClass =
     schedule.last_status === "ok"
-      ? "text-[color:var(--ok)]"
+      ? "text-[color:var(--accent)]"
       : schedule.last_status === "failed"
       ? "text-[color:var(--critical)]"
       : "text-muted";
   return (
-    <li className="rounded-xl border border-line bg-bg-card p-4 flex items-start gap-4">
+    <li className="motion-enter rounded-xl border border-line bg-bg-card p-4 flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4">
       <div className="flex-1 min-w-0 space-y-1">
         <div className="flex items-center gap-2">
           <span className="font-medium">{schedule.name}</span>
           {!schedule.enabled && (
-            <span className="text-[10px] uppercase tracking-wider text-muted border border-line rounded px-1 py-0.5">
+            <span className="text-[11px] uppercase tracking-wider text-muted border border-line rounded px-1 py-0.5">
               disabled
             </span>
           )}
@@ -164,22 +193,19 @@ function ScheduleRow({
           </div>
         )}
       </div>
-      <div className="flex items-center gap-2 flex-shrink-0">
-        <button
-          type="button"
-          onClick={onToggle}
-          className="text-xs px-2.5 py-1 rounded-lg border border-line text-muted hover:text-[color:var(--text)] hover:bg-bg-elevated/60"
-        >
+      <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
+        <Button size="sm" onClick={onToggle} pending={toggling}>
           {schedule.enabled ? "Pause" : "Enable"}
-        </button>
-        <button
-          type="button"
-          onClick={onDelete}
-          className="p-1.5 text-muted hover:text-[color:var(--critical)]"
-          aria-label="Delete schedule"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        </Button>
+        <ConfirmButton
+          label="Delete"
+          confirmLabel="Delete schedule"
+          consequence={`"${schedule.name}" stops sending.`}
+          icon={<Trash2 className="h-3.5 w-3.5" aria-hidden />}
+          onConfirm={onDelete}
+          pending={deleting}
+          tone="danger"
+        />
       </div>
     </li>
   );
@@ -224,9 +250,9 @@ function CreateScheduleForm({
       className="rounded-xl border border-line bg-bg-card p-4 space-y-3"
     >
       <div className="text-xs uppercase tracking-wider text-muted">New schedule</div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
         <label className="space-y-1">
-          <span className="text-muted">Name</span>
+          <span className="text-xs font-medium">Name</span>
           <input
             type="text"
             value={name}
@@ -236,7 +262,7 @@ function CreateScheduleForm({
           />
         </label>
         <label className="space-y-1">
-          <span className="text-muted">Saved report</span>
+          <span className="text-xs font-medium">Saved report</span>
           <select
             value={savedId}
             onChange={(e) => setSavedId(e.target.value)}
@@ -251,7 +277,7 @@ function CreateScheduleForm({
           </select>
         </label>
         <label className="space-y-1">
-          <span className="text-muted">Cron (5 fields, UTC)</span>
+          <span className="text-xs font-medium">Cron (5 fields, UTC)</span>
           <input
             type="text"
             value={cron}
@@ -261,7 +287,7 @@ function CreateScheduleForm({
           />
         </label>
         <label className="space-y-1">
-          <span className="text-muted">Destination</span>
+          <span className="text-xs font-medium">Destination</span>
           <select
             value={destination}
             onChange={(e) => setDestination(e.target.value as "slack" | "email")}
@@ -272,7 +298,7 @@ function CreateScheduleForm({
           </select>
         </label>
         <label className="space-y-1">
-          <span className="text-muted">
+          <span className="text-xs font-medium">
             {destination === "slack" ? "Slack channel (optional)" : "Email address"}
           </span>
           <input
@@ -284,7 +310,7 @@ function CreateScheduleForm({
           />
         </label>
         <label className="space-y-1">
-          <span className="text-muted">Format</span>
+          <span className="text-xs font-medium">Format</span>
           <select
             value={format}
             onChange={(e) => setFormat(e.target.value as "markdown" | "csv")}
@@ -296,25 +322,24 @@ function CreateScheduleForm({
         </label>
       </div>
       {create.error && (
-        <div className="text-xs text-[color:var(--critical)]">
-          {(create.error as Error).message}
+        <div role="alert" className="text-sm text-[color:var(--critical)]">
+          {errorText(create.error)}
         </div>
       )}
       <div className="flex gap-2">
-        <button
+        <Button
           type="submit"
-          disabled={create.isPending || !name.trim() || !savedId || !cron.trim()}
-          className="text-xs px-3 py-1.5 rounded-lg border border-accent-blue/60 text-accent-blue hover:bg-accent-blue/10 disabled:opacity-50"
+          size="sm"
+          variant="primary"
+          pending={create.isPending}
+          disabled={!name.trim() || !savedId || !cron.trim()}
+          disabledReason="Fill in a name, a saved report and a cron schedule"
         >
-          Create
-        </button>
-        <button
-          type="button"
-          onClick={onClose}
-          className="text-xs px-3 py-1.5 rounded-lg border border-line text-muted hover:text-[color:var(--text)]"
-        >
+          Create schedule
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onClose}>
           Cancel
-        </button>
+        </Button>
       </div>
     </form>
   );

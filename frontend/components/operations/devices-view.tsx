@@ -20,6 +20,12 @@ import {
   X,
 } from "lucide-react";
 import { api, type SotDevice, type SotTransport } from "@/lib/api";
+import { errorText } from "@/lib/errors";
+import { Button } from "@/components/ui/button";
+import { ConfirmButton } from "@/components/ui/confirm-button";
+import { LoadState } from "@/components/ui/load-state";
+import { useToast } from "@/components/ui/toast";
+import { SOT_NOT_SET_UP } from "@/components/operations/sot-not-set-up";
 
 const TRANSPORT_LABEL: Record<SotTransport, string> = {
   linux_ssh: "Linux (SSH)",
@@ -41,20 +47,29 @@ const TRANSPORT_ICON: Record<SotTransport, typeof HardDrive> = {
 
 export function DevicesView() {
   const qc = useQueryClient();
+  const toast = useToast();
   const [adding, setAdding] = useState(false);
   const [query, setQuery] = useState("");
   const [transportFilter, setTransportFilter] = useState<SotTransport | "all">(
     "all",
   );
 
-  const { data, isLoading, error } = useQuery({
+  const devicesQ = useQuery({
     queryKey: ["sot-devices"],
     queryFn: () => api.sot.devices.list(),
   });
+  const { data } = devicesQ;
+  // Search, filters, the count and "Add device" only make sense once the
+  // list loaded; while Nautobot isn't connected they'd be dead controls.
+  const ready = !!data;
 
   const remove = useMutation({
-    mutationFn: (id: string) => api.sot.devices.remove(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["sot-devices"] }),
+    mutationFn: (d: SotDevice) => api.sot.devices.remove(d.id),
+    onSuccess: (_r, d) => {
+      qc.invalidateQueries({ queryKey: ["sot-devices"] });
+      toast.success(`${d.name} removed from Nautobot`);
+    },
+    onError: (err) => toast.error(errorText(err)),
   });
 
   const filtered = (data ?? []).filter((d) => {
@@ -66,96 +81,88 @@ export function DevicesView() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="text-muted text-sm">
-            Every device daalu knows about — pulled live from your Source of
-            Truth. Click any tile to view + edit its intended config.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setAdding(true)}
-          className="text-xs h-9 px-4 rounded-lg bg-gradient-to-r from-accent-emerald to-accent-cyan text-bg-base inline-flex items-center gap-1.5"
-        >
-          <Plus className="h-3.5 w-3.5" /> Add device
-        </button>
+        <p className="text-muted text-sm">
+          Every device Daalu knows about, pulled live from your Source of
+          Truth. Open a device to view and edit its intended config.
+        </p>
+        {ready && (
+          <Button
+            variant="primary"
+            icon={<Plus className="h-3.5 w-3.5" aria-hidden />}
+            onClick={() => setAdding(true)}
+          >
+            Add device
+          </Button>
+        )}
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by hostname"
-          className="text-xs h-9 px-3 rounded-lg bg-bg-elevated/60 border border-line min-w-[220px]"
-        />
-        <select
-          value={transportFilter}
-          onChange={(e) =>
-            setTransportFilter(e.target.value as SotTransport | "all")
-          }
-          className="text-xs h-9 px-3 rounded-lg bg-bg-elevated/60 border border-line"
-        >
-          <option value="all">All transports</option>
-          {Object.entries(TRANSPORT_LABEL)
-            .filter(([k]) => k !== "unknown")
-            .map(([k, v]) => (
-              <option key={k} value={k}>
-                {v}
-              </option>
-            ))}
-        </select>
-        <div className="text-xs text-muted self-center">
-          {filtered.length} of {data?.length ?? 0}
-        </div>
-      </div>
-
-      {adding && <AddDeviceForm onClose={() => setAdding(false)} />}
-
-      {isLoading && <div className="text-sm text-muted">Loading devices…</div>}
-      {error && (
-        <div className="surface p-4 text-sm text-[color:var(--critical)]">
-          Couldn't load devices: {String(error)}
-          <div className="mt-2 text-[12px] text-muted">
-            If you haven't set up Nautobot yet, head to{" "}
-            <Link href="/onboarding/sot" className="underline text-accent-cyan">
-              the SoT wizard
-            </Link>{" "}
-            first.
+      {ready && data.length > 0 && (
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="text-xs space-y-1">
+            <span className="block text-muted">Search</span>
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Hostname"
+              className="text-sm h-9 px-3 rounded-lg bg-bg-elevated/60 border border-line min-w-[220px]"
+            />
+          </label>
+          <label className="text-xs space-y-1">
+            <span className="block text-muted">Transport</span>
+            <select
+              value={transportFilter}
+              onChange={(e) =>
+                setTransportFilter(e.target.value as SotTransport | "all")
+              }
+              className="text-sm h-9 px-3 rounded-lg bg-bg-elevated/60 border border-line"
+            >
+              <option value="all">All transports</option>
+              {Object.entries(TRANSPORT_LABEL)
+                .filter(([k]) => k !== "unknown")
+                .map(([k, v]) => (
+                  <option key={k} value={k}>
+                    {v}
+                  </option>
+                ))}
+            </select>
+          </label>
+          <div className="text-xs text-muted pb-2.5" role="status">
+            {filtered.length} of {data.length}
           </div>
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        {filtered.map((d) => (
-          <DeviceTile
-            key={d.id}
-            device={d}
-            onRemove={() => {
-              if (
-                confirm(
-                  `Delete ${d.name} from Nautobot? Daalu will stop managing it; existing data on the device itself is untouched.`,
-                )
-              ) {
-                remove.mutate(d.id);
-              }
-            }}
-          />
-        ))}
-        {data && data.length === 0 && !isLoading && (
-          <div className="surface p-6 text-center text-sm text-muted">
-            <p>
-              No devices yet. Click <strong>Add device</strong> to onboard your
-              first one, or use the <strong>Bulk import</strong> tab to upload
-              YAML/Excel.
-            </p>
-          </div>
-        )}
-        {data && data.length > 0 && filtered.length === 0 && (
-          <div className="surface p-6 text-center text-sm text-muted">
-            No devices match the current filter.
-          </div>
-        )}
-      </div>
+      {adding && <AddDeviceForm onClose={() => setAdding(false)} />}
+
+      <LoadState
+        query={devicesQ}
+        loadingText="Loading devices…"
+        notSetUp={SOT_NOT_SET_UP}
+        empty={!!data && data.length === 0}
+        emptyTitle="No devices yet"
+        emptyHint={
+          <>
+            Click <strong>Add device</strong> to onboard your first one, or use
+            the <strong>Bulk import</strong> tab to upload YAML or Excel.
+          </>
+        }
+      >
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 motion-enter">
+          {filtered.map((d) => (
+            <DeviceTile
+              key={d.id}
+              device={d}
+              removing={remove.isPending && remove.variables?.id === d.id}
+              onRemove={() => remove.mutate(d)}
+            />
+          ))}
+          {data && data.length > 0 && filtered.length === 0 && (
+            <div className="surface p-6 text-center text-sm text-muted lg:col-span-2">
+              No devices match the current filter.
+            </div>
+          )}
+        </div>
+      </LoadState>
     </div>
   );
 }
@@ -163,60 +170,56 @@ export function DevicesView() {
 function DeviceTile({
   device,
   onRemove,
+  removing,
 }: {
   device: SotDevice;
   onRemove: () => void;
+  removing: boolean;
 }) {
   const Icon = TRANSPORT_ICON[device.transport] ?? Cloud;
   return (
-    <div
-      className="group relative block w-full rounded-2xl overflow-hidden border border-line bg-bg-card hover:border-accent-blue/40 transition-colors"
-      style={{
-        boxShadow:
-          "0 1px 0 rgba(0,0,0,0.25), 0 8px 24px -12px rgba(0,0,0,0.55)",
-      }}
-    >
-      <Link href={`/devices/${device.id}`} className="block pl-5 pr-4 py-3.5">
+    <div className="group relative block w-full rounded-2xl overflow-hidden border border-line bg-bg-card hover:border-accent-blue/40 transition-colors shadow-sm">
+      <Link href={`/devices/${device.id}`} className="block pl-5 pr-4 pt-3.5 pb-2">
         <div className="flex items-center gap-2 mb-1.5">
-          <Icon className="h-3.5 w-3.5 text-accent-cyan" />
-          <span className="text-[10px] uppercase tracking-wider text-muted">
+          <Icon className="h-3.5 w-3.5 text-accent-cyan" aria-hidden />
+          <span className="text-[11px] uppercase tracking-wider text-muted">
             {TRANSPORT_LABEL[device.transport] ?? device.transport}
           </span>
-          <span className="ml-auto text-[10px] text-muted">
+          <span className="ml-auto text-xs text-muted">
             {device.primary_ip || "no IP"}
           </span>
         </div>
         <h3 className="font-medium text-[14px] leading-snug text-[color:var(--text)]">
           {device.name}
         </h3>
-        <div className="flex items-center gap-2 mt-2 text-[11px] text-muted">
+        <div className="flex items-center gap-2 mt-2 text-xs text-muted">
           <span className="font-mono">{device.id.slice(0, 8)}</span>
           {device.tags.length > 0 && (
             <span className="truncate">· tags: {device.tags.join(", ")}</span>
           )}
           <span className="ml-auto inline-flex items-center gap-1 group-hover:text-[color:var(--text)]">
-            Open <ChevronRight className="h-3 w-3" />
+            Open <ChevronRight className="h-3 w-3" aria-hidden />
           </span>
         </div>
       </Link>
-      <button
-        type="button"
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          onRemove();
-        }}
-        className="absolute top-2 right-2 h-7 w-7 rounded-md text-muted hover:text-[color:var(--critical)] hover:bg-bg-elevated/60 inline-flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-        title="Delete device from Nautobot"
-      >
-        <Trash2 className="h-3.5 w-3.5" />
-      </button>
+      <div className="flex justify-end px-4 pb-3">
+        <ConfirmButton
+          label="Remove"
+          confirmLabel={`Remove ${device.name}`}
+          consequence="Deletes it from Nautobot; Daalu stops managing it. The device itself is untouched."
+          icon={<Trash2 className="h-3.5 w-3.5" aria-hidden />}
+          tone="danger"
+          pending={removing}
+          onConfirm={onRemove}
+        />
+      </div>
     </div>
   );
 }
 
 function AddDeviceForm({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient();
+  const toast = useToast();
   const [name, setName] = useState("");
   const [primaryIp, setPrimaryIp] = useState("");
   const [transport, setTransport] = useState<SotTransport>("linux_ssh");
@@ -243,6 +246,7 @@ function AddDeviceForm({ onClose }: { onClose: () => void }) {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["sot-devices"] });
+      toast.success(`${name} added to Nautobot`);
       onClose();
     },
   });
@@ -255,25 +259,23 @@ function AddDeviceForm({ onClose }: { onClose: () => void }) {
     deviceRoleId.length > 0;
 
   return (
-    <div className="surface p-5 space-y-3 border-accent-blue/40">
+    <div className="surface p-5 space-y-3 border-accent-blue/40 motion-enter">
       <div className="flex items-start justify-between">
         <div>
           <h2 className="text-base font-semibold inline-flex items-center gap-2">
             <Plus className="h-4 w-4 text-accent-cyan" /> Add a device
           </h2>
-          <p className="text-[12px] text-muted mt-0.5">
-            Creates the device row in Nautobot with daalu_transport pre-set,
-            then assigns the primary IP. After it lands, click into the device
-            to author its intended config.
+          <p className="text-xs text-muted mt-0.5">
+            Creates the device in Nautobot with its transport set and assigns
+            the primary IP. Then open the device to write its intended config.
           </p>
         </div>
-        <button
-          type="button"
+        <Button
+          variant="icon"
+          aria-label="Close add-device form"
           onClick={onClose}
-          className="text-muted hover:text-[color:var(--text)]"
-        >
-          <X className="h-4 w-4" />
-        </button>
+          icon={<X className="h-4 w-4" aria-hidden />}
+        />
       </div>
 
       {catalogLoading && (
@@ -299,7 +301,7 @@ function AddDeviceForm({ onClose }: { onClose: () => void }) {
             { value: "iosxr", label: "Cisco IOS-XR" },
             { value: "eos", label: "Arista EOS" },
           ]}
-          help="Stamped as daalu_transport custom field on the Nautobot device."
+          help="How Daalu connects to it. Saved on the Nautobot device."
         />
         <Select
           label="Site / location"
@@ -356,26 +358,23 @@ function AddDeviceForm({ onClose }: { onClose: () => void }) {
       </div>
 
       <div className="flex justify-end gap-2 pt-2 border-t border-line/40">
-        <button
-          type="button"
-          onClick={onClose}
-          className="text-xs h-9 px-3 rounded-lg border border-line text-muted hover:text-[color:var(--text)]"
-        >
+        <Button variant="ghost" onClick={onClose}>
           Cancel
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="primary"
           onClick={() => create.mutate()}
-          disabled={!canSubmit || create.isPending}
-          className="text-xs h-9 px-4 rounded-lg bg-gradient-to-r from-accent-emerald to-accent-cyan text-bg-base disabled:opacity-50 inline-flex items-center gap-1.5"
+          disabled={!canSubmit}
+          disabledReason={canSubmit ? undefined : "Fill in name, primary IP, site, type and role first"}
+          pending={create.isPending}
         >
-          {create.isPending ? "Creating…" : "Create device"}
-        </button>
+          Create device
+        </Button>
       </div>
 
       {create.isError && (
-        <div className="text-[11.5px] text-[color:var(--critical)]">
-          {String(create.error)}
+        <div role="alert" className="text-xs text-[color:var(--critical)]">
+          {errorText(create.error)}
         </div>
       )}
     </div>
@@ -437,7 +436,7 @@ function Select({
           </option>
         ))}
       </select>
-      {help && <div className="text-[10px] text-muted">{help}</div>}
+      {help && <div className="text-xs text-muted">{help}</div>}
     </label>
   );
 }

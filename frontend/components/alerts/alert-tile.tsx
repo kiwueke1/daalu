@@ -8,6 +8,7 @@ import type { Alert } from "@/lib/api";
 import { enrichAlertTitle } from "@/components/alerts/alert-title";
 import { formatRelative } from "@/lib/utils";
 import { ConfirmButton } from "@/components/ui/confirm-button";
+import { Button } from "@/components/ui/button";
 
 /**
  * Map alert severity → the CSS variable that drives the tile's side
@@ -74,23 +75,23 @@ export function AlertTile({
         <Link href={`/alerts/${alert.id}`} className="block">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-1.5">
           <span
-            className="text-[10px] uppercase tracking-wider font-semibold"
+            className="text-[11px] uppercase tracking-wider font-semibold"
             style={{ color: stripe }}
           >
             {alert.severity}
           </span>
-          <span className="text-[10px] uppercase tracking-wider text-muted">
+          <span className="text-[11px] uppercase tracking-wider text-muted">
             {alert.module}
           </span>
           {alert.occurrence_count > 1 && (
             <span
-              className="text-[10px] font-medium px-1.5 py-0.5 rounded-md border border-line text-fg/80"
+              className="text-xs font-medium px-1.5 py-0.5 rounded-md border border-line text-fg"
               title={`This alert has fired ${alert.occurrence_count} times`}
             >
               fired {alert.occurrence_count.toLocaleString()}×
             </span>
           )}
-          <span className="text-[10px] text-muted ml-auto">
+          <span className="text-xs text-muted ml-auto">
             {formatRelative(alert.last_seen_at ?? alert.created_at)}
           </span>
         </div>
@@ -99,7 +100,7 @@ export function AlertTile({
           {enrichAlertTitle(alert)}
         </h3>
 
-        <div className="text-[13px] text-fg/65 mt-1.5 line-clamp-3 alert-tile-preview">
+        <div className="text-[13px] text-muted mt-1.5 line-clamp-3 alert-tile-preview">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{
@@ -127,31 +128,29 @@ export function AlertTile({
 
         <div className="flex flex-wrap items-center gap-2 mt-3">
           {alert.status === "open" && onAcknowledge && (
-            <button
-              type="button"
+            <Button
+              size="sm"
               onClick={onAcknowledge}
               title="Mark that someone is looking at it. It stays open."
-              className="text-[11px] h-7 px-2.5 rounded-md border border-line text-muted hover:text-fg hover:bg-bg-elevated/60 flex items-center"
             >
               Acknowledge
-            </button>
+            </Button>
           )}
           {alert.status !== "resolved" && onResolve && (
             <ConfirmButton
               label="Resolve"
               confirmLabel="Resolve alert"
-              consequence="Closes it now. If it fires again, a new alert opens."
+              consequence="Closes the alert and stops the investigation."
               onConfirm={onResolve}
               pending={resolving}
-              className="h-7 px-2.5 text-[11px] rounded-md text-muted hover:text-fg"
             />
           )}
           <Link
             href={`/alerts/${alert.id}`}
-            className="ml-auto text-[11px] flex items-center gap-1 transition-colors hover:underline"
+            className="ml-auto min-h-8 text-xs flex items-center gap-1 transition-colors hover:underline"
             style={{ color: "var(--accent)" }}
           >
-            Open details <ChevronRight className="h-3.5 w-3.5" />
+            Open details <ChevronRight aria-hidden className="h-3.5 w-3.5" />
           </Link>
         </div>
       </div>

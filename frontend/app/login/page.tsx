@@ -2,9 +2,14 @@
 
 import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { DaaluMark } from "@/components/brand/daalu-mark";
+import { DaaluWordmark } from "@/components/brand/daalu-mark";
+import { Button, buttonClass } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
-import { api, type SSOProvider } from "@/lib/api";
+import { api, ApiError, UnauthorizedError, type SSOProvider } from "@/lib/api";
+import { errorText } from "@/lib/errors";
+import { cn } from "@/lib/utils";
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function LoginPage() {
   return (
@@ -45,6 +50,7 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [emailTouched, setEmailTouched] = useState(false);
   // null = mode not yet known (probing /auth/config). While unknown we render
   // nothing so neither the password form nor the SSO buttons flash early.
   const [mode, setMode] = useState<"password" | "oidc" | null>(null);
@@ -102,25 +108,35 @@ function LoginForm() {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setBusy(true);
     setError(null);
+    if (!EMAIL_RE.test(email)) {
+      setEmailTouched(true);
+      setError("Enter an email like name@example.com.");
+      return;
+    }
+    if (!password) {
+      setError("Enter your password.");
+      return;
+    }
+    setBusy(true);
     try {
       await login(email, password);
       router.replace(next);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      // Trim the verbose body off the network-level error so the user
-      // sees "Invalid email or password" instead of the full stack.
-      const friendly = /401/.test(msg)
-        ? "Invalid email or password."
-        : /403/.test(msg)
-        ? "This account is inactive."
-        : "Sign-in failed. Try again.";
-      setError(friendly);
+      // A 401 here means wrong credentials, not an expired session.
+      setError(
+        err instanceof UnauthorizedError
+          ? "That email and password don't match. Check both and try again."
+          : err instanceof ApiError && err.status === 403
+            ? "This account is inactive. Ask your workspace admin to re-enable it."
+            : errorText(err),
+      );
     } finally {
       setBusy(false);
     }
   }
+
+  const emailInvalid = emailTouched && email.length > 0 && !EMAIL_RE.test(email);
 
   return (
     <div className="relative min-h-screen flex items-center justify-center px-4 overflow-hidden">
@@ -132,20 +148,12 @@ function LoginForm() {
         }}
       />
       <div className="relative w-full max-w-sm">
-        <div className="flex items-center gap-3 mb-8">
-          <DaaluMark />
-          <div>
-            <div className="text-sm font-semibold tracking-wide">Daalu</div>
-            <div className="text-[10px] tracking-[0.18em] text-muted">
-              intelligent IT operations
-            </div>
-          </div>
+        <div className="mb-8">
+          <DaaluWordmark />
         </div>
 
         <h1 className="text-xl font-semibold mb-1">Sign in</h1>
-        <p className="text-sm text-muted mb-6">
-          Access your live operational nervous system.
-        </p>
+        <p className="text-sm text-muted mb-6">Welcome back. Use your work email.</p>
 
         <div className="space-y-4">
           {/* SSO buttons — one per brokered provider (e.g. Google). */}
@@ -156,7 +164,7 @@ function LoginForm() {
                   key={p.id}
                   type="button"
                   onClick={() => startSSO(p.id)}
-                  className="w-full flex items-center justify-center gap-3 rounded-md text-sm font-medium py-2.5 bg-bg-secondary/70 border border-line hover:bg-bg-secondary transition-colors"
+                  className={cn(buttonClass("secondary"), "w-full h-10 gap-3")}
                 >
                   {p.id === "google" && <GoogleIcon />}
                   Continue with {p.label}
@@ -167,18 +175,9 @@ function LoginForm() {
 
           {/* OIDC enabled but no specific IdP advertised — generic SSO start. */}
           {mode === "oidc" && providers.length === 0 && (
-            <button
-              type="button"
-              onClick={() => startSSO()}
-              className="w-full rounded-md text-sm font-medium py-2.5 transition-colors"
-              style={{
-                background: "var(--accent)",
-                color: "var(--bg-base)",
-                boxShadow: "0 0 22px var(--accent-glow)",
-              }}
-            >
+            <Button variant="primary" onClick={() => startSSO()} className="w-full h-10">
               Continue with SSO
-            </button>
+            </Button>
           )}
 
           {/* Divider when both SSO and the local form are shown. */}
@@ -192,59 +191,71 @@ function LoginForm() {
 
           {/* Local email + password sign-in. */}
           {passwordLogin && (
-            <form onSubmit={onSubmit} className="space-y-3">
+            <form onSubmit={onSubmit} className="space-y-3" noValidate>
               <label className="block">
-                <span className="text-xs uppercase tracking-wider text-muted">Email</span>
+                <span className="text-sm font-medium">Email</span>
                 <input
                   type="email"
+                  name="email"
                   autoComplete="email"
+                  inputMode="email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="mt-1 w-full bg-bg-secondary/60 border border-line rounded-md px-3 py-2 text-sm focus:outline-none focus:border-accent-blue/60 focus:bg-bg-secondary"
+                  onBlur={() => setEmailTouched(true)}
+                  aria-invalid={emailInvalid || undefined}
+                  aria-describedby={emailInvalid ? "login-email-hint" : undefined}
+                  className={inputCls}
                 />
+                {emailInvalid && (
+                  <span id="login-email-hint" className="mt-1 block text-xs text-signal-critical">
+                    Enter an email like name@example.com.
+                  </span>
+                )}
               </label>
               <label className="block">
-                <span className="text-xs uppercase tracking-wider text-muted">Password</span>
+                <span className="text-sm font-medium">Password</span>
                 <input
                   type="password"
+                  name="password"
                   autoComplete="current-password"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="mt-1 w-full bg-bg-secondary/60 border border-line rounded-md px-3 py-2 text-sm focus:outline-none focus:border-accent-blue/60 focus:bg-bg-secondary"
+                  aria-describedby="login-forgot"
+                  className={inputCls}
                 />
-                <span className="mt-1 block text-[11px] text-muted">
+                <span id="login-forgot" className="mt-1 block text-xs text-muted">
                   Forgot your password? Ask your workspace admin to reset it.
                 </span>
               </label>
               {error && (
-                <div className="text-xs text-signal-critical bg-signal-critical/10 border border-signal-critical/30 rounded px-3 py-2">
+                <div
+                  role="alert"
+                  className="text-sm text-signal-critical bg-signal-critical/10 border border-signal-critical/30 rounded-md px-3 py-2 motion-enter"
+                >
                   {error}
                 </div>
               )}
-              <button
+              <Button
                 type="submit"
-                disabled={busy}
-                className="w-full rounded-md text-sm font-medium py-2 transition-colors disabled:opacity-60"
-                style={{
-                  background: "var(--accent)",
-                  color: "var(--bg-base)",
-                  boxShadow: "0 0 22px var(--accent-glow)",
-                }}
+                variant="primary"
+                pending={busy}
+                disabledReason="Signing in…"
+                className="w-full h-10"
               >
                 {busy ? "Signing in…" : "Sign in"}
-              </button>
+              </Button>
             </form>
           )}
 
           {/* Self-service signup entry point. */}
           {selfSignup && (
-            <p className="text-[12px] text-muted text-center pt-1">
+            <p className="text-sm text-muted text-center pt-1">
               New to Daalu?{" "}
               <a
                 href={`/signup${next && next !== "/" ? `?next=${encodeURIComponent(next)}` : ""}`}
-                className="text-[color:var(--accent)] hover:underline"
+                className="font-medium text-[color:var(--accent)] hover:underline"
               >
                 Create an account
               </a>
@@ -252,7 +263,7 @@ function LoginForm() {
           )}
 
           {mode === "oidc" && !passwordLogin && (
-            <p className="text-[11px] text-muted text-center pt-1">
+            <p className="text-xs text-muted text-center pt-1">
               Secured by single sign-on.
             </p>
           )}
@@ -261,3 +272,6 @@ function LoginForm() {
     </div>
   );
 }
+
+const inputCls =
+  "mt-1 w-full h-10 bg-bg-secondary/60 border border-line rounded-md px-3 text-sm focus:border-accent focus:bg-bg-secondary aria-[invalid=true]:border-signal-critical";

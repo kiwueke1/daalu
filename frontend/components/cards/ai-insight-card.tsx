@@ -29,10 +29,10 @@ export function AIInsightCard({
     >
       <div className="relative">
         <div
-          className="flex items-center gap-2 text-[10px] uppercase tracking-[0.20em] mb-3"
+          className="flex items-center gap-2 text-[11px] uppercase tracking-[0.20em] mb-3"
           style={{ color: "var(--accent)" }}
         >
-          <Sparkles className="h-3 w-3 animate-shimmer" />
+          <Sparkles aria-hidden className="h-3 w-3" />
           AI insight
         </div>
         <h3 className="text-base md:text-lg font-semibold mb-2 leading-snug">

@@ -314,9 +314,10 @@ Writes to policy, kill switch and runbook publish require `user.is_admin`.
 
 ## 12. UI
 
-Sidebar section **AI Ops**: Maturity (`/maturity`), Autonomy policy
-(`/autonomy`), Investigations (`/investigations`), Runbooks (`/runbooks`),
-Evals (`/evals`), Audit log (`/audit`). The alert chat approve card shows
+Sidebar, grouped by task: **Respond** → Investigations (`/investigations`);
+**Automate** → Runbooks (`/runbooks`), Autonomy policy (`/autonomy`);
+**Insights** → Maturity (`/maturity`), Evals (`/evals`), Audit log (`/audit`).
+The alert chat approve card shows
 the policy decision, approvals `n/N`, and the preview; the alert page shows
 the investigation verdict buttons.
 

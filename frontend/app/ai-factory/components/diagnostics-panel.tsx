@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Loader2, Play, AlertTriangle } from "lucide-react";
 import {
   api,
@@ -10,7 +10,12 @@ import {
 } from "@/lib/api";
 import { Accordion, AccordionItem } from "@/components/ui/accordion";
 import { LoadState } from "@/components/ui/load-state";
-import { RunStateBadge, fmtWhen, useRecent } from "./run-state";
+import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
+import { useToast } from "@/components/ui/toast";
+import { errorText } from "@/lib/errors";
+import { cn } from "@/lib/utils";
+import { RunStateBadge, When, useRecent, useRunWatch } from "./run-state";
 
 /**
  * Admin-only GPU diagnostics. "Run dcgmi diag" (level 1/2/3) and "Run NCCL
@@ -22,6 +27,7 @@ type RunBody = { kind: AiFactoryDiagKind; level?: 1 | 2 | 3; acknowledged?: bool
 
 export function DiagnosticsPanel({ gpuClass }: { gpuClass: string | null }) {
   const qc = useQueryClient();
+  const toast = useToast();
   const [level, setLevel] = useState<1 | 2 | 3>(1);
   const [err, setErr] = useState<string | null>(null);
   // When a stressful run needs confirmation, the backend returns the warning
@@ -53,10 +59,17 @@ export function DiagnosticsPanel({ gpuClass }: { gpuClass: string | null }) {
         return;
       }
       setAckPrompt(null);
+      toast.success(
+        body.kind === "nccl_test"
+          ? "Interconnect test started. It appears in Past runs below."
+          : `Health check (level ${body.level ?? 1}) started. It appears in Past runs below.`
+      );
       qc.invalidateQueries({ queryKey: ["aiFactory", "diagnostics"] });
     },
-    onError: (e: unknown) =>
-      setErr(e instanceof Error ? e.message : "failed to start diagnostic"),
+    onError: (e: unknown) => {
+      setErr(errorText(e));
+      toast.error(errorText(e));
+    },
   });
 
   // NCCL is multi-GPU only. We can't always know the GPU count; a
@@ -66,14 +79,19 @@ export function DiagnosticsPanel({ gpuClass }: { gpuClass: string | null }) {
 
   const allRuns = runs.data?.runs ?? [];
   const recent = useRecent(allRuns);
+  const describe = useCallback(
+    (r: AiFactoryDiagRun) => (r.kind === "nccl_test" ? "Interconnect test" : "GPU health check"),
+    []
+  );
+  const fresh = useRunWatch(runs.data?.runs, describe);
 
   return (
     <div className="space-y-4">
       <section className="rounded-xl border border-line bg-bg-elevated/40 p-5">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="inline-flex items-center gap-2">
-            <label className="text-xs text-muted" htmlFor="diag-level">
-              Level
+          <div className="flex flex-wrap items-center gap-2 min-w-0">
+            <label className="text-xs text-muted whitespace-nowrap" htmlFor="diag-level">
+              Check depth
             </label>
             <select
               id="diag-level"
@@ -81,52 +99,44 @@ export function DiagnosticsPanel({ gpuClass }: { gpuClass: string | null }) {
               onChange={(e) => setLevel(Number(e.target.value) as 1 | 2 | 3)}
               className="h-8 rounded-md border border-line bg-bg-base px-2 text-xs"
             >
-              <option value={1}>1 — quick</option>
-              <option value={2}>2 — medium</option>
-              <option value={3}>3 — long</option>
+              <option value={1}>Level 1: quick (seconds)</option>
+              <option value={2}>Level 2: medium (minutes)</option>
+              <option value={3}>Level 3: long (stresses the GPU)</option>
             </select>
-            <button
-              type="button"
+            <Button
+              variant="primary"
+              size="sm"
               disabled={run.isPending}
+              pending={run.isPending && run.variables?.kind === "dcgmi_diag"}
               onClick={() => run.mutate({ kind: "dcgmi_diag", level })}
-              className="text-xs h-8 px-3 rounded-lg bg-gradient-to-r from-accent-emerald to-accent-cyan text-bg-base inline-flex items-center gap-1.5 disabled:opacity-60"
+              icon={<Play className="h-3.5 w-3.5" aria-hidden />}
             >
-              {run.isPending && run.variables?.kind === "dcgmi_diag" ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Play className="h-3.5 w-3.5" />
-              )}
-              Run dcgmi diag
-            </button>
+              Run health check
+            </Button>
           </div>
 
-          {nccl && (
-            <button
-              type="button"
-              disabled={run.isPending}
-              onClick={() => run.mutate({ kind: "nccl_test" })}
-              className="text-xs h-8 px-3 rounded-lg border border-accent-emerald/60 text-[color:var(--text)] hover:bg-accent-emerald/15 disabled:opacity-60 inline-flex items-center gap-1.5 transition-colors"
-            >
-              {run.isPending && run.variables?.kind === "nccl_test" ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Play className="h-3.5 w-3.5" />
-              )}
-              Run NCCL test
-            </button>
-          )}
+          <Button
+            size="sm"
+            disabled={!nccl || run.isPending}
+            disabledReason={nccl ? undefined : "Needs 2 or more GPUs on one node; your GPU class has one"}
+            pending={run.isPending && run.variables?.kind === "nccl_test"}
+            onClick={() => run.mutate({ kind: "nccl_test" })}
+            icon={<Play className="h-3.5 w-3.5" aria-hidden />}
+          >
+            Run interconnect test
+          </Button>
         </div>
 
-        {!nccl && (
-          <div className="mt-2 text-[11px] text-muted">
-            The NCCL test measures the GPU-to-GPU interconnect, so it needs more
-            than one GPU. This node has a single card.
-          </div>
-        )}
+        <div className="mt-2 text-xs text-muted">
+          The health check tests each GPU (dcgmi diag).{" "}
+          {nccl
+            ? "The interconnect test measures GPU-to-GPU bandwidth (NCCL)."
+            : "The interconnect test (NCCL) measures GPU-to-GPU bandwidth, so it needs 2 or more GPUs on one node; your GPU class has one."}
+        </div>
 
         {err && (
-          <div className="mt-3 text-[11px] text-[color:var(--critical)] flex items-center gap-1.5">
-            <AlertTriangle className="h-3 w-3" /> {err}
+          <div role="alert" className="mt-3 text-xs text-[color:var(--critical)] flex items-center gap-1.5">
+            <AlertTriangle className="h-3.5 w-3.5" aria-hidden /> {err}
           </div>
         )}
       </section>
@@ -138,12 +148,18 @@ export function DiagnosticsPanel({ gpuClass }: { gpuClass: string | null }) {
           empty={allRuns.length === 0}
           loadingText="Loading diagnostic runs…"
           emptyTitle="No diagnostic runs yet"
-          emptyHint="Run dcgmi diag above for a quick health pass of the card."
+          emptyHint="Run a level 1 health check above for a quick pass over the card."
         >
           <Accordion>
-            {recent.shown.map((r) => (
-              <DiagRow key={r.id} run={r} gpuClass={gpuClass} />
-            ))}
+            {recent.shown.map((r) =>
+              fresh.has(r.id) ? (
+                <div key={r.id} className="motion-enter">
+                  <DiagRow run={r} gpuClass={gpuClass} fresh />
+                </div>
+              ) : (
+                <DiagRow key={r.id} run={r} gpuClass={gpuClass} />
+              )
+            )}
           </Accordion>
           {recent.toggle && <div className="pt-1">{recent.toggle}</div>}
         </LoadState>
@@ -175,41 +191,53 @@ function AckModal({
   onCancel: () => void;
 }) {
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-[2px] p-4"
-      role="dialog"
-      aria-modal="true"
-    >
-      <div className="w-full max-w-md rounded-xl border border-signal-warning/40 bg-[color:var(--bg-elevated)] p-5 shadow-xl">
-        <h4 className="text-sm font-semibold flex items-center gap-2 text-[color:var(--warning)]">
-          <AlertTriangle className="h-4 w-4" /> This run stresses the GPU
-        </h4>
-        <p className="text-xs text-muted mt-3 leading-relaxed">{warning}</p>
-        <p className="text-[11px] text-muted mt-3">
-          This is a shared production card. Make sure you understand the impact
-          before continuing.
-        </p>
-        <div className="mt-5 flex items-center justify-end gap-2">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="text-xs h-8 px-3 rounded-lg border border-line text-muted hover:text-[color:var(--text)]"
-          >
+    <Dialog
+      open
+      onClose={onCancel}
+      size="sm"
+      title={
+        <span className="flex items-center gap-2 text-[color:var(--warning)]">
+          <AlertTriangle className="h-4 w-4" aria-hidden /> This run stresses the GPU
+        </span>
+      }
+      footer={
+        <>
+          <Button variant="ghost" onClick={onCancel}>
             Cancel
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={onConfirm}
-            className="text-xs h-8 px-3 rounded-lg bg-signal-warning/90 text-bg-base font-medium inline-flex items-center gap-1.5 disabled:opacity-60"
-          >
-            {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            I understand — run it
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+          <Button variant="danger" pending={busy} onClick={onConfirm}>
+            Run it on the shared GPU
+          </Button>
+        </>
+      }
+    >
+      <p className="text-sm text-muted leading-relaxed">{warning}</p>
+      <p className="text-xs text-muted mt-3">
+        This is a shared production card. Requests served from it may slow
+        down while the test runs.
+      </p>
+    </Dialog>
   );
+}
+
+/**
+ * An "error" that is really the environment saying no (a single-GPU node, a
+ * tool the image doesn't ship), not a fault: shown as "Skipped".
+ */
+function environmentLimit(run: AiFactoryDiagRun, gpuClass: string | null): string | null {
+  if (run.state !== "error") return null;
+  if (run.kind === "nccl_test" && !ncclEligible(gpuClass)) {
+    return "Needs 2 or more GPUs on one node; this node has one";
+  }
+  const error = summaryString(run.summary, "error") ?? "";
+  if (
+    /not (installed|available|supported|found)|unsupported|requires (2|two|more|multiple)|single[- ]gpu|no (gpus?|such file)|disabled/i.test(
+      error
+    )
+  ) {
+    return error;
+  }
+  return null;
 }
 
 function ncclEligible(gpuClass: string | null): boolean {
@@ -267,40 +295,50 @@ function failureReason(
 function DiagRow({
   run,
   gpuClass,
+  fresh = false,
 }: {
   run: AiFactoryDiagRun;
   gpuClass: string | null;
+  /** Just appeared from a run started on this page: tint it once. */
+  fresh?: boolean;
 }) {
   const label =
     run.kind === "dcgmi_diag"
-      ? `dcgmi diag${run.level ? ` · level ${run.level}` : ""}`
-      : "NCCL interconnect test";
-  const reason = failureReason(run, gpuClass);
+      ? `GPU health check${run.level ? ` · level ${run.level}` : ""}`
+      : "Interconnect test";
+  const skipped = environmentLimit(run, gpuClass);
+  const reason = skipped ?? failureReason(run, gpuClass);
 
   return (
     <AccordionItem
       id={run.id}
       tone={
-        run.state === "failed"
-          ? "var(--critical)"
-          : run.state === "error"
-            ? "var(--warning)"
-            : undefined
+        skipped
+          ? undefined
+          : run.state === "failed"
+            ? "var(--critical)"
+            : run.state === "error"
+              ? "var(--warning)"
+              : undefined
       }
       title={
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-medium">{label}</span>
-            <RunStateBadge state={run.state} />
+            <span className={cn("font-medium px-1 -mx-1", fresh && "motion-update")}>{label}</span>
+            <RunStateBadge
+              state={run.state}
+              label={skipped ? "Skipped" : undefined}
+              title={skipped ?? undefined}
+            />
           </div>
           {reason && (
-            <div className="text-[11px] text-muted line-clamp-2 break-words">
+            <div className="text-xs text-muted line-clamp-2 break-words">
               {reason}
             </div>
           )}
         </div>
       }
-      meta={fmtWhen(run.started_at)}
+      meta={<When iso={run.started_at} />}
     >
       <DiagDetail run={run} />
     </AccordionItem>
@@ -326,8 +364,8 @@ function DiagDetail({ run }: { run: AiFactoryDiagRun }) {
         </div>
       )}
       {detail.isLoading ? (
-        <div className="text-[11px] text-muted inline-flex items-center gap-1.5">
-          <Loader2 className="h-3 w-3 animate-spin" /> Loading output…
+        <div role="status" className="text-xs text-muted inline-flex items-center gap-1.5">
+          <Loader2 className="h-3 w-3 animate-spin" aria-hidden /> Loading output…
         </div>
       ) : (
         <pre className="text-[11px] font-mono bg-bg-base rounded-md border border-line p-3 overflow-x-auto whitespace-pre-wrap max-h-72 overflow-y-auto">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -29,6 +29,11 @@ import {
   type ReportsQueryResponse,
   type SavedReport,
 } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { ConfirmButton } from "@/components/ui/confirm-button";
+import { LoadState } from "@/components/ui/load-state";
+import { useToast } from "@/components/ui/toast";
+import { errorText } from "@/lib/errors";
 
 const RENDER_OPTIONS: Array<DashboardTile["render"]> = [
   "table",
@@ -42,12 +47,16 @@ export default function DashboardDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
   const qc = useQueryClient();
+  const toast = useToast();
+  const savedFieldId = useId();
+  const renderFieldId = useId();
 
-  const { data: dashboard } = useQuery({
+  const dashboardQ = useQuery({
     queryKey: ["dashboard", id],
     queryFn: () => api.reports.dashboards.get(id),
     enabled: !!id,
   });
+  const dashboard = dashboardQ.data;
   const { data: saved = [] } = useQuery({
     queryKey: ["reports-saved"],
     queryFn: () => api.reports.saved.list(),
@@ -60,10 +69,14 @@ export default function DashboardDetailPage() {
   const updateMutation = useMutation({
     mutationFn: (next: Partial<Pick<Dashboard, "name" | "tiles" | "home_pinned">>) =>
       api.reports.dashboards.update(id, next),
-    onSuccess: () => {
+    onSuccess: (_d, next) => {
       qc.invalidateQueries({ queryKey: ["dashboard", id] });
       qc.invalidateQueries({ queryKey: ["dashboards"] });
+      if (next.tiles && dashboard) {
+        toast.success(next.tiles.length > dashboard.tiles.length ? "Tile added." : "Tile removed.");
+      }
     },
+    onError: (e) => toast.error(errorText(e)),
   });
 
   const onAddTile = () => {
@@ -86,28 +99,46 @@ export default function DashboardDetailPage() {
   };
 
   if (!dashboard) {
-    return <div className="text-sm text-muted">Loading…</div>;
+    return (
+      <div className="space-y-4 max-w-[1200px]">
+        <Link
+          href="/reports?tab=dashboards"
+          className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-[color:var(--text)] transition-colors"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> Back to Dashboards
+        </Link>
+        <LoadState
+          query={dashboardQ}
+          loadingText="Loading dashboard…"
+          empty
+          emptyTitle="Dashboard not found"
+          emptyHint="It may have been deleted. The Dashboards tab lists the ones that exist."
+        >
+          {null}
+        </LoadState>
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-6 max-w-[1200px]">
+    <div className="space-y-6 max-w-[1200px] motion-enter">
       <div className="flex items-center justify-between gap-4">
         <Link
           href="/reports?tab=dashboards"
           className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-[color:var(--text)] transition-colors"
         >
-          <ArrowLeft className="h-3.5 w-3.5" /> Back to Dashboards
+          <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> Back to Dashboards
         </Link>
         {dashboard.home_pinned && (
-          <span className="inline-flex items-center gap-1 text-xs text-accent-blue">
-            <Pin className="h-3 w-3" /> pinned to Home
+          <span className="inline-flex items-center gap-1 text-xs text-accent">
+            <Pin className="h-3 w-3" aria-hidden /> pinned to Home
           </span>
         )}
       </div>
 
       <header>
         <h1 className="text-2xl font-semibold inline-flex items-center gap-2">
-          <LayoutGrid className="h-5 w-5 text-accent-blue" /> {dashboard.name}
+          <LayoutGrid className="h-5 w-5 text-accent" aria-hidden /> {dashboard.name}
         </h1>
         <p className="text-muted text-sm mt-1">
           {dashboard.tiles.length} tile{dashboard.tiles.length === 1 ? "" : "s"}
@@ -116,7 +147,17 @@ export default function DashboardDetailPage() {
 
       {dashboard.tiles.length === 0 ? (
         <div className="rounded-xl border border-line bg-bg-card p-6 text-sm text-muted">
-          No tiles yet. Add one from your saved reports below.
+          No tiles yet. Add one from your saved reports below
+          {saved.length === 0 && (
+            <>
+              {" "}(save a query on the{" "}
+              <Link href="/reports?tab=query" className="text-accent hover:underline">
+                Query tab
+              </Link>{" "}
+              first)
+            </>
+          )}
+          .
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -133,19 +174,25 @@ export default function DashboardDetailPage() {
 
       <section className="rounded-xl border border-line bg-bg-card p-4">
         {!adding ? (
-          <button
-            type="button"
+          <Button
+            size="sm"
             onClick={() => setAdding(true)}
             disabled={saved.length === 0}
-            className="text-xs inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-accent-blue/60 text-accent-blue hover:bg-accent-blue/10 transition-colors disabled:opacity-50"
+            disabledReason="Save a query on the Query tab first; tiles show saved reports"
+            icon={<Plus className="h-3.5 w-3.5" aria-hidden />}
           >
-            <Plus className="h-3.5 w-3.5" /> Add tile
-          </button>
+            Add tile
+          </Button>
         ) : (
           <div className="space-y-3">
             <div className="text-xs uppercase tracking-wider text-muted">Add tile</div>
-            <div className="flex flex-wrap gap-2 items-center">
+            <div className="flex flex-wrap gap-2 items-end">
+              <div>
+              <label htmlFor={savedFieldId} className="block text-xs font-medium mb-1">
+                Saved report
+              </label>
               <select
+                id={savedFieldId}
                 value={addSavedId}
                 onChange={(e) => setAddSavedId(e.target.value)}
                 className="bg-bg-elevated border border-line rounded-lg px-2 py-1.5 text-sm"
@@ -157,7 +204,13 @@ export default function DashboardDetailPage() {
                   </option>
                 ))}
               </select>
+              </div>
+              <div>
+              <label htmlFor={renderFieldId} className="block text-xs font-medium mb-1">
+                Show as
+              </label>
               <select
+                id={renderFieldId}
                 value={addRender}
                 onChange={(e) => setAddRender(e.target.value as DashboardTile["render"])}
                 className="bg-bg-elevated border border-line rounded-lg px-2 py-1.5 text-sm"
@@ -168,21 +221,20 @@ export default function DashboardDetailPage() {
                   </option>
                 ))}
               </select>
-              <button
-                type="button"
+              </div>
+              <Button
+                size="sm"
+                variant="primary"
                 onClick={onAddTile}
                 disabled={!addSavedId}
-                className="text-xs px-3 py-1.5 rounded-lg border border-accent-blue/60 text-accent-blue hover:bg-accent-blue/10 disabled:opacity-50"
+                disabledReason="Pick a saved report"
+                pending={updateMutation.isPending}
               >
-                Add
-              </button>
-              <button
-                type="button"
-                onClick={() => setAdding(false)}
-                className="text-xs px-3 py-1.5 rounded-lg border border-line text-muted hover:text-[color:var(--text)]"
-              >
+                Add tile
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setAdding(false)}>
                 Cancel
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -212,34 +264,33 @@ function TileBody({
   });
 
   return (
-    <div className="rounded-xl border border-line bg-bg-card p-4 space-y-2 group">
+    <div className="motion-enter rounded-xl border border-line bg-bg-card p-4 space-y-2">
       <div className="flex items-start justify-between gap-2">
         <div>
           <div className="font-medium text-sm">
             {tile.title || saved?.name || "Tile"}
           </div>
-          <div className="text-[10px] uppercase tracking-wider text-muted">
+          <div className="text-[11px] uppercase tracking-wider text-muted">
             {tile.render}
             {saved?.definition?.entity ? ` · ${saved.definition.entity}` : ""}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            if (window.confirm("Remove this tile?")) onRemove();
-          }}
-          className="opacity-0 group-hover:opacity-100 transition-opacity text-muted hover:text-[color:var(--critical)] p-1"
-          aria-label="Remove tile"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        <ConfirmButton
+          label={<span className="sr-only">Remove tile</span>}
+          confirmLabel="Remove tile"
+          consequence="The saved report stays."
+          icon={<Trash2 className="h-3.5 w-3.5" aria-hidden />}
+          onConfirm={onRemove}
+          tone="danger"
+          className="border-0 px-2 text-muted hover:text-[color:var(--critical)]"
+        />
       </div>
 
       {!saved ? (
-        <div className="text-sm text-muted py-6">Saved report missing.</div>
+        <div className="text-sm text-muted py-6">The saved report behind this tile was deleted. Remove the tile, or add a new one.</div>
       ) : error ? (
-        <div className="text-xs text-[color:var(--critical)] py-2">
-          {(error as Error).message}
+        <div role="alert" className="text-sm text-[color:var(--critical)] py-2">
+          {errorText(error)}
         </div>
       ) : !result ? (
         <div className="text-sm text-muted py-6">Loading…</div>
@@ -272,7 +323,7 @@ function TileRender({
 
   // Default + pie fallback → table.
   if (result.rows.length === 0) {
-    return <div className="text-sm text-muted py-3">No rows.</div>;
+    return <div className="text-sm text-muted py-3">No matching rows. Widen the time range or loosen the filters in the saved query.</div>;
   }
   const visible = result.rows.slice(0, 6);
   return (
@@ -338,7 +389,7 @@ function TimeSeriesTile({
   if (!tsCol || data.length === 0) {
     return (
       <div className="text-sm text-muted py-3">
-        No time-series data to chart.
+        No time-series data to chart. Show it as a table, or widen the saved query&apos;s time range.
       </div>
     );
   }
@@ -348,19 +399,19 @@ function TimeSeriesTile({
       <ResponsiveContainer width="100%" height="100%">
         {kind === "line" ? (
           <LineChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-            <XAxis dataKey="day" tick={{ fontSize: 10 }} />
-            <YAxis tick={{ fontSize: 10 }} />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--line-strong)" />
+            <XAxis dataKey="day" tick={{ fontSize: 11, fill: "var(--text-muted)" }} />
+            <YAxis tick={{ fontSize: 11, fill: "var(--text-muted)" }} />
             <Tooltip />
-            <Line type="monotone" dataKey="count" stroke="var(--accent-blue, #3b82f6)" />
+            <Line type="monotone" dataKey="count" stroke="var(--accent)" />
           </LineChart>
         ) : (
           <BarChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-            <XAxis dataKey="day" tick={{ fontSize: 10 }} />
-            <YAxis tick={{ fontSize: 10 }} />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--line-strong)" />
+            <XAxis dataKey="day" tick={{ fontSize: 11, fill: "var(--text-muted)" }} />
+            <YAxis tick={{ fontSize: 11, fill: "var(--text-muted)" }} />
             <Tooltip />
-            <Bar dataKey="count" fill="var(--accent-blue, #3b82f6)" />
+            <Bar dataKey="count" fill="var(--accent)" />
           </BarChart>
         )}
       </ResponsiveContainer>

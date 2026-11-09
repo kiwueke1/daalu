@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { ExternalLink, TerminalSquare, X } from "lucide-react";
 import { api, type TopoNode } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 function ReachBadge({ reachable }: { reachable: boolean | null }) {
   const map = {
@@ -20,11 +20,12 @@ function ReachBadge({ reachable }: { reachable: boolean | null }) {
   return (
     <span
       className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] uppercase tracking-wider"
-      style={{ borderColor: `${color}66`, color }}
+      style={{ borderColor: `color-mix(in srgb, ${color} 40%, transparent)`, color }}
     >
       <span
+        aria-hidden
         className="h-1.5 w-1.5 rounded-full"
-        style={{ background: color, boxShadow: `0 0 6px ${color}` }}
+        style={{ background: color }}
       />
       {label}
     </span>
@@ -64,14 +65,13 @@ export function NodeDrawer({
             {node.platform && <span>· {node.platform}</span>}
           </div>
         </div>
-        <button
-          type="button"
+        <Button
+          variant="icon"
+          size="sm"
           onClick={onClose}
-          aria-label="Close"
-          className="rounded-md p-1 text-muted hover:text-[color:var(--text)] transition-colors"
-        >
-          <X className="h-4 w-4" />
-        </button>
+          aria-label={`Close ${node.name} details`}
+          icon={<X className="h-4 w-4" aria-hidden />}
+        />
       </div>
 
       <div className="flex-1 space-y-4 overflow-y-auto scrollbar-thin px-4 py-4">
@@ -95,7 +95,7 @@ export function NodeDrawer({
         </dl>
 
         {data?.probe_error && (
-          <p className="rounded-lg border border-line bg-bg-card px-3 py-2 text-[12px] text-[color:var(--warning)]">
+          <p className="rounded-lg border border-line bg-bg-card px-3 py-2 text-xs text-[color:var(--warning)]">
             {data.probe_error}
           </p>
         )}
@@ -106,9 +106,9 @@ export function NodeDrawer({
             {!isLoading && <span className="text-muted">· {neighbors.length}</span>}
           </div>
           {isLoading ? (
-            <div className="text-sm text-muted">Loading…</div>
+            <div role="status" className="text-sm text-muted">Loading neighbours…</div>
           ) : neighbors.length === 0 ? (
-            <div className="rounded-lg border border-line bg-bg-card px-3 py-3 text-center text-[12px] text-muted">
+            <div className="rounded-lg border border-line bg-bg-card px-3 py-3 text-center text-xs text-muted">
               No neighbours observed
             </div>
           ) : (
@@ -116,7 +116,7 @@ export function NodeDrawer({
               {neighbors.map((n, i) => (
                 <li
                   key={`${n.local_if}-${i}`}
-                  className="flex items-center justify-between rounded-lg border border-line bg-bg-card px-2.5 py-1.5 text-[12px]"
+                  className="flex items-center justify-between rounded-lg border border-line bg-bg-card px-2.5 py-1.5 text-xs"
                 >
                   <span className="font-mono text-[color:var(--text)]">
                     {n.local_if || "?"}
@@ -134,25 +134,17 @@ export function NodeDrawer({
       </div>
 
       <div className="space-y-2 border-t border-line px-4 py-3">
-        <button
-          type="button"
+        <Button
+          variant="primary"
           disabled={!canTerminal}
+          disabledReason="This device has no SSH transport configured"
           onClick={() => onOpenTerminal({ id: node.id, name: node.name })}
-          className={cn(
-            "flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-            canTerminal
-              ? "bg-accent-emerald/15 text-accent-emerald hover:bg-accent-emerald/25"
-              : "cursor-not-allowed bg-bg-elevated text-muted"
-          )}
-          title={
-            canTerminal
-              ? "Open an SSH shell to this device"
-              : "No SSH transport for this device"
-          }
+          title="Open an SSH shell to this device"
+          className="w-full"
+          icon={<TerminalSquare className="h-4 w-4" aria-hidden />}
         >
-          <TerminalSquare className="h-4 w-4" />
           SSH into {node.name}
-        </button>
+        </Button>
         <Link
           href={`/devices/${node.id}`}
           className="flex w-full items-center justify-center gap-2 rounded-lg border border-line px-3 py-2 text-sm text-muted hover:text-[color:var(--text)] transition-colors"

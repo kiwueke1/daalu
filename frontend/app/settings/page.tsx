@@ -1,12 +1,15 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { useUnsavedGuard } from "@/components/ui/use-unsaved-guard";
+import { Suspense, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Bell,
   Check,
   Copy,
+  Eye,
+  EyeOff,
   KeyRound,
   Loader2,
   Lock,
@@ -24,6 +27,10 @@ import { useAuth } from "@/lib/auth";
 import { useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { TabBar, useUrlTab } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { ConfirmButton } from "@/components/ui/confirm-button";
+import { useToast } from "@/components/ui/toast";
+import { errorText } from "@/lib/errors";
 
 /**
  * /settings — four-tab control panel for the signed-in operator.
@@ -98,29 +105,49 @@ function ProfileTab() {
   const [fullName, setFullName] = useState(user?.full_name ?? "");
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
+  const [showPw, setShowPw] = useState(false);
   const [pwError, setPwError] = useState<string | null>(null);
-  const [pwOk, setPwOk] = useState(false);
+  const toast = useToast();
+
+  const nameDirty = !!user && fullName !== (user.full_name ?? "");
+  const pwDirty = !!(currentPw || newPw || confirmPw);
+  useUnsavedGuard(nameDirty || pwDirty);
 
   const saveProfile = useMutation({
     mutationFn: () => api.auth.updateMe({ full_name: fullName.trim() || null }),
-    onSuccess: () => refresh(),
+    onSuccess: () => {
+      refresh();
+      toast.success("Profile saved");
+    },
+    onError: (err) => toast.error(errorText(err)),
   });
   const savePassword = useMutation({
     mutationFn: () => api.auth.changePassword(currentPw, newPw),
     onSuccess: () => {
       setCurrentPw("");
       setNewPw("");
+      setConfirmPw("");
       setPwError(null);
-      setPwOk(true);
-      setTimeout(() => setPwOk(false), 4000);
+      toast.success("Password changed. Use the new one next time you sign in.");
     },
-    onError: (err: Error) => {
-      setPwOk(false);
-      setPwError(extractDetail(err) ?? "could not change password");
+    onError: (err) => {
+      setPwError(errorText(err));
+      toast.error(errorText(err));
     },
   });
 
   if (!user) return <SectionEmpty />;
+
+  const pwTooShort = newPw.length > 0 && newPw.length < 8;
+  const pwMismatch = confirmPw.length > 0 && confirmPw !== newPw;
+  const pwReason = !currentPw
+    ? "Enter your current password"
+    : newPw.length < 8
+      ? "New password needs at least 8 characters"
+      : confirmPw !== newPw
+        ? "The two new passwords must match"
+        : undefined;
 
   return (
     <div className="space-y-6">
@@ -137,30 +164,22 @@ function ProfileTab() {
               type="text"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
-              placeholder="—"
+              placeholder="Your name"
+              autoComplete="name"
               className={inputClass}
             />
           </Field>
         </div>
         <div className="flex justify-end gap-2 pt-3">
-          <button
-            type="button"
+          <Button
+            variant="primary"
             onClick={() => saveProfile.mutate()}
-            disabled={saveProfile.isPending || fullName === (user.full_name ?? "")}
-            className={primaryBtn}
+            pending={saveProfile.isPending}
+            disabled={!nameDirty}
+            disabledReason={saveProfile.isPending ? "Saving…" : "Change a field to save"}
           >
-            {saveProfile.isPending ? (
-              <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving…
-              </>
-            ) : saveProfile.isSuccess ? (
-              <>
-                <Check className="h-3.5 w-3.5" /> Saved
-              </>
-            ) : (
-              "Save profile"
-            )}
-          </button>
+            Save profile
+          </Button>
         </div>
       </Section>
 
@@ -178,35 +197,76 @@ function ProfileTab() {
               className={inputClass}
             />
           </Field>
+          <div className="hidden md:block" aria-hidden />
           <Field label="New password">
             <input
-              type="password"
+              type={showPw ? "text" : "password"}
               value={newPw}
               onChange={(e) => setNewPw(e.target.value)}
               autoComplete="new-password"
+              aria-invalid={pwTooShort || undefined}
+              aria-describedby="new-pw-hint"
               className={inputClass}
             />
+            <div
+              id="new-pw-hint"
+              className={cn("text-xs mt-1", pwTooShort ? "text-signal-critical" : "text-muted")}
+            >
+              {pwTooShort
+                ? `${8 - newPw.length} more character${8 - newPw.length === 1 ? "" : "s"} needed.`
+                : "At least 8 characters."}
+            </div>
+          </Field>
+          <Field label="Confirm new password">
+            <input
+              type={showPw ? "text" : "password"}
+              value={confirmPw}
+              onChange={(e) => setConfirmPw(e.target.value)}
+              autoComplete="new-password"
+              aria-invalid={pwMismatch || undefined}
+              aria-describedby="confirm-pw-hint"
+              className={inputClass}
+            />
+            <div
+              id="confirm-pw-hint"
+              aria-live="polite"
+              className={cn(
+                "text-xs mt-1",
+                pwMismatch ? "text-signal-critical" : confirmPw && !pwMismatch ? "text-accent" : "text-muted"
+              )}
+            >
+              {pwMismatch
+                ? "Passwords don't match yet."
+                : confirmPw
+                  ? "Passwords match."
+                  : "Type the new password again."}
+            </div>
           </Field>
         </div>
-        {pwError && <BannerError message={pwError} />}
-        {pwOk && <BannerOk message="Password updated." />}
-        <div className="flex justify-end pt-3">
-          <button
-            type="button"
-            onClick={() => savePassword.mutate()}
-            disabled={
-              savePassword.isPending || !currentPw || newPw.length < 8
-            }
-            className={primaryBtn}
+        <div className="pt-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={showPw ? <EyeOff className="h-3.5 w-3.5" aria-hidden /> : <Eye className="h-3.5 w-3.5" aria-hidden />}
+            onClick={() => setShowPw((v) => !v)}
+            aria-pressed={showPw}
+            // Ghost padding would indent the label; line it up with the fields.
+            className="-ml-3"
           >
-            {savePassword.isPending ? (
-              <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Updating…
-              </>
-            ) : (
-              "Change password"
-            )}
-          </button>
+            {showPw ? "Hide passwords" : "Show passwords"}
+          </Button>
+        </div>
+        {pwError && <BannerError message={pwError} />}
+        <div className="flex justify-end pt-3">
+          <Button
+            variant="primary"
+            onClick={() => savePassword.mutate()}
+            pending={savePassword.isPending}
+            disabled={!!pwReason}
+            disabledReason={savePassword.isPending ? "Changing password…" : pwReason}
+          >
+            Change password
+          </Button>
         </div>
       </Section>
 
@@ -215,9 +275,9 @@ function ProfileTab() {
         description="Sign out of this browser. Other sessions (including API tokens) are unaffected."
       >
         <div className="flex justify-end">
-          <button type="button" onClick={() => logout()} className={dangerBtn}>
+          <Button variant="danger" onClick={() => logout()}>
             Sign out
-          </button>
+          </Button>
         </div>
       </Section>
     </div>
@@ -231,11 +291,16 @@ function AppearanceTab() {
   const { user, refresh } = useAuth();
   const prefs = (user?.preferences ?? {}) as Record<string, unknown>;
   const density = (prefs.density as "compact" | "comfortable") ?? "comfortable";
+  const toast = useToast();
 
   const saveDensity = useMutation({
     mutationFn: (next: "compact" | "comfortable") =>
       api.auth.updateMe({ preferences: { density: next } }),
-    onSuccess: () => refresh(),
+    onSuccess: (_d, next) => {
+      refresh();
+      toast.success(`Density set to ${next}`);
+    },
+    onError: (err) => toast.error(errorText(err)),
   });
 
   return (
@@ -317,11 +382,16 @@ function NotificationsTab() {
   const { user, refresh } = useAuth();
   const prefs = (user?.preferences ?? {}) as Record<string, unknown>;
   const notif = (prefs.notifications as Record<string, boolean>) ?? {};
+  const toast = useToast();
 
   const save = useMutation({
     mutationFn: (next: Record<string, boolean>) =>
       api.auth.updateMe({ preferences: { notifications: next } }),
-    onSuccess: () => refresh(),
+    onSuccess: () => {
+      refresh();
+      toast.success("Notification settings saved");
+    },
+    onError: (err) => toast.error(errorText(err)),
   });
 
   function toggle(id: string) {
@@ -374,6 +444,7 @@ function TokensTab() {
     useState<PersonalAccessTokenCreated | null>(null);
   const [copied, setCopied] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const toast = useToast();
 
   const create = useMutation({
     mutationFn: () =>
@@ -387,21 +458,29 @@ function TokensTab() {
       setName("");
       setExpiresDays("");
       qc.invalidateQueries({ queryKey: ["auth", "tokens"] });
+      toast.success(`Token "${created.name}" created. Copy it now.`);
     },
-    onError: (err: Error) =>
-      setCreateError(extractDetail(err) ?? "could not create token"),
+    onError: (err) => setCreateError(errorText(err)),
   });
 
   const revoke = useMutation({
     mutationFn: (id: string) => api.auth.tokens.revoke(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["auth", "tokens"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["auth", "tokens"] });
+      toast.success("Token revoked");
+    },
+    onError: (err) => toast.error(errorText(err)),
   });
 
   async function copyToken() {
     if (!justCreated) return;
-    await navigator.clipboard.writeText(justCreated.token);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    try {
+      await navigator.clipboard.writeText(justCreated.token);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error("Couldn't copy. Select the token and copy it by hand.");
+    }
   }
 
   return (
@@ -434,54 +513,45 @@ function TokensTab() {
         </div>
         {createError && <BannerError message={createError} />}
         <div className="flex justify-end pt-3">
-          <button
-            type="button"
+          <Button
+            variant="primary"
             onClick={() => create.mutate()}
-            disabled={create.isPending || !name.trim()}
-            className={primaryBtn}
+            pending={create.isPending}
+            disabled={!name.trim()}
+            disabledReason={create.isPending ? "Creating…" : "Name the token to create it"}
+            icon={<Plus className="h-3.5 w-3.5" aria-hidden />}
           >
-            {create.isPending ? (
-              <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Minting…
-              </>
-            ) : (
-              <>
-                <Plus className="h-3.5 w-3.5" /> Create token
-              </>
-            )}
-          </button>
+            Create token
+          </Button>
         </div>
 
         {justCreated && (
-          <div className="mt-4 rounded-lg border border-accent-blue/60 bg-accent-blue/10 p-4">
+          <div className="mt-4 rounded-lg border border-accent-blue/60 bg-accent-blue/10 p-4 motion-enter">
             <div className="flex items-center justify-between gap-2 mb-2">
               <div className="text-sm font-medium">
                 Token created — copy it now
               </div>
-              <button
-                onClick={() => setJustCreated(null)}
-                className="text-xs text-muted hover:text-[color:var(--text)]"
-              >
+              <Button variant="ghost" size="sm" onClick={() => setJustCreated(null)}>
                 Done
-              </button>
+              </Button>
             </div>
             <div className="font-mono text-xs break-all bg-[color:var(--bg-elevated)] p-3 rounded border border-line">
               {justCreated.token}
             </div>
-            <button
+            <Button
+              size="sm"
               onClick={copyToken}
-              className="mt-3 text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-line hover:border-line-strong"
+              className="mt-3"
+              icon={
+                copied ? (
+                  <Check className="h-3.5 w-3.5 motion-success" aria-hidden />
+                ) : (
+                  <Copy className="h-3.5 w-3.5" aria-hidden />
+                )
+              }
             >
-              {copied ? (
-                <>
-                  <Check className="h-3.5 w-3.5" /> Copied
-                </>
-              ) : (
-                <>
-                  <Copy className="h-3.5 w-3.5" /> Copy to clipboard
-                </>
-              )}
-            </button>
+              {copied ? "Copied" : "Copy to clipboard"}
+            </Button>
             <div className="text-xs text-muted mt-3 flex items-start gap-1.5">
               <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
               We do not keep the cleartext. If you lose it, revoke this token
@@ -496,10 +566,15 @@ function TokensTab() {
         description="Use Authorization: Bearer dpat_… on any API call. Revoking is immediate."
       >
         {tokens.isLoading && (
-          <div className="text-xs text-muted">Loading…</div>
+          <div role="status" className="text-sm text-muted flex items-center gap-1.5">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> Loading tokens…
+          </div>
         )}
+        {tokens.isError && <BannerError message={errorText(tokens.error)} />}
         {tokens.data && tokens.data.length === 0 && (
-          <div className="text-xs text-muted">No tokens yet.</div>
+          <div className="text-sm text-muted">
+            No tokens yet. Create one above for a script or CI job.
+          </div>
         )}
         <div className="space-y-2">
           {(tokens.data ?? []).map((t) => {
@@ -519,16 +594,16 @@ function TokensTab() {
                 <div className="min-w-0 flex-1">
                   <div className="text-sm flex items-center gap-2">
                     <span className="truncate">{t.name}</span>
-                    <span className="font-mono text-[11px] text-muted">
+                    <span className="font-mono text-xs text-muted">
                       {t.prefix}…
                     </span>
                     {revoked && (
-                      <span className="text-[10px] uppercase tracking-wider text-[color:var(--critical)]">
+                      <span className="text-[11px] uppercase tracking-wider text-signal-critical">
                         revoked
                       </span>
                     )}
                     {!revoked && expired && (
-                      <span className="text-[10px] uppercase tracking-wider text-muted">
+                      <span className="text-[11px] uppercase tracking-wider text-muted">
                         expired
                       </span>
                     )}
@@ -542,20 +617,15 @@ function TokensTab() {
                   </div>
                 </div>
                 {!revoked && (
-                  <button
-                    onClick={() => revoke.mutate(t.id)}
-                    disabled={
-                      revoke.isPending && revoke.variables === t.id
-                    }
-                    className="text-xs flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-line hover:border-[color:var(--critical)] hover:text-[color:var(--critical)]"
-                  >
-                    {revoke.isPending && revoke.variables === t.id ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Trash2 className="h-3.5 w-3.5" />
-                    )}
-                    Revoke
-                  </button>
+                  <ConfirmButton
+                    tone="danger"
+                    label="Revoke"
+                    confirmLabel="Revoke token"
+                    consequence="Anything using this token stops working immediately."
+                    icon={<Trash2 className="h-3.5 w-3.5" aria-hidden />}
+                    pending={revoke.isPending && revoke.variables === t.id}
+                    onConfirm={() => revoke.mutate(t.id)}
+                  />
                 )}
               </div>
             );
@@ -580,9 +650,14 @@ function TeamTab() {
     queryFn: () => api.invites.list(showAll),
   });
 
+  const toast = useToast();
   const revokeMut = useMutation({
     mutationFn: (id: string) => api.invites.revoke(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["invites"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["invites"] });
+      toast.success("Invite revoked");
+    },
+    onError: (err) => toast.error(errorText(err)),
   });
 
   const resendMut = useMutation({
@@ -590,7 +665,9 @@ function TeamTab() {
     onSuccess: (inv) => {
       setLastCreated(inv);
       qc.invalidateQueries({ queryKey: ["invites"] });
+      toast.success(inv.delivered ? `Invite re-sent to ${inv.email}` : `New invite link ready for ${inv.email}`);
     },
+    onError: (err) => toast.error(errorText(err)),
   });
 
   if (!user) return <SectionEmpty />;
@@ -599,10 +676,10 @@ function TeamTab() {
   // explaining their tenant admin is the one who can invite.
   if (!user.is_admin) {
     return (
-      <Section title="Team" description="Who else has access to this tenant.">
+      <Section title="Team" description="Who else has access to this organisation.">
         <p className="text-sm text-muted">
-          Only tenant admins can invite users. Ask your admin to add the
-          person from Settings → Team.
+          Only organisation admins can invite people. Ask your admin to add
+          them from Settings → Team.
         </p>
       </Section>
     );
@@ -619,7 +696,7 @@ function TeamTab() {
 
       <Section
         title="Invite a teammate"
-        description="Send a single-use link that expires after 7 days. They sign up under this tenant."
+        description="Send a single-use link that expires after 7 days. They join this organisation."
       >
         {creating ? (
           <InviteForm
@@ -631,12 +708,13 @@ function TeamTab() {
             }}
           />
         ) : (
-          <button
+          <Button
+            variant="primary"
             onClick={() => setCreating(true)}
-            className="inline-flex items-center gap-2 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-bg-base hover:opacity-90"
+            icon={<Plus className="h-4 w-4" aria-hidden />}
           >
-            <Plus className="h-4 w-4" /> Invite user
-          </button>
+            Invite a teammate
+          </Button>
         )}
       </Section>
 
@@ -659,8 +737,11 @@ function TeamTab() {
           </label>
         </div>
         {query.isLoading && <SectionEmpty />}
+        {query.isError && <BannerError message={errorText(query.error)} />}
         {query.data && query.data.length === 0 && (
-          <p className="text-sm text-muted">No invites yet.</p>
+          <p className="text-sm text-muted">
+            {showAll ? "No invites yet." : "No pending invites. Invite a teammate above."}
+          </p>
         )}
         {query.data && query.data.length > 0 && (
           <ul className="space-y-2">
@@ -670,7 +751,10 @@ function TeamTab() {
                 invite={inv}
                 onRevoke={() => revokeMut.mutate(inv.id)}
                 onResend={() => resendMut.mutate(inv.id)}
-                busy={revokeMut.isPending || resendMut.isPending}
+                busy={
+                  (revokeMut.isPending && revokeMut.variables === inv.id) ||
+                  (resendMut.isPending && resendMut.variables === inv.id)
+                }
               />
             ))}
           </ul>
@@ -725,29 +809,34 @@ function InviteCreatedBanner({
           <div className="mt-3 flex gap-2">
             <input
               readOnly
+              aria-label="Invite link"
               value={invite.invite_url}
-              className="flex-1 rounded-md border border-line bg-[color:var(--bg-elevated)] px-2 py-1 text-xs font-mono"
+              className="flex-1 min-w-0 rounded-md border border-line bg-[color:var(--bg-elevated)] px-2 py-1 text-xs font-mono"
               onFocus={(e) => e.currentTarget.select()}
             />
-            <button
+            <Button
+              size="sm"
               onClick={() => {
-                navigator.clipboard.writeText(invite.invite_url!);
-                setCopied(true);
-                setTimeout(() => setCopied(false), 1500);
+                navigator.clipboard.writeText(invite.invite_url!).then(() => {
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1500);
+                });
               }}
-              className="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs"
+              icon={
+                copied ? (
+                  <Check className="h-3.5 w-3.5 motion-success" aria-hidden />
+                ) : (
+                  <Copy className="h-3.5 w-3.5" aria-hidden />
+                )
+              }
             >
-              {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-              {copied ? "Copied" : "Copy"}
-            </button>
+              {copied ? "Copied" : "Copy link"}
+            </Button>
           </div>
         </div>
-        <button
-          onClick={onDismiss}
-          className="text-xs text-muted hover:text-[color:var(--text)]"
-        >
+        <Button variant="ghost" size="sm" onClick={onDismiss}>
           Dismiss
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -773,7 +862,7 @@ function InviteForm({
         message: message.trim() || null,
       }),
     onSuccess: (inv) => onCreated(inv),
-    onError: (e: Error) => setError(extractDetail(e) ?? e.message),
+    onError: (e) => setError(errorText(e)),
   });
 
   return (
@@ -790,6 +879,7 @@ function InviteForm({
           type="email"
           required
           autoFocus
+          autoComplete="off"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="teammate@yourcompany.com"
@@ -816,27 +906,22 @@ function InviteForm({
         />
       </Field>
       {error && (
-        <p className="text-sm flex items-center gap-1.5 text-[color:var(--critical)]">
-          <AlertTriangle className="h-3.5 w-3.5" />
+        <p role="alert" className="text-sm flex items-center gap-1.5 text-signal-critical">
+          <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
           {error}
         </p>
       )}
       <div className="flex gap-2">
-        <button
+        <Button
           type="submit"
-          disabled={createMut.isPending}
-          className="inline-flex items-center gap-2 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-bg-base hover:opacity-90 disabled:opacity-50"
+          variant="primary"
+          pending={createMut.isPending}
+          disabled={!email.trim()}
+          disabledReason={createMut.isPending ? "Sending…" : "Enter their email to send"}
         >
-          {createMut.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
           Send invite
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="rounded-md border border-line px-3 py-1.5 text-sm"
-        >
-          Cancel
-        </button>
+        </Button>
+        <Button onClick={onCancel}>Cancel</Button>
       </div>
     </form>
   );
@@ -857,7 +942,7 @@ function InviteRow({
     <li className="flex items-center justify-between gap-3 rounded-md border border-line bg-bg-elevated/40 px-3 py-2">
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 text-sm">
-          <Mail className="h-3.5 w-3.5 text-muted" />
+          <Mail className="h-3.5 w-3.5 text-muted" aria-hidden />
           <span className="truncate">{invite.email}</span>
           <span className="rounded bg-line/60 px-1.5 py-px text-xs uppercase tracking-wider text-muted">
             {invite.role}
@@ -871,22 +956,24 @@ function InviteRow({
       </div>
       {invite.status === "pending" || invite.status === "expired" ? (
         <div className="flex gap-1.5">
-          <button
+          <Button
+            size="sm"
             onClick={onResend}
             disabled={busy}
-            title="Re-issue the token + re-send the email"
-            className="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs hover:bg-line/40 disabled:opacity-50"
+            title="Issue a new link and email it again"
+            icon={<RefreshCw className="h-3 w-3" aria-hidden />}
           >
-            <RefreshCw className="h-3 w-3" /> Resend
-          </button>
-          <button
-            onClick={onRevoke}
+            Resend
+          </Button>
+          <ConfirmButton
+            tone="danger"
+            label="Revoke"
+            confirmLabel="Revoke invite"
+            consequence="The link stops working. This can't be undone."
             disabled={busy}
-            title="Revoke this invite. Cannot be undone."
-            className="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs text-[color:var(--critical)] hover:bg-line/40 disabled:opacity-50"
-          >
-            <Trash2 className="h-3 w-3" /> Revoke
-          </button>
+            icon={<Trash2 className="h-3 w-3" aria-hidden />}
+            onConfirm={onRevoke}
+          />
         </div>
       ) : null}
     </li>
@@ -898,7 +985,7 @@ function InviteStatusPill({ status }: { status: Invite["status"] }) {
     pending: "bg-accent/15 text-accent-cyan",
     expired: "bg-line/60 text-muted",
     revoked: "bg-line/60 text-muted line-through",
-    accepted: "bg-emerald-500/20 text-emerald-400",
+    accepted: "bg-accent/15 text-accent",
   };
   return (
     <span className={cn("rounded px-1.5 py-px text-xs uppercase tracking-wider", styles[status])}>
@@ -933,8 +1020,8 @@ function Section({
 
 function SectionEmpty() {
   return (
-    <div className="rounded-xl border border-line p-6 text-muted text-sm">
-      Loading…
+    <div role="status" className="rounded-xl border border-line p-6 text-muted text-sm flex items-center gap-2">
+      <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Loading…
     </div>
   );
 }
@@ -948,7 +1035,7 @@ function Field({
 }) {
   return (
     <label className="block">
-      <div className="text-xs uppercase tracking-[0.16em] text-muted mb-1.5">
+      <div className="text-xs font-medium text-muted mb-1.5">
         {label}
       </div>
       {children}
@@ -992,14 +1079,14 @@ function Switch({
       aria-checked={checked}
       onClick={onChange}
       className={cn(
-        "shrink-0 relative h-5 w-9 rounded-full transition-colors",
+        "shrink-0 relative h-6 w-11 rounded-full transition-colors",
         checked ? "bg-accent" : "bg-fg/15"
       )}
     >
       <span
         className={cn(
-          "absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform",
-          checked ? "translate-x-4" : "translate-x-0.5"
+          "absolute top-0.5 h-5 w-5 rounded-full bg-bg-card shadow transition-transform",
+          checked ? "translate-x-[22px]" : "translate-x-0.5"
         )}
       />
     </button>
@@ -1039,28 +1126,14 @@ function Choice({
 
 function BannerError({ message }: { message: string }) {
   return (
-    <div className="mt-3 text-xs text-[color:var(--critical)] flex items-start gap-1.5">
-      <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" /> {message}
-    </div>
-  );
-}
-
-function BannerOk({ message }: { message: string }) {
-  return (
-    <div className="mt-3 text-xs text-accent-blue flex items-start gap-1.5">
-      <Check className="h-3.5 w-3.5 mt-0.5 shrink-0" /> {message}
+    <div role="alert" className="mt-3 text-sm text-signal-critical flex items-start gap-1.5">
+      <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" aria-hidden /> {message}
     </div>
   );
 }
 
 const inputClass =
   "w-full h-9 px-3 rounded-lg border border-line bg-[color:var(--bg-elevated)] text-sm focus:outline-none focus:border-accent transition-colors";
-
-const primaryBtn =
-  "text-xs h-9 px-3 rounded-lg border border-accent-blue/60 bg-accent-blue/10 hover:bg-accent-blue/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5";
-
-const dangerBtn =
-  "text-xs h-9 px-3 rounded-lg border border-line hover:border-[color:var(--critical)] hover:text-[color:var(--critical)]";
 
 function formatDate(s: string): string {
   try {
@@ -1072,20 +1145,6 @@ function formatDate(s: string): string {
     });
   } catch {
     return s;
-  }
-}
-
-function extractDetail(err: Error): string | null {
-  // Backend errors arrive as "<status> <statusText>: <body>". Pull the
-  // body if it's a JSON object with a {detail} key, which is what
-  // FastAPI HTTPException renders.
-  const m = err.message.match(/\d+\s[^:]+:\s(.+)$/);
-  if (!m) return null;
-  try {
-    const body = JSON.parse(m[1]) as { detail?: string };
-    return body.detail ?? null;
-  } catch {
-    return m[1];
   }
 }
 

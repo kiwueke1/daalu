@@ -81,7 +81,45 @@ test.describe("alerts list", () => {
   test("mobile", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await open(page, "/alerts");
+    // Asserted directly: dark on dark, it's within the screenshot's 1% tolerance.
+    await expect(page.getByRole("button", { name: /Open Assistant/ })).toBeVisible();
     await settle(page);
     await expect(page).toHaveScreenshot("alerts-mobile.png", snap);
+  });
+
+  test("mobile Assistant sheet keeps the conversation and returns focus", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await open(page, "/alerts");
+    const button = page.getByRole("button", { name: /Open Assistant/ });
+    await button.click();
+    const sheet = page.getByRole("dialog", { name: "Assistant" });
+    // Opening must not throw up the phone keyboard over the sheet.
+    await expect(page.getByLabel("Message the assistant")).not.toBeFocused();
+    await settle(page);
+    await expect(page).toHaveScreenshot("assistant-sheet-mobile.png", snap);
+
+    await page.getByLabel("Message the assistant").fill("What services are degraded?");
+    await page.keyboard.press("Enter");
+    await expect(sheet.getByText(/What services are degraded/)).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(sheet).toBeHidden();
+    await expect(button).toBeFocused();
+
+    await button.click();
+    await expect(sheet.getByText(/What services are degraded/)).toBeVisible();
+  });
+
+  test("sidebar is grouped and keeps Settings on screen", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await open(page, "/alerts");
+    const nav = page.getByRole("navigation", { name: "Main" });
+    for (const group of ["Respond", "Automate", "Infrastructure", "Insights"]) {
+      await expect(nav.getByRole("group", { name: group })).toBeVisible();
+    }
+    await expect(nav.getByRole("group", { name: "Respond" }).getByRole("link", { name: /Alerts/ })).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
+    await expect(page.getByRole("link", { name: "Settings" })).toBeInViewport();
   });
 });

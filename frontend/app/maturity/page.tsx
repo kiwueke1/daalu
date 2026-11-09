@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, Check, Gauge, X } from "lucide-react";
@@ -66,22 +66,22 @@ export default function MaturityPage() {
               }}
             >
               <div className="flex items-baseline gap-3">
-                <span className="text-6xl font-bold tabular-nums text-accent">L{m.level}</span>
+                <Live value={`L${m.level}`} className="text-6xl font-bold tabular-nums text-accent" />
                 <span className="text-2xl font-semibold">{m.name}</span>
               </div>
               <div className="flex-1 min-w-[16rem] text-sm text-fg/80">
                 {current?.description}
-                <div className="text-[11px] text-muted mt-1">
+                <div className="text-xs text-muted mt-1">
                   The highest level whose criteria (and every level below) are all met.
                 </div>
               </div>
               {m.assessment && (
                 <div className="rounded-xl border border-line bg-bg-card px-4 py-3 text-center">
-                  <div className="text-[10px] uppercase tracking-wider text-muted">
+                  <div className="text-[11px] uppercase tracking-wider text-muted">
                     Self-assessed
                   </div>
                   <div className="text-2xl font-semibold tabular-nums">L{m.assessment.level}</div>
-                  <div className="text-[10px] text-muted">
+                  <div className="text-xs text-muted">
                     {m.assessment.created_by || "—"} · {fmtDateTime(m.assessment.created_at)}
                   </div>
                 </div>
@@ -93,23 +93,23 @@ export default function MaturityPage() {
             <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <StatTile
                 label="AI triage rate"
-                value={fmtRate(met.ai_triage_rate)}
+                value={<Live value={fmtRate(met.ai_triage_rate)} />}
                 hint={`${met.investigations_total} of ${met.alerts_total} alerts`}
               />
-              <StatTile label="Time to triage" value={fmtDuration(met.median_time_to_triage_s)} hint="median" />
+              <StatTile label="Time to triage" value={<Live value={fmtDuration(met.median_time_to_triage_s)} />} hint="median" />
               <StatTile
                 label="Agreement rate"
-                value={fmtRate(met.agreement_rate)}
+                value={<Live value={fmtRate(met.agreement_rate)} />}
                 hint={`verdicts on ${fmtRate(met.verdict_coverage)} of investigations`}
               />
               <StatTile
                 label="Approval rate"
-                value={fmtRate(met.proposal_approval_rate)}
+                value={<Live value={fmtRate(met.proposal_approval_rate)} />}
                 hint={`${met.actions.approved} approved · ${met.actions.rejected} rejected`}
               />
               <StatTile
                 label="Change-failure rate"
-                value={fmtRate(met.change_failure_rate)}
+                value={<Live value={fmtRate(met.change_failure_rate)} />}
                 hint={`${met.actions.failed_verification} of ${met.actions.executed} executed failed verification`}
                 tone={
                   met.change_failure_rate !== null && met.change_failure_rate > 0.15
@@ -119,20 +119,20 @@ export default function MaturityPage() {
               />
               <StatTile
                 label="Escalation rate"
-                value={fmtRate(met.escalation_rate)}
+                value={<Live value={fmtRate(met.escalation_rate)} />}
                 hint={`${met.resolutions.approved + met.resolutions.manual} needed a human · ${met.resolutions.auto} auto-resolved`}
               />
-              <StatTile label="MTTR" value={fmtDuration(met.median_time_to_resolve_s)} hint="median time to resolve" />
+              <StatTile label="MTTR" value={<Live value={fmtDuration(met.median_time_to_resolve_s)} />} hint="median time to resolve" />
               <StatTile
                 label="Audit chain"
-                value={met.audit_chain_ok ? "Intact" : "Broken"}
+                value={<Live value={met.audit_chain_ok ? "Intact" : "Broken"} />}
                 tone={met.audit_chain_ok ? "accent" : "critical"}
                 hint={<Link href="/audit" className="underline underline-offset-2">Open audit log</Link>}
               />
             </section>
 
             <section className="rounded-2xl border border-line bg-bg-card p-4 lg:p-5">
-              <div className="text-[10px] uppercase tracking-wider text-muted mb-2">
+              <div className="text-[11px] uppercase tracking-wider text-muted mb-2">
                 Daily trend · last {days} days
               </div>
               <MetricsTrend daily={met.daily} />
@@ -140,11 +140,11 @@ export default function MaturityPage() {
 
             <div className="grid lg:grid-cols-[1.4fr_1fr] gap-4">
               <section className="rounded-2xl border border-line bg-bg-card overflow-x-auto">
-                <div className="px-4 pt-4 text-[10px] uppercase tracking-wider text-muted">
+                <div className="px-4 pt-4 text-[11px] uppercase tracking-wider text-muted">
                   Criteria
                 </div>
                 <table className="w-full min-w-[520px] text-sm mt-2">
-                  <thead className="text-[10px] uppercase tracking-wider text-muted bg-bg-elevated/50">
+                  <thead className="text-[11px] uppercase tracking-wider text-muted bg-bg-elevated/50">
                     <tr>
                       <th className="text-left px-4 py-2">Level</th>
                       <th className="text-left px-4 py-2">Criterion</th>
@@ -161,11 +161,11 @@ export default function MaturityPage() {
                         <td className="px-4 py-2">
                           {c.met ? (
                             <span className="inline-flex items-center gap-1 text-accent text-xs">
-                              <Check className="h-3.5 w-3.5" /> met
+                              <Check aria-hidden className="h-3.5 w-3.5" /> met
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 text-muted text-xs">
-                              <X className="h-3.5 w-3.5" /> not yet
+                              <X aria-hidden className="h-3.5 w-3.5" /> not yet
                             </span>
                           )}
                         </td>
@@ -180,12 +180,12 @@ export default function MaturityPage() {
               </section>
 
               <section className="rounded-2xl border border-line bg-bg-card p-4 lg:p-5">
-                <div className="text-[10px] uppercase tracking-wider text-muted mb-2">Next steps</div>
+                <div className="text-[11px] uppercase tracking-wider text-muted mb-2">Next steps</div>
                 {m.next_steps.length ? (
                   <ul className="space-y-2">
                     {m.next_steps.map((s, i) => (
                       <li key={i} className="flex gap-2 text-sm">
-                        <ArrowRight className="h-4 w-4 mt-0.5 shrink-0 text-accent" />
+                        <ArrowRight aria-hidden className="h-4 w-4 mt-0.5 shrink-0 text-accent" />
                         <span>{s}</span>
                       </li>
                     ))}
@@ -215,5 +215,23 @@ export default function MaturityPage() {
         )}
       </LoadState>
     </div>
+  );
+}
+
+/** A value that tints once (`motion-update`) when a refetch changes it, so a
+ *  moved metric draws the eye; nothing animates on first render. */
+function Live({ value, className }: { value: string; className?: string }) {
+  const prev = useRef(value);
+  const [changes, setChanges] = useState(0);
+  useEffect(() => {
+    if (prev.current !== value) {
+      prev.current = value;
+      setChanges((n) => n + 1);
+    }
+  }, [value]);
+  return (
+    <span key={changes} className={[changes ? "motion-update" : "", className ?? ""].join(" ").trim() || undefined}>
+      {value}
+    </span>
   );
 }

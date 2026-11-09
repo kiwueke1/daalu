@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { BookMarked, Plus, Sparkles } from "lucide-react";
 import { api, type Runbook, type RunbookStatus } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { cn, formatRelative } from "@/lib/utils";
 import { LoadState } from "@/components/ui/load-state";
-import { Chip, PageHeader, Segmented, btnPrimary } from "@/components/aiops/ui";
+import { Button } from "@/components/ui/button";
+import { Chip, PageHeader, Segmented } from "@/components/aiops/ui";
 import { RunbookEditor } from "@/components/aiops/runbook-editor";
 
 type Filter = "" | RunbookStatus;
@@ -31,6 +32,29 @@ export default function RunbooksPage() {
   const rows = q.data ?? [];
   const current: Runbook | null =
     selected && selected !== "new" ? rows.find((r) => r.id === selected) ?? null : null;
+  const needsReview = (r: Runbook) => r.status === "draft" && r.source === "generated";
+
+  // On a wide screen, open the first AI draft waiting for review, so the
+  // thing that needs the user is already on screen. Once per filter.
+  const autoPicked = useRef<string | null>(null);
+  useEffect(() => {
+    if (!q.data || selected !== null || autoPicked.current === status) return;
+    autoPicked.current = status;
+    if (!window.matchMedia("(min-width: 1024px)").matches) return;
+    const first = q.data.find(needsReview);
+    if (first) setSelected(first.id);
+  }, [q.data, selected, status]);
+
+  // Stacked layout: bring the editor into view when a runbook is picked.
+  const editorRef = useRef<HTMLElement>(null);
+  const pick = (id: string) => {
+    setSelected(id);
+    if (!window.matchMedia("(min-width: 1024px)").matches) {
+      window.requestAnimationFrame(() =>
+        editorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+      );
+    }
+  };
 
   return (
     <div className="space-y-6 max-w-[1200px]">
@@ -38,9 +62,14 @@ export default function RunbooksPage() {
         icon={BookMarked}
         title="Runbooks"
         actions={
-          <button type="button" className={btnPrimary} onClick={() => setSelected("new")}>
-            <Plus className="h-3.5 w-3.5" /> New runbook
-          </button>
+          <Button
+            variant="primary"
+            size="sm"
+            icon={<Plus className="h-3.5 w-3.5" aria-hidden />}
+            onClick={() => pick("new")}
+          >
+            New runbook
+          </Button>
         }
       >
         Your team&apos;s fixes, written down where the AI can use them. A published
@@ -72,12 +101,13 @@ export default function RunbooksPage() {
         >
           <ul className="space-y-2">
             {rows.map((r) => {
-              const aiDraft = r.status === "draft" && r.source === "generated";
+              const aiDraft = needsReview(r);
               return (
                 <li key={r.id}>
                   <button
                     type="button"
-                    onClick={() => setSelected(r.id)}
+                    onClick={() => pick(r.id)}
+                    aria-current={selected === r.id ? "true" : undefined}
                     className={cn(
                       "w-full text-left rounded-xl border p-3 bg-bg-card hover:bg-bg-elevated/40 transition-colors",
                       selected === r.id ? "border-accent/60" : "border-line"
@@ -88,19 +118,19 @@ export default function RunbooksPage() {
                         : undefined
                     }
                   >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium text-sm flex-1 min-w-0 truncate">{r.title}</span>
+                    <div className="font-medium text-sm break-words">{r.title}</div>
+                    <div className="mt-1.5">
                       {r.status === "published" ? (
                         <Chip tone="accent">published</Chip>
                       ) : aiDraft ? (
                         <Chip tone="warning">
-                          <Sparkles className="h-3 w-3" /> AI-drafted, needs review
+                          <Sparkles aria-hidden className="h-3 w-3" /> AI-drafted, needs review
                         </Chip>
                       ) : (
                         <Chip>draft</Chip>
                       )}
                     </div>
-                    <div className="text-[11px] text-muted mt-1 flex flex-wrap gap-x-2">
+                    <div className="text-xs text-muted mt-1.5 flex flex-wrap gap-x-2">
                       <span className="font-mono">{r.slug}</span>
                       <span>v{r.version}</span>
                       <span>{r.source}</span>
@@ -116,14 +146,20 @@ export default function RunbooksPage() {
           </ul>
         </LoadState>
 
-        <section className="rounded-2xl border border-line bg-bg-card p-4 lg:p-5">
+        <section
+          ref={editorRef}
+          className={cn(
+            "rounded-2xl border border-line bg-bg-card p-4 lg:p-5 scroll-mt-4",
+            selected === null && "hidden md:block"
+          )}
+        >
           {selected === null ? (
             <div className="text-sm text-muted">
               Pick a runbook to view or edit it, or create a new one.
             </div>
           ) : (
-            <>
-              <div className="text-[15px] font-medium mb-3">
+            <div key={selected} className="motion-enter">
+              <div className="text-[15px] font-medium mb-3 break-words">
                 {selected === "new" ? "New runbook" : current?.title ?? "Runbook"}
                 {current?.published_by && (
                   <span className="text-xs text-muted font-normal">
@@ -142,7 +178,7 @@ export default function RunbooksPage() {
                   onDone={(rb) => setSelected(rb ? rb.id : null)}
                 />
               )}
-            </>
+            </div>
           )}
         </section>
       </div>

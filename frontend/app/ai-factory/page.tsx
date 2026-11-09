@@ -33,7 +33,8 @@ import {
   type AiFactoryRole,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { cn } from "@/lib/utils";
+import { cn, formatRelative } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { FactoryOps } from "./components/factory-ops";
 import { LoadState } from "@/components/ui/load-state";
 import { GpuOnboardingCard, GpuServingPanel } from "@/components/gpu/connect-gpu";
@@ -117,20 +118,26 @@ export default function AiFactoryPage() {
             Grafana detour required.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {isAdmin && (
-            <button
-              type="button"
+            <Button
+              variant="primary"
+              size="sm"
               onClick={() => setAddingGpu((v) => !v)}
-              className="text-xs h-8 px-3 rounded-lg bg-gradient-to-r from-accent-emerald to-accent-cyan text-bg-base inline-flex items-center gap-1.5"
+              aria-expanded={addingGpu}
+              icon={<Plus className="h-3.5 w-3.5" aria-hidden />}
             >
-              <Plus className="h-3.5 w-3.5" /> Add GPU
-            </button>
+              Add GPU
+            </Button>
           )}
           <RoleBadge role={role} />
           {gpuClass && (
-            <span className="text-xs rounded-full px-3 py-1.5 border border-line text-muted inline-flex items-center gap-1.5 font-mono">
-              <Cpu className="h-3.5 w-3.5" /> {gpuClass}
+            <span
+              className="text-xs rounded-full px-3 py-1.5 border border-line text-muted inline-flex items-center gap-1.5"
+              title="The GPU class this tenant runs on"
+            >
+              <Cpu className="h-3.5 w-3.5" aria-hidden /> GPU class{" "}
+              <span className="font-mono text-fg">{gpuClass}</span>
             </span>
           )}
           {/* Only meaningful with at least one GPU: worstOf([]) is vacuously
@@ -168,13 +175,15 @@ export default function AiFactoryPage() {
             and the factory floor will light up here.
           </p>
           {isAdmin && !addingGpu && (
-            <button
-              type="button"
+            <Button
+              variant="primary"
+              size="sm"
+              className="mt-4"
               onClick={() => setAddingGpu(true)}
-              className="mt-4 inline-flex items-center gap-1.5 text-xs h-8 px-3 rounded-lg bg-gradient-to-r from-accent-emerald to-accent-cyan text-bg-base"
+              icon={<Plus className="h-3.5 w-3.5" aria-hidden />}
             >
-              <Plus className="h-3.5 w-3.5" /> Add GPU
-            </button>
+              Add GPU
+            </Button>
           )}
         </section>
       )}
@@ -192,13 +201,15 @@ export default function AiFactoryPage() {
             health here.
           </p>
           {isAdmin && !addingGpu && (
-            <button
-              type="button"
+            <Button
+              variant="primary"
+              size="sm"
+              className="mt-4"
               onClick={() => setAddingGpu(true)}
-              className="mt-4 inline-flex items-center gap-1.5 text-xs h-8 px-3 rounded-lg bg-gradient-to-r from-accent-emerald to-accent-cyan text-bg-base"
+              icon={<Plus className="h-3.5 w-3.5" aria-hidden />}
             >
-              <Plus className="h-3.5 w-3.5" /> Add GPU
-            </button>
+              Add GPU
+            </Button>
           )}
         </section>
       )}
@@ -265,8 +276,12 @@ const ROLE_LABEL: Record<AiFactoryRole, string> = {
 function RoleBadge({ role }: { role: AiFactoryRole }) {
   if (role === "none") return null;
   return (
-    <span className="text-xs rounded-full px-3 py-1.5 border border-accent-emerald/40 bg-accent-emerald/10 text-[color:var(--text)] inline-flex items-center gap-1.5">
-      <Factory className="h-3.5 w-3.5 text-accent-emerald" /> {ROLE_LABEL[role]}
+    <span
+      className="text-xs text-muted inline-flex items-center gap-1.5"
+      title="Your role for this AI Factory"
+    >
+      <Factory className="h-3.5 w-3.5" aria-hidden /> Your role:{" "}
+      <span className="font-medium text-fg">{ROLE_LABEL[role]}</span>
     </span>
   );
 }
@@ -380,7 +395,7 @@ function MetricCards({ gpus }: { gpus: AiFactoryGpu[] }) {
 
       {/* Per-GPU breakdown when more than one card is present. */}
       {n > 1 && (
-        <div className="rounded-xl border border-line bg-bg-elevated/40 overflow-hidden">
+        <div className="rounded-xl border border-line bg-bg-elevated/40 overflow-x-auto">
           <table className="w-full text-xs">
             <thead className="text-muted">
               <tr className="border-b border-line">
@@ -568,7 +583,7 @@ function GpuList({
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg bg-bg-base/40 px-2 py-1.5">
-      <div className="text-[10px] uppercase tracking-wide text-muted">
+      <div className="text-[11px] uppercase tracking-wide text-muted">
         {label}
       </div>
       <div className="text-sm font-medium mt-0.5">{value}</div>
@@ -649,9 +664,9 @@ function GpuDetail({
 // health, shown inside its detail view.
 function CardReliabilityStrip({ gpu }: { gpu: AiFactoryGpu }) {
   const items: { label: string; value: string; crit: boolean }[] = [
-    { label: "XID errors", value: String(gpu.xid_errors), crit: gpu.xid_errors > 0 },
+    { label: "Driver errors (XID)", value: String(gpu.xid_errors), crit: gpu.xid_errors > 0 },
     {
-      label: "Uncorrectable ECC",
+      label: "Memory errors (ECC)",
       value: String(gpu.ecc_dbe),
       crit: gpu.ecc_dbe > 0,
     },
@@ -664,10 +679,12 @@ function CardReliabilityStrip({ gpu }: { gpu: AiFactoryGpu }) {
   return (
     <section className="rounded-xl border border-line bg-bg-elevated/40 p-5">
       <h3 className="text-sm font-medium mb-3 flex items-center gap-1.5">
-        <Activity className="h-4 w-4 text-accent-emerald" /> Reliability
-        <span className="text-muted font-normal text-xs">· this GPU</span>
+        <Activity className="h-4 w-4 text-accent-emerald" aria-hidden /> Reliability
+        <span className="text-muted font-normal text-xs">
+          · this GPU&apos;s driver errors, memory errors and overheating
+        </span>
       </h3>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {items.map((it) => (
           <div
             key={it.label}
@@ -719,12 +736,16 @@ function HealthDot({ health }: { health: AiFactoryHealth }) {
       : health === "warn"
         ? "var(--warning)"
         : "var(--critical)";
+  const word = health === "ok" ? "Healthy" : health === "warn" ? "Degraded" : "Critical";
   return (
-    <span
-      className="inline-block h-2 w-2 rounded-full"
-      style={{ background: color, boxShadow: `0 0 8px ${color}` }}
-      title={health}
-    />
+    <span className="inline-flex items-center gap-1.5 text-xs text-muted whitespace-nowrap">
+      <span
+        aria-hidden
+        className="inline-block h-2 w-2 rounded-full"
+        style={{ background: color, boxShadow: `0 0 8px ${color}` }}
+      />
+      {word}
+    </span>
   );
 }
 
@@ -779,7 +800,7 @@ function TimeseriesPanel({ card }: { card?: string }) {
             {METRICS.find((m) => m.key === metric)?.label}
           </span>
         </h3>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Switcher
             options={METRICS.map((m) => ({ key: m.key, label: m.label }))}
             value={metric}
@@ -801,19 +822,20 @@ function TimeseriesPanel({ card }: { card?: string }) {
                 <stop offset="100%" stopColor="var(--accent)" stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid stroke="rgba(255,255,255,0.04)" vertical={false} />
-            <XAxis dataKey="t" stroke="rgba(255,255,255,0.3)" fontSize={10} />
+            <CartesianGrid stroke="var(--line)" vertical={false} />
+            <XAxis dataKey="t" stroke="var(--text-muted)" fontSize={11} />
             <YAxis
-              stroke="rgba(255,255,255,0.3)"
-              fontSize={10}
+              stroke="var(--text-muted)"
+              fontSize={11}
               domain={yDomain}
               width={38}
               tickFormatter={(v: number) => `${v}${unit}`}
             />
             <Tooltip
               contentStyle={{
-                background: "rgba(15,15,18,0.95)",
-                border: "1px solid rgba(255,255,255,0.08)",
+                background: "var(--bg-card)",
+                border: "1px solid var(--line)",
+                color: "var(--text)",
                 fontSize: 12,
               }}
               formatter={(v: number) => `${v.toFixed(1)}${unit}`}
@@ -887,15 +909,18 @@ function EventsTable({ card }: { card?: string }) {
   return (
     <section className="rounded-xl border border-line bg-bg-elevated/40 p-5">
       <h3 className="text-sm font-medium mb-3 flex items-center gap-1.5">
-        <AlertTriangle className="h-4 w-4 text-[color:var(--warning)]" /> XID /
-        ECC events
+        <AlertTriangle className="h-4 w-4 text-[color:var(--warning)]" aria-hidden /> Hardware
+        error events
+        <span className="text-muted font-normal text-xs">
+          · driver (XID) and memory (ECC) errors
+        </span>
       </h3>
       {events.length === 0 ? (
         <div className="text-xs text-muted">
           No hardware error events recorded. That&apos;s a good sign.
         </div>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-line">
+        <div className="overflow-x-auto rounded-lg border border-line">
           <table className="w-full text-xs">
             <thead className="text-muted">
               <tr className="border-b border-line">
@@ -908,14 +933,17 @@ function EventsTable({ card }: { card?: string }) {
             <tbody>
               {events.map((e, i) => (
                 <tr key={i} className="border-b border-line/50 last:border-0">
-                  <td className="px-3 py-2 text-muted whitespace-nowrap">
-                    {new Date(e.ts).toLocaleString()}
+                  <td
+                    className="px-3 py-2 text-muted whitespace-nowrap"
+                    title={new Date(e.ts).toLocaleString()}
+                  >
+                    {formatRelative(e.ts)}
                   </td>
                   <td className="px-3 py-2 font-mono">{e.gpu}</td>
                   <td className="px-3 py-2">
                     <span
                       className={cn(
-                        "inline-flex rounded px-1.5 py-0.5 border text-[10px]",
+                        "inline-flex rounded px-1.5 py-0.5 border text-[11px]",
                         e.kind === "ecc_sbe"
                           ? "border-signal-warning/40 text-[color:var(--warning)]"
                           : "border-signal-critical/40 text-[color:var(--critical)]"
@@ -971,7 +999,7 @@ function AlertsList({ card }: { card?: string }) {
               >
                 <span
                   className={cn(
-                    "mt-0.5 inline-flex rounded px-1.5 py-0.5 border text-[10px] uppercase tracking-wide shrink-0",
+                    "mt-0.5 inline-flex rounded px-1.5 py-0.5 border text-[11px] uppercase tracking-wide shrink-0",
                     tone
                   )}
                 >
@@ -981,7 +1009,10 @@ function AlertsList({ card }: { card?: string }) {
                   <div className="text-xs font-medium">{a.name}</div>
                   <div className="text-[11px] text-muted">{a.summary}</div>
                 </div>
-                <div className="ml-auto text-[10px] text-muted whitespace-nowrap">
+                <div
+                  className="ml-auto text-xs text-muted whitespace-nowrap"
+                  title={new Date(a.since).toLocaleString()}
+                >
                   {timeAgo(a.since)}
                 </div>
               </div>
@@ -1074,7 +1105,7 @@ function ConsumerPanel({
           </span>
           <span>{quotaPct.toFixed(0)}%</span>
         </div>
-        <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
+        <div className="h-1.5 rounded-full bg-bg-elevated overflow-hidden">
           <div
             className="h-full rounded-full"
             style={{

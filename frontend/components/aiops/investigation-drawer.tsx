@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ExternalLink, X, Zap } from "lucide-react";
+import { ExternalLink, Zap } from "lucide-react";
 import { api } from "@/lib/api";
 import { severityColor } from "@/lib/utils";
 import { LoadState } from "@/components/ui/load-state";
+import { Dialog } from "@/components/ui/dialog";
 import { Chip, fmtDateTime, fmtDuration } from "./ui";
 import { ModeChip } from "./autonomy-parts";
 import { RESOLUTION_LABEL, RESOLUTION_TONE } from "./investigation-panel";
@@ -22,37 +22,27 @@ export function InvestigationDrawer({ id, onClose }: { id: string; onClose: () =
     queryFn: () => api.aiops.investigations.get(id),
   });
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
   const inv = q.data;
+  // Dialog gives the drawer its role, label, Escape, focus trap and focus
+  // return, and slides it in from the right.
   return (
-    <>
-      <div className="fixed inset-0 z-40 bg-black/50" onClick={onClose} aria-hidden />
-      <aside
-        role="dialog"
-        aria-label="Investigation"
-        className="fixed inset-y-0 right-0 z-50 w-full max-w-[640px] bg-bg-base border-l border-line overflow-y-auto p-5 space-y-4 animate-fadeIn"
-      >
-        <div className="flex items-start gap-2">
-          <div className="flex-1 min-w-0">
-            <div className="text-[10px] uppercase tracking-wider text-muted">Investigation</div>
-            <h2 className="text-lg font-semibold leading-tight mt-0.5">
-              {inv?.alert_title ?? "Loading…"}
-            </h2>
-          </div>
-          <button type="button" onClick={onClose} aria-label="Close" className="h-8 w-8 rounded-lg border border-line inline-flex items-center justify-center">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+    <Dialog
+      open
+      onClose={onClose}
+      variant="drawer"
+      className="sm:max-w-[640px]"
+      title={
+        <>
+          <span className="block text-[11px] uppercase tracking-wider text-muted font-normal">Investigation</span>
+          <span className="block text-lg leading-tight mt-0.5">{inv?.alert_title ?? "Loading…"}</span>
+        </>
+      }
+    >
         <LoadState query={q} loadingText="Loading investigation…">
           {inv && (
-            <>
+            <div className="space-y-4 motion-enter">
               <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="uppercase tracking-wider font-semibold text-[10px]" style={{ color: severityColor[inv.alert_severity] }}>
+                <span className="uppercase tracking-wider font-semibold text-[11px]" style={{ color: severityColor[inv.alert_severity] }}>
                   {inv.alert_severity}
                 </span>
                 <Chip tone={RESOLUTION_TONE[inv.resolution] ?? "muted"}>
@@ -61,7 +51,7 @@ export function InvestigationDrawer({ id, onClose }: { id: string; onClose: () =
                 {inv.verified === true && <Chip tone="accent">fix verified</Chip>}
                 {inv.verified === false && <Chip tone="critical">fix did not verify</Chip>}
                 <Link href={`/alerts/${inv.alert_id}`} className="ml-auto inline-flex items-center gap-1 text-muted hover:text-fg">
-                  Open alert <ExternalLink className="h-3 w-3" />
+                  Open alert <ExternalLink aria-hidden className="h-3 w-3" />
                 </Link>
               </div>
               <dl className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
@@ -84,7 +74,7 @@ export function InvestigationDrawer({ id, onClose }: { id: string; onClose: () =
               </dl>
 
               <section className="surface p-4">
-                <div className="text-[10px] uppercase tracking-wider text-muted mb-2">Root cause</div>
+                <div className="text-[11px] uppercase tracking-wider text-muted mb-2">Root cause</div>
                 {inv.root_cause ? (
                   <article className="prose prose-sm dark:prose-invert max-w-none">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>{inv.root_cause}</ReactMarkdown>
@@ -101,7 +91,7 @@ export function InvestigationDrawer({ id, onClose }: { id: string; onClose: () =
               )}
 
               <section className="space-y-2">
-                <div className="text-[10px] uppercase tracking-wider text-muted">
+                <div className="text-[11px] uppercase tracking-wider text-muted">
                   Actions ({inv.actions.length})
                 </div>
                 {inv.actions.length === 0 && (
@@ -117,7 +107,7 @@ export function InvestigationDrawer({ id, onClose }: { id: string; onClose: () =
                           .map(([k, v]) => `${k}=${typeof v === "string" ? v : JSON.stringify(v)}`)
                           .join(" ")}
                       </span>
-                      <span className="ml-auto uppercase tracking-wider text-[10px] text-muted">{a.status}</span>
+                      <span className="ml-auto uppercase tracking-wider text-[11px] text-muted">{a.status}</span>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       {a.auto_executed ? (
@@ -142,10 +132,9 @@ export function InvestigationDrawer({ id, onClose }: { id: string; onClose: () =
                   </div>
                 ))}
               </section>
-            </>
+            </div>
           )}
         </LoadState>
-      </aside>
-    </>
+    </Dialog>
   );
 }

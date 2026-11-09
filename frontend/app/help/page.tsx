@@ -6,17 +6,18 @@ import {
   ArrowUpRight,
   BookOpen,
   Bug,
-  Check,
   GitBranch,
   HelpCircle,
   Lightbulb,
-  Loader2,
   MessageSquare,
   ServerCog,
   Sparkles,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { errorText } from "@/lib/errors";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast";
 
 /**
  * /help — three blocks down the page:
@@ -72,7 +73,7 @@ export default function HelpPage() {
     <div className="space-y-6 max-w-[1100px]">
       <div>
         <h1 className="text-2xl font-semibold flex items-center gap-2">
-          <HelpCircle className="h-5 w-5 text-accent-cyan" /> Help & Feedback
+          <HelpCircle className="h-5 w-5 text-accent-cyan" aria-hidden /> Help & Feedback
         </h1>
         <p className="text-muted text-sm mt-1">
           Documentation, and a direct channel back to the team.
@@ -92,7 +93,7 @@ function DocsSection() {
   return (
     <section className="rounded-xl border border-line bg-bg-elevated/40 p-5">
       <div className="flex items-center gap-2 mb-4">
-        <BookOpen className="h-4 w-4 text-muted" />
+        <BookOpen className="h-4 w-4 text-muted" aria-hidden />
         <h2 className="text-sm font-medium">Documentation</h2>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -111,7 +112,8 @@ function DocsSection() {
                     className="text-sm flex items-center gap-1.5 text-[color:var(--text)] hover:text-accent-blue group"
                   >
                     <span className="truncate">{l.label}</span>
-                    <ArrowUpRight className="h-3 w-3 opacity-50 group-hover:opacity-100 shrink-0" />
+                    <ArrowUpRight className="h-3 w-3 opacity-50 group-hover:opacity-100 shrink-0" aria-hidden />
+                    <span className="sr-only">(opens in a new tab)</span>
                   </a>
                 </li>
               ))}
@@ -128,8 +130,8 @@ function DocsSection() {
 function FeedbackSection() {
   const [category, setCategory] = useState<string>("general");
   const [message, setMessage] = useState("");
-  const [ok, setOk] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const toast = useToast();
 
   const send = useMutation({
     mutationFn: () =>
@@ -140,23 +142,22 @@ function FeedbackSection() {
           typeof window !== "undefined" ? window.location.pathname : "",
       }),
     onSuccess: () => {
-      setOk(true);
       setMessage("");
       setErr(null);
-      setTimeout(() => setOk(false), 4000);
+      toast.success("Thanks, your feedback is with the team.");
     },
-    onError: (e: Error) => {
-      setErr(e.message || "could not send");
-      setOk(false);
+    onError: (e) => {
+      setErr(errorText(e));
+      toast.error(`Feedback not sent. ${errorText(e)}`);
     },
   });
 
-  const canSend = message.trim().length > 0 && !send.isPending;
+  const hasMessage = message.trim().length > 0;
 
   return (
     <section className="rounded-xl border border-line bg-bg-elevated/40 p-5">
       <div className="flex items-center gap-2 mb-1">
-        <MessageSquare className="h-4 w-4 text-muted" />
+        <MessageSquare className="h-4 w-4 text-muted" aria-hidden />
         <h2 className="text-sm font-medium">Send feedback</h2>
       </div>
       <p className="text-xs text-muted mb-4 max-w-[640px]">
@@ -164,25 +165,31 @@ function FeedbackSection() {
         when reporting a bug.
       </p>
 
-      <div className="flex flex-wrap gap-2 mb-3">
+      <div role="radiogroup" aria-label="Feedback type" className="flex flex-wrap gap-2 mb-3">
         {CATEGORIES.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
             type="button"
+            role="radio"
+            aria-checked={category === id}
             onClick={() => setCategory(id)}
             className={cn(
-              "text-xs h-8 px-3 rounded-lg border flex items-center gap-1.5 transition-colors",
+              "motion-press text-sm h-9 px-3.5 rounded-lg border flex items-center gap-1.5 transition-colors",
               category === id
                 ? "border-accent bg-accent/15 text-fg font-medium"
                 : "border-line text-muted hover:text-[color:var(--text)]"
             )}
           >
-            <Icon className="h-3.5 w-3.5" /> {label}
+            <Icon className="h-3.5 w-3.5" aria-hidden /> {label}
           </button>
         ))}
       </div>
 
+      <label htmlFor="feedback-message" className="block text-xs font-medium text-muted mb-1.5">
+        Your message
+      </label>
       <textarea
+        id="feedback-message"
         value={message}
         onChange={(e) => setMessage(e.target.value)}
         rows={5}
@@ -191,29 +198,22 @@ function FeedbackSection() {
       />
 
       {err && (
-        <div className="mt-2 text-xs text-[color:var(--critical)]">{err}</div>
-      )}
-      {ok && (
-        <div className="mt-2 text-xs text-accent-blue flex items-center gap-1.5">
-          <Check className="h-3.5 w-3.5" /> Thanks — your feedback is in.
-        </div>
+        <div role="alert" className="mt-2 text-sm text-signal-critical">{err}</div>
       )}
 
-      <div className="flex justify-end mt-3">
-        <button
-          type="button"
+      <div className="flex items-center justify-end gap-3 mt-3">
+        {!hasMessage && (
+          <span className="text-xs text-muted">Write a message to send.</span>
+        )}
+        <Button
+          variant="primary"
           onClick={() => send.mutate()}
-          disabled={!canSend}
-          className="text-xs h-9 px-3 rounded-lg border border-accent-blue/60 bg-accent-blue/10 hover:bg-accent-blue/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+          pending={send.isPending}
+          disabled={!hasMessage}
+          disabledReason={send.isPending ? "Sending…" : "Write a message to send"}
         >
-          {send.isPending ? (
-            <>
-              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Sending…
-            </>
-          ) : (
-            "Send feedback"
-          )}
-        </button>
+          Send feedback
+        </Button>
       </div>
     </section>
   );
@@ -226,9 +226,12 @@ function StatusSection() {
     queryKey: ["meta", "version"],
     queryFn: api.meta.version,
     refetchOnWindowFocus: false,
+    // A missing endpoint won't appear on retry; answer at once instead of
+    // sitting on "Loading…" through three backoffs.
+    retry: false,
   });
 
-  // Missing or "unknown" values read as "unknown", never as a bare dash.
+  // Missing or "unknown" values read as "Not recorded" (or "unknown" for the version), never as a bare dash.
   const known = (v: string | null | undefined) =>
     v && v !== "unknown" && v !== "—" ? v : null;
   const sha = known(version.data?.commit_sha);
@@ -237,10 +240,19 @@ function StatusSection() {
   return (
     <section className="rounded-xl border border-line bg-bg-elevated/40 p-5">
       <div className="flex items-center gap-2 mb-4">
-        <ServerCog className="h-4 w-4 text-muted" />
+        <ServerCog className="h-4 w-4 text-muted" aria-hidden />
         <h2 className="text-sm font-medium">System status</h2>
       </div>
 
+      {version.isError ? (
+        // The build-info endpoint isn't reachable from every deployment
+        // (it 404s when only /api is proxied). That says nothing about the
+        // platform's health, so show a neutral note, never an outage.
+        <p className="text-sm text-muted motion-enter">
+          Version info unavailable. Daalu itself is unaffected; if support asks
+          for the build, they can read it from the server.
+        </p>
+      ) : (
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <StatBlock
           label="Version"
@@ -249,22 +261,17 @@ function StatusSection() {
         />
         <StatBlock
           label="Commit"
-          value={sha ? sha.slice(0, 12) : "unknown"}
+          value={sha ? sha.slice(0, 12) : "Not recorded"}
           mono
           loading={version.isLoading}
           icon={GitBranch}
         />
         <StatBlock
           label="Built"
-          value={built ? formatBuilt(built) : "unknown"}
+          value={built ? formatBuilt(built) : "Not recorded"}
           loading={version.isLoading}
         />
       </div>
-
-      {version.isError && (
-        <div className="text-xs text-[color:var(--critical)] mt-3">
-          Couldn&apos;t read the version. The API may be unavailable.
-        </div>
       )}
     </section>
   );
@@ -294,7 +301,7 @@ function StatBlock({
           mono && "font-mono"
         )}
       >
-        {Icon && <Icon className="h-3.5 w-3.5 text-muted" />}
+        {Icon && <Icon className="h-3.5 w-3.5 text-muted" aria-hidden />}
         {loading ? "Loading…" : value}
       </div>
     </>

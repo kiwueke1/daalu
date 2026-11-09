@@ -25,7 +25,7 @@ export default function BenchmarkPage() {
   return (
     <FactoryPageShell
       title="Performance benchmarking"
-      subtitle="Run an AIPerf concurrency sweep to measure TTFT, inter-token latency and throughput — the SLO curve behind capacity planning and pricing."
+      subtitle="Measure how fast your model answers as more users send requests at once: time to first token, time between tokens and throughput (AIPerf)."
     >
       <LoadState query={overview} loadingText="Checking your access…">
         {!(isSuperuser || isHardware) ? (

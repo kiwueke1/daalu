@@ -8,8 +8,11 @@ import { FileText, RotateCcw } from "lucide-react";
 import { api } from "@/lib/api";
 import { ReportsQueryTab } from "@/components/reports/query-tab";
 import { ReportsDashboardsTab } from "@/components/reports/dashboards-tab";
-import { TabBar, useUrlTab } from "@/components/ui/tabs";
+import { TabBar, TabPanel, useUrlTab } from "@/components/ui/tabs";
 import { LoadState } from "@/components/ui/load-state";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast";
+import { errorText } from "@/lib/errors";
 
 const TABS = [
   { id: "briefings", label: "Briefings" },
@@ -28,7 +31,7 @@ function ReportsPageInner() {
     <div className="space-y-6 max-w-[1200px]">
       <header>
         <h1 className="text-2xl font-semibold flex items-center gap-2">
-          <FileText className="h-5 w-5 text-accent-blue" /> Reports
+          <FileText className="h-5 w-5 text-accent" aria-hidden /> Reports
         </h1>
         <p className="text-muted text-sm mt-1">
           Daily AI briefings, ad-hoc queries over your events, and reports
@@ -44,13 +47,15 @@ function ReportsPageInner() {
         ariaLabel="Reports sections"
       />
 
-      {tab === "query" ? (
-        <ReportsQueryTab />
-      ) : tab === "dashboards" ? (
-        <ReportsDashboardsTab />
-      ) : (
-        <BriefingsTab />
-      )}
+      <TabPanel id={tab}>
+        {tab === "query" ? (
+          <ReportsQueryTab />
+        ) : tab === "dashboards" ? (
+          <ReportsDashboardsTab />
+        ) : (
+          <BriefingsTab />
+        )}
+      </TabPanel>
     </div>
   );
 }
@@ -65,6 +70,8 @@ export default function ReportsPage() {
 
 function BriefingsTab() {
   const qc = useQueryClient();
+  const toast = useToast();
+  const router = useRouter();
   const q = useQuery({
     queryKey: ["briefings", "infra"],
     queryFn: () => api.briefings.list("infra"),
@@ -72,10 +79,14 @@ function BriefingsTab() {
 
   const generate = useMutation({
     mutationFn: () => api.briefings.generate("infra"),
-    onSuccess: () => {
+    onSuccess: (b) => {
       qc.invalidateQueries({ queryKey: ["briefings"] });
       qc.invalidateQueries({ queryKey: ["briefing"] });
+      toast.success("New briefing ready.", {
+        action: b?.id ? { label: "Open", onClick: () => router.push(`/reports/briefings/${b.id}`) } : undefined,
+      });
     },
+    onError: (e) => toast.error(errorText(e)),
   });
 
   useEffect(() => {
@@ -90,25 +101,24 @@ function BriefingsTab() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-muted">
+        <p className="text-sm text-muted">
           Daalu writes a briefing every day from your events. Generate one now
           to cover what changed since the last one.
         </p>
         {!q.isLoading && (
-          <button
+          <Button
+            size="sm"
+            variant={latest ? "secondary" : "primary"}
             onClick={() => generate.mutate()}
-            disabled={generate.isPending}
-            className="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-line text-muted hover:text-fg hover:bg-bg-elevated/60 transition-colors disabled:opacity-50"
+            pending={generate.isPending}
+            icon={<RotateCcw className="h-3.5 w-3.5" aria-hidden />}
           >
-            <RotateCcw
-              className={`h-3.5 w-3.5 ${generate.isPending ? "animate-spin" : ""}`}
-            />
             {generate.isPending
-              ? "Generating…"
+              ? "Generating… (about a minute)"
               : latest
               ? "Generate a new briefing"
               : "Generate today's briefing"}
-          </button>
+          </Button>
         )}
       </div>
 
@@ -127,15 +137,16 @@ function BriefingsTab() {
       >
         {latest && (
           <Link
+            key={latest.id}
             href={`/reports/briefings/${latest.id}`}
-            className="block gradient-border p-6 lg:p-8 bg-hero-grad hover:opacity-95 transition-opacity"
+            className="motion-enter block gradient-border p-6 lg:p-8 bg-hero-grad hover:opacity-95 transition-opacity"
           >
-            <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-accent-blue mb-2">
-              <FileText className="h-3.5 w-3.5" /> Latest · {latest.channel} ·{" "}
+            <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-accent mb-2">
+              <FileText className="h-3.5 w-3.5" aria-hidden /> Latest · {latest.channel} ·{" "}
               {latest.coverage_date}
             </div>
             <h2 className="text-2xl font-semibold mb-3">{latest.title}</h2>
-            <p className="text-fg/70 line-clamp-3">{latest.summary}</p>
+            <p className="text-muted line-clamp-3">{latest.summary}</p>
             <span className="mt-3 inline-block text-xs text-muted">Open the briefing →</span>
           </Link>
         )}
@@ -151,7 +162,7 @@ function BriefingsTab() {
               <li key={b.id}>
                 <Link
                   href={`/reports/briefings/${b.id}`}
-                  className="block w-full text-left rounded-xl border border-line bg-bg-card p-3 text-sm hover:border-accent-blue/60 hover:bg-bg-elevated/60 transition-colors"
+                  className="block w-full text-left rounded-xl border border-line bg-bg-card p-3 text-sm hover:border-accent/60 hover:bg-bg-elevated/60 transition-colors"
                 >
                   <div className="text-muted text-xs">{b.coverage_date}</div>
                   <div className="font-medium">{b.title}</div>

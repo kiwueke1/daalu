@@ -2,8 +2,12 @@
 
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { DaaluMark } from "@/components/brand/daalu-mark";
-import { api } from "@/lib/api";
+import { DaaluWordmark } from "@/components/brand/daalu-mark";
+import { Button } from "@/components/ui/button";
+import { api, ApiError } from "@/lib/api";
+import { errorText } from "@/lib/errors";
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function SignupPage() {
   return (
@@ -27,16 +31,27 @@ function SignupForm() {
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [resent, setResent] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [emailTouched, setEmailTouched] = useState(false);
+
+  const emailInvalid = emailTouched && email.length > 0 && !EMAIL_RE.test(email);
+  const pwShort = password.length > 0 && password.length < 8;
+  const pwMismatch = confirm.length > 0 && confirm !== password;
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    if (!EMAIL_RE.test(email)) {
+      setEmailTouched(true);
+      setError("Enter an email like name@example.com.");
+      return;
+    }
     if (password.length < 8) {
-      setError("Password must be at least 8 characters.");
+      setError("Use a password of at least 8 characters.");
       return;
     }
     if (password !== confirm) {
-      setError("Passwords don't match.");
+      setError("The two passwords don't match. Retype the confirmation.");
       return;
     }
     setBusy(true);
@@ -49,11 +64,10 @@ function SignupForm() {
       });
       setDone(true);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
       setError(
-        /404/.test(msg)
-          ? "Account creation isn't available on this hub."
-          : "Sign-up failed. Please try again.",
+        err instanceof ApiError && err.status === 404
+          ? "Account creation isn't turned on here. Ask your admin for an invite."
+          : errorText(err),
       );
     } finally {
       setBusy(false);
@@ -62,9 +76,11 @@ function SignupForm() {
 
   async function resend() {
     setResent(false);
+    setResending(true);
     try {
       await api.auth.resendVerification(email);
     } finally {
+      setResending(false);
       setResent(true);
     }
   }
@@ -79,34 +95,33 @@ function SignupForm() {
         }}
       />
       <div className="relative w-full max-w-sm">
-        <div className="flex items-center gap-3 mb-8">
-          <DaaluMark />
-          <div>
-            <div className="text-sm font-semibold tracking-wide">Daalu</div>
-            <div className="text-[10px] tracking-[0.18em] text-muted">
-              intelligent IT operations
-            </div>
-          </div>
+        <div className="mb-8">
+          <DaaluWordmark />
         </div>
 
         {done ? (
-          <div className="space-y-4">
+          <div className="space-y-4 motion-enter">
             <h1 className="text-xl font-semibold">Check your email</h1>
             <p className="text-sm text-muted">
               We&apos;ve sent a verification link to{" "}
               <span className="text-[color:var(--text)]">{email}</span>. Click it
               to activate your account, then sign in.
             </p>
-            <div className="text-xs text-muted">
-              Didn&apos;t get it?{" "}
+            <div className="text-sm text-muted">
+              Didn&apos;t get it? Check spam, then{" "}
               <button
                 type="button"
                 onClick={resend}
-                className="text-[color:var(--accent)] hover:underline"
+                disabled={resending}
+                className="font-medium text-[color:var(--accent)] hover:underline disabled:opacity-60"
               >
-                Resend the link
+                {resending ? "sending…" : "resend the link"}
               </button>
-              {resent && <span className="ml-1 text-accent-emerald">Sent.</span>}
+              {resent && (
+                <span role="status" className="ml-1 text-accent motion-enter">
+                  Sent.
+                </span>
+              )}
             </div>
             <a
               href={loginHref}
@@ -123,7 +138,7 @@ function SignupForm() {
               workspace.
             </p>
 
-            <form onSubmit={onSubmit} className="space-y-3">
+            <form onSubmit={onSubmit} className="space-y-3" noValidate>
               <Field label="Full name">
                 <input
                   type="text"
@@ -137,13 +152,22 @@ function SignupForm() {
                 <input
                   type="email"
                   autoComplete="email"
+                  inputMode="email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  onBlur={() => setEmailTouched(true)}
+                  aria-invalid={emailInvalid || undefined}
+                  aria-describedby={emailInvalid ? "signup-email-hint" : undefined}
                   className={inputCls}
                 />
+                {emailInvalid && (
+                  <span id="signup-email-hint" className="mt-1 block text-xs text-signal-critical">
+                    Enter an email like name@example.com.
+                  </span>
+                )}
               </Field>
-              <Field label="Organization (optional)">
+              <Field label="Organisation (optional)">
                 <input
                   type="text"
                   autoComplete="organization"
@@ -160,10 +184,19 @@ function SignupForm() {
                   minLength={8}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  aria-invalid={pwShort || undefined}
+                  aria-describedby="signup-pw-hint"
                   className={inputCls}
                 />
-                <span className="mt-1 block text-[11px] text-muted">
-                  At least 8 characters.
+                <span
+                  id="signup-pw-hint"
+                  className={`mt-1 block text-xs ${pwShort ? "text-signal-critical" : password ? "text-accent" : "text-muted"}`}
+                >
+                  {pwShort
+                    ? `At least 8 characters: ${8 - password.length} more to go.`
+                    : password
+                      ? "Long enough."
+                      : "At least 8 characters."}
                 </span>
               </Field>
               <Field label="Confirm password">
@@ -174,33 +207,44 @@ function SignupForm() {
                   minLength={8}
                   value={confirm}
                   onChange={(e) => setConfirm(e.target.value)}
+                  aria-invalid={pwMismatch || undefined}
+                  aria-describedby="signup-confirm-hint"
                   className={inputCls}
                 />
+                {confirm && (
+                  <span
+                    id="signup-confirm-hint"
+                    aria-live="polite"
+                    className={`mt-1 block text-xs ${pwMismatch ? "text-signal-critical" : "text-accent"}`}
+                  >
+                    {pwMismatch ? "Passwords don't match yet." : "Passwords match."}
+                  </span>
+                )}
               </Field>
 
               {error && (
-                <div className="text-xs text-signal-critical bg-signal-critical/10 border border-signal-critical/30 rounded px-3 py-2">
+                <div
+                  role="alert"
+                  className="text-sm text-signal-critical bg-signal-critical/10 border border-signal-critical/30 rounded-md px-3 py-2 motion-enter"
+                >
                   {error}
                 </div>
               )}
 
-              <button
+              <Button
                 type="submit"
-                disabled={busy}
-                className="w-full rounded-md text-sm font-medium py-2 transition-colors disabled:opacity-60"
-                style={{
-                  background: "var(--accent)",
-                  color: "var(--bg-base)",
-                  boxShadow: "0 0 22px var(--accent-glow)",
-                }}
+                variant="primary"
+                pending={busy}
+                disabledReason="Creating your account…"
+                className="w-full h-10"
               >
                 {busy ? "Creating account…" : "Create account"}
-              </button>
+              </Button>
             </form>
 
-            <p className="text-[12px] text-muted text-center pt-4">
+            <p className="text-sm text-muted text-center pt-4">
               Already have an account?{" "}
-              <a href={loginHref} className="text-[color:var(--accent)] hover:underline">
+              <a href={loginHref} className="font-medium text-[color:var(--accent)] hover:underline">
                 Sign in
               </a>
             </p>
@@ -212,12 +256,12 @@ function SignupForm() {
 }
 
 const inputCls =
-  "mt-1 w-full bg-bg-secondary/60 border border-line rounded-md px-3 py-2 text-sm focus:outline-none focus:border-accent-blue/60 focus:bg-bg-secondary";
+  "mt-1 w-full h-10 bg-bg-secondary/60 border border-line rounded-md px-3 text-sm focus:border-accent focus:bg-bg-secondary aria-[invalid=true]:border-signal-critical";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="text-xs uppercase tracking-wider text-muted">{label}</span>
+      <span className="text-sm font-medium">{label}</span>
       {children}
     </label>
   );

@@ -10,6 +10,9 @@ import {
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { LoadState } from "@/components/ui/load-state";
+import { Button } from "@/components/ui/button";
+import { HUB } from "@/lib/hub-routes";
+import { isUnreachable, withTimeout } from "@/lib/timeout";
 
 /**
  * Reliability — the NVSentinel auto-remediation posture for the tenant's card,
@@ -26,8 +29,11 @@ import { LoadState } from "@/components/ui/load-state";
 export function ReliabilityPanel() {
   const rel = useQuery({
     queryKey: ["aiFactory", "reliability"],
-    queryFn: api.aiFactory.reliability,
+    // The signals come from Prometheus; with no live infra the request can
+    // hang, so give up after a while and say so instead of spinning.
+    queryFn: () => withTimeout(api.aiFactory.reliability(), "Prometheus"),
     refetchInterval: 30_000,
+    retry: false,
   });
 
   const data = rel.data;
@@ -36,8 +42,26 @@ export function ReliabilityPanel() {
       query={rel}
       empty={!data || data.status === "n/a"}
       loadingText="Reading the fault signals…"
+      notSetUp={{
+        when: isUnreachable,
+        title: "Couldn't reach Prometheus",
+        hint: (
+          <>
+            Check the cluster&apos;s observability connection in{" "}
+            <Link href={HUB.clusters} className="underline">
+              Managed infra
+            </Link>
+            .
+          </>
+        ),
+        action: (
+          <Button size="sm" onClick={() => rel.refetch()}>
+            Retry
+          </Button>
+        ),
+      }}
       emptyTitle="No GPU is reporting reliability signals"
-      emptyHint="Fault signals (XID, ECC, thermal) show here once a GPU card is onboarded and its metrics reach Daalu."
+      emptyHint="Fault signals (driver errors, memory errors and overheating) show here once a GPU card is onboarded and its metrics reach Daalu."
       emptyAction={
         <Link
           href="/ai-factory"
@@ -72,7 +96,7 @@ function ReliabilityBody({ data }: { data: AiFactoryReliability }) {
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h3 className="text-sm font-medium flex items-center gap-1.5">
           <Icon className={cn("h-4 w-4", tone)} /> Auto-remediation
-          <span className="text-[10px] text-muted font-normal ml-1 uppercase tracking-wide">
+          <span className="text-[11px] text-muted font-normal ml-1 uppercase tracking-wide">
             NVSentinel
           </span>
         </h3>
@@ -84,7 +108,9 @@ function ReliabilityBody({ data }: { data: AiFactoryReliability }) {
       </div>
       <p className="text-xs text-muted mt-1 max-w-[620px]">
         NVSentinel watches the card&apos;s fault stream and, once it leaves
-        observe mode, cordons and recovers a faulted node in seconds.
+        observe mode, cordons and recovers a faulted node in seconds. The
+        signals below are driver errors (XID), memory errors (ECC) and
+        overheating (thermal).
       </p>
 
       {data.metrics_available === false ? (
@@ -113,15 +139,15 @@ function ReliabilityBody({ data }: { data: AiFactoryReliability }) {
             cuda-checkpoint
             <span
               className={cn(
-                "inline-flex rounded px-1.5 py-0.5 border text-[10px] uppercase tracking-wide",
+                "inline-flex rounded px-1.5 py-0.5 border text-[11px] font-medium",
                 data.cuda_checkpoint.status === "enabled"
                   ? "border-accent-emerald/40 text-[color:var(--text)]"
                   : "border-line text-muted"
               )}
             >
               {data.cuda_checkpoint.status === "enabled"
-                ? "enabled"
-                : "gated — legal sign-off"}
+                ? "Enabled"
+                : "Awaiting legal sign-off"}
             </span>
           </div>
           <p className="text-[11px] text-muted mt-1">
@@ -185,7 +211,7 @@ function SignalCard({
         : "border-line text-[color:var(--text)]";
   return (
     <div className={cn("rounded-lg border bg-bg-base/40 px-3.5 py-3", tone)}>
-      <div className="text-[10px] uppercase tracking-[0.12em] text-muted">
+      <div className="text-[11px] uppercase tracking-[0.12em] text-muted">
         {name}
       </div>
       <div className="text-lg font-semibold mt-1">

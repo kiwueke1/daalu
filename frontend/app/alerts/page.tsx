@@ -2,11 +2,13 @@
 
 import { Suspense } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { api, type Alert } from "@/lib/api";
 import { AlertTile } from "@/components/alerts/alert-tile";
-import { TabBar, useUrlTab } from "@/components/ui/tabs";
+import { TabBar, TabPanel, useUrlTab } from "@/components/ui/tabs";
 import { LoadState } from "@/components/ui/load-state";
+import { useToast } from "@/components/ui/toast";
+import { errorText } from "@/lib/errors";
 
 const TABS = [
   { id: "open", label: "Open" },
@@ -42,6 +44,7 @@ const EMPTY_HINT: Record<Status, string> = {
 function AlertsPageInner() {
   const [tab, setTab] = useUrlTab<Status>(TAB_IDS, "open");
   const qc = useQueryClient();
+  const toast = useToast();
 
   // Open + acknowledged always load, so their tabs can show counts.
   const openQ = useQuery({
@@ -64,11 +67,19 @@ function AlertsPageInner() {
 
   const ack = useMutation({
     mutationFn: (id: string) => api.alerts.acknowledge(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["alerts"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["alerts"] });
+      toast.success("Alert acknowledged. It stays open under Acknowledged.");
+    },
+    onError: (e) => toast.error(errorText(e)),
   });
   const resolve = useMutation({
     mutationFn: (id: string) => api.alerts.resolve(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["alerts"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["alerts"] });
+      toast.success("Alert resolved. Its investigation has stopped.");
+    },
+    onError: (e) => toast.error(errorText(e)),
   });
 
   const openCount = openQ.data?.length;
@@ -79,7 +90,7 @@ function AlertsPageInner() {
     <div className="space-y-6 max-w-[1200px]">
       <div>
         <h1 className="text-2xl font-semibold flex items-center gap-2">
-          <Bell className="h-5 w-5 text-accent-red" /> Alerts
+          <AlertTriangle aria-hidden className="h-5 w-5 text-accent" /> Alerts
         </h1>
         <p className="text-muted text-sm mt-1">
           Problems Daalu picked out of your event stream, most severe first.
@@ -111,7 +122,7 @@ function AlertsPageInner() {
         emptyTitle={`No ${tab} alerts`}
         emptyHint={EMPTY_HINT[tab]}
       >
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <TabPanel id={tab} className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           {items.map((a) => (
             <AlertTile
               key={a.id}
@@ -121,7 +132,7 @@ function AlertsPageInner() {
               resolving={resolve.isPending && resolve.variables === a.id}
             />
           ))}
-        </div>
+        </TabPanel>
       </LoadState>
     </div>
   );

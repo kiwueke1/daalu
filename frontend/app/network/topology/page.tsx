@@ -11,13 +11,14 @@ import {
   RefreshCw,
   Waypoints,
 } from "lucide-react";
-import { api, type TopoLinkStatus, type TopoNode } from "@/lib/api";
+import { api, ApiError, type TopoLinkStatus, type TopoNode } from "@/lib/api";
 import { FabricGraph, LINK_COLOR, LINK_STYLE } from "@/components/topology/FabricGraph";
 import { NodeDrawer } from "@/components/topology/NodeDrawer";
 import { DeviceTerminal } from "@/components/topology/DeviceTerminal";
 import { cn } from "@/lib/utils";
 import { HUB } from "@/lib/hub-routes";
 import { LoadState } from "@/components/ui/load-state";
+import { Button } from "@/components/ui/button";
 
 // Which links each view draws. "Observed" is the wire truth — only
 // adjacencies actually seen via LLDP. "Planned" is the intent — the
@@ -83,8 +84,8 @@ function GraphLoading({
     return () => window.clearTimeout(t);
   }, []);
   return (
-    <div className="rounded-2xl border border-line bg-bg-card p-10 text-center text-sm text-muted">
-      <Loader2 className="mx-auto mb-3 h-5 w-5 animate-spin text-accent-cyan" />
+    <div role="status" className="rounded-2xl border border-line bg-bg-card p-10 text-center text-sm text-muted">
+      <Loader2 className="mx-auto mb-3 h-5 w-5 animate-spin text-accent-cyan" aria-hidden />
       {slow ? (
         <>
           <div>
@@ -92,13 +93,14 @@ function GraphLoading({
             {envLabel ? ` from ${envLabel}` : ""}…
           </div>
           {onRetry && (
-            <button
-              type="button"
+            <Button
+              size="sm"
               onClick={onRetry}
-              className="mt-3 h-8 px-3 rounded-lg border border-line text-xs inline-flex items-center gap-1.5 hover:text-[color:var(--text)]"
+              className="mt-3"
+              icon={<RefreshCw className="h-3.5 w-3.5" aria-hidden />}
             >
-              <RefreshCw className="h-3.5 w-3.5" /> Retry
-            </button>
+              Retry
+            </Button>
           )}
         </>
       ) : (
@@ -153,7 +155,8 @@ function TopologyView() {
 
   // 403 → the tenant doesn't have the feature flag on.
   const forbidden =
-    error instanceof Error && error.message.startsWith("403");
+    (error instanceof ApiError && error.status === 403) ||
+    (error instanceof Error && error.message.startsWith("403"));
 
   return (
     <div className="space-y-5 max-w-[1440px]">
@@ -166,7 +169,7 @@ function TopologyView() {
         href={HUB.network}
         className="text-xs text-muted hover:text-[color:var(--text)] inline-flex items-center gap-1.5"
       >
-        <ArrowLeft className="h-3.5 w-3.5" /> Back to network &amp; servers
+        <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> Network
       </Link>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
@@ -180,12 +183,23 @@ function TopologyView() {
             )}
           </h1>
           <p className="mt-1 text-sm text-muted">
-            The live network fabric
-            {envLabel ? ` in ${envLabel}` : ""} — links coloured from observed
-            LLDP adjacency and device telemetry. Click a node to inspect it or
-            open a shell.
+            {data && data.nodes.length > 0 ? (
+              <>
+                The live network fabric
+                {envLabel ? ` in ${envLabel}` : ""} — links coloured from observed
+                LLDP adjacency and device telemetry. Click a node to inspect it or
+                open a shell.
+              </>
+            ) : (
+              <>
+                A live map of your network fabric
+                {envLabel ? ` in ${envLabel}` : ""}: devices, the links between
+                them and their health, from LLDP and device telemetry.
+              </>
+            )}
           </p>
         </div>
+        {!forbidden && (
         <div className="flex flex-wrap items-center gap-3">
           {data && (
             <div className="text-xs text-muted">
@@ -225,7 +239,7 @@ function TopologyView() {
                 aria-selected={view === v}
                 onClick={() => setView(v)}
                 className={cn(
-                  "rounded-md px-2.5 py-1 whitespace-nowrap transition-colors",
+                  "rounded-md px-2.5 min-h-[28px] whitespace-nowrap transition-colors",
                   view === v
                     ? "bg-bg-elevated text-[color:var(--text)]"
                     : "text-muted hover:text-[color:var(--text)]"
@@ -236,26 +250,28 @@ function TopologyView() {
               </button>
             ))}
           </div>
-          <button
-            type="button"
+          <Button
+            size="sm"
             onClick={() => refetch()}
-            className="flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1.5 text-xs text-muted hover:text-[color:var(--text)] transition-colors"
+            icon={<RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} aria-hidden />}
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
             Refresh
-          </button>
+          </Button>
         </div>
+        )}
       </div>
 
-      {/* Legend */}
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-muted">
-        {LEGEND[view].map((l) => (
-          <span key={l.status} className="inline-flex items-center gap-2">
-            <LegendSwatch status={l.status} />
-            {l.label}
-          </span>
-        ))}
-      </div>
+      {/* Legend: only meaningful when there's a graph to read. */}
+      {!forbidden && !error && (
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-muted">
+          {LEGEND[view].map((l) => (
+            <span key={l.status} className="inline-flex items-center gap-2">
+              <LegendSwatch status={l.status} />
+              {l.label}
+            </span>
+          ))}
+        </div>
+      )}
 
       {forbidden ? (
         <div className="rounded-2xl border border-line bg-bg-card p-8 text-center">
@@ -263,10 +279,15 @@ function TopologyView() {
           <p className="text-sm text-[color:var(--text)]">
             Live topology isn’t enabled for this workspace yet.
           </p>
-          <p className="mt-1 text-xs text-muted">
-            Ask your Daalu administrator to turn on the fabric view for this
-            workspace.
+          <p className="mt-1 text-sm text-muted">
+            A tenant admin can turn on the fabric view for this workspace.
           </p>
+          <Link
+            href="/settings?tab=team"
+            className="mt-3 inline-flex text-sm text-accent hover:underline"
+          >
+            See your workspace admins in Settings
+          </Link>
         </div>
       ) : error ? (
         <LoadState

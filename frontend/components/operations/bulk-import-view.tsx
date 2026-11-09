@@ -17,6 +17,10 @@ import {
   type SotBulkRow,
   type SotCatalogPlan,
 } from "@/lib/api";
+import { errorText } from "@/lib/errors";
+import { Button } from "@/components/ui/button";
+import { ConfirmButton } from "@/components/ui/confirm-button";
+import { useToast } from "@/components/ui/toast";
 
 const YAML_EXAMPLE = `devices:
   - name: web01
@@ -43,6 +47,7 @@ const EXCEL_COLUMNS =
  *  Operations view) means the tenant's default source of truth. */
 export function BulkImportView({ env }: { env?: string } = {}) {
   const qc = useQueryClient();
+  const toast = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<SotBulkImportResult | null>(null);
@@ -71,7 +76,10 @@ export function BulkImportView({ env }: { env?: string } = {}) {
     onSuccess: (r) => {
       setApplied(r);
       qc.invalidateQueries({ queryKey: ["sot-devices"] });
+      const n = r.summary.created;
+      toast.success(`${n} device${n === 1 ? "" : "s"} written to Nautobot`);
     },
+    onError: (err) => toast.error(errorText(err)),
   });
 
   const reset = () => {
@@ -131,16 +139,12 @@ export function BulkImportView({ env }: { env?: string } = {}) {
             </span>
           )}
           {(dryRun.isPending || apply.isPending) && (
-            <Loader2 className="h-4 w-4 animate-spin text-muted" />
+            <Loader2 className="h-4 w-4 animate-spin text-muted" aria-label="Working" />
           )}
           {file && (
-            <button
-              type="button"
-              onClick={reset}
-              className="ml-auto text-[11px] text-muted hover:text-[color:var(--text)] underline"
-            >
-              Reset
-            </button>
+            <Button variant="ghost" size="sm" onClick={reset} className="ml-auto">
+              Choose another file
+            </Button>
           )}
         </div>
 
@@ -149,7 +153,7 @@ export function BulkImportView({ env }: { env?: string } = {}) {
             type="checkbox"
             checked={createMissing}
             onChange={(e) => onToggleCreateMissing(e.target.checked)}
-            className="mt-0.5 accent-[color:var(--accent-emerald,#10b981)]"
+            className="mt-0.5 accent-[color:var(--accent)]"
           />
           <span>
             <span className="text-[color:var(--text)]">
@@ -162,8 +166,8 @@ export function BulkImportView({ env }: { env?: string } = {}) {
         </label>
 
         {dryRun.isError && (
-          <div className="text-xs text-[color:var(--critical)]">
-            {String(dryRun.error)}
+          <div role="alert" className="text-xs text-[color:var(--critical)]">
+            {errorText(dryRun.error)}
           </div>
         )}
       </div>
@@ -192,7 +196,7 @@ export function BulkImportView({ env }: { env?: string } = {}) {
             couldn&apos;t be read — not because the file is wrong.
           </p>
           {display.errors.map((e, i) => (
-            <div key={i} className="font-mono text-[11px] text-muted">
+            <div key={i} className="font-mono text-xs text-muted">
               {e}
             </div>
           ))}
@@ -201,9 +205,9 @@ export function BulkImportView({ env }: { env?: string } = {}) {
 
       {/* Preview table */}
       {display && (
-        <div className="surface p-0 overflow-hidden">
-          <div className="px-5 py-3 border-b border-line flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3 text-sm">
+        <div className="surface p-0 overflow-hidden motion-enter">
+          <div className="px-5 py-3 border-b border-line flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-3 text-sm">
               <span className="font-semibold">
                 {applied ? "Applied" : "Preview"}
               </span>
@@ -234,7 +238,7 @@ export function BulkImportView({ env }: { env?: string } = {}) {
                 {applied && (display.summary.warnings ?? 0) > 0 && (
                   <>
                     {" · "}
-                    <span style={{ color: "var(--warning, #f59e0b)" }}>
+                    <span className="text-signal-warning">
                       {display.summary.warnings}
                     </span>{" "}
                     incomplete
@@ -243,31 +247,22 @@ export function BulkImportView({ env }: { env?: string } = {}) {
               </span>
             </div>
             {!applied && (
-              <button
-                type="button"
-                disabled={!hasUploadableRows || apply.isPending || !file}
-                onClick={() => file && apply.mutate(file)}
-                className="text-xs h-9 px-4 rounded-lg bg-gradient-to-r from-accent-emerald to-accent-cyan text-bg-base disabled:opacity-50 inline-flex items-center gap-1.5"
-              >
-                {apply.isPending ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Applying…
-                  </>
-                ) : (
-                  <>
-                    <Upload className="h-3.5 w-3.5" /> Apply{" "}
-                    {display.summary.valid} device
-                    {display.summary.valid === 1 ? "" : "s"}
-                  </>
-                )}
-              </button>
+              <ConfirmButton
+                label={`Apply ${display.summary.valid} device${display.summary.valid === 1 ? "" : "s"}`}
+                confirmLabel="Apply to Nautobot"
+                consequence={`Writes ${display.summary.valid + (display.planned_catalog ? Object.values(display.planned_catalog).reduce((n, xs) => n + xs.length, 0) : 0)} objects to Nautobot. There is no undo.`}
+                icon={<Upload className="h-3.5 w-3.5" aria-hidden />}
+                disabled={!hasUploadableRows || !file}
+                pending={apply.isPending}
+                onConfirm={() => file && apply.mutate(file)}
+              />
             )}
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="text-[10px] uppercase tracking-wider text-muted border-b border-line">
+                <tr className="text-[11px] uppercase tracking-wider text-muted border-b border-line">
                   <th className="text-left px-3 py-2 w-12">Row</th>
                   <th className="text-left px-3 py-2 w-12">Status</th>
                   <th className="text-left px-3 py-2">Name</th>
@@ -291,19 +286,19 @@ export function BulkImportView({ env }: { env?: string } = {}) {
 
       {apply.isError && (
         <div className="text-xs text-[color:var(--critical)]">
-          Apply failed: {String(apply.error)}
+          Nothing was written: {errorText(apply.error)}
         </div>
       )}
 
       {/* Format reference */}
       <details className="surface p-4">
         <summary className="cursor-pointer text-sm font-medium inline-flex items-center gap-2">
-          <FileText className="h-4 w-4 text-accent-cyan" /> YAML format
+          <FileText className="h-4 w-4 text-accent-cyan" aria-hidden /> YAML format
         </summary>
-        <pre className="mt-3 text-[11.5px] font-mono whitespace-pre bg-bg-elevated/60 border border-line rounded-lg p-3 overflow-x-auto">
+        <pre className="mt-3 text-xs font-mono whitespace-pre bg-bg-elevated/60 border border-line rounded-lg p-3 overflow-x-auto">
           {YAML_EXAMPLE}
         </pre>
-        <p className="text-[11px] text-muted mt-2">
+        <p className="text-xs text-muted mt-2">
           A bare top-level list (no <code>devices:</code> key) also works.
           Names in <code>site</code>, <code>device_type</code>,{" "}
           <code>role</code>, <code>platform</code> are resolved
@@ -314,7 +309,7 @@ export function BulkImportView({ env }: { env?: string } = {}) {
 
       <details className="surface p-4">
         <summary className="cursor-pointer text-sm font-medium inline-flex items-center gap-2">
-          <FileSpreadsheet className="h-4 w-4 text-accent-cyan" /> Excel format
+          <FileSpreadsheet className="h-4 w-4 text-accent-cyan" aria-hidden /> Excel format
         </summary>
         <p className="text-xs text-muted mt-2 leading-relaxed">
           First sheet, first row = headers (case-insensitive). Columns:{" "}
@@ -352,7 +347,7 @@ function CatalogPlanPanel({
   if (total === 0 && !applied) {
     return (
       <div className="surface p-4 text-xs text-muted flex items-center gap-2">
-        <CheckCircle2 className="h-4 w-4 text-accent-emerald" />
+        <CheckCircle2 className="h-4 w-4 text-accent-emerald" aria-hidden />
         Everything this file references already exists in your Nautobot catalog.
       </div>
     );
@@ -362,7 +357,7 @@ function CatalogPlanPanel({
   return (
     <div className="surface p-4 space-y-3">
       <div className="flex items-center gap-2 text-sm font-semibold">
-        <PlusCircle className="h-4 w-4 text-accent-cyan" />
+        <PlusCircle className="h-4 w-4 text-accent-cyan" aria-hidden />
         {applied
           ? `Catalog entries created (${created.length}/${total})`
           : `${total} catalog ${total === 1 ? "entry" : "entries"} will be created first`}
@@ -372,14 +367,14 @@ function CatalogPlanPanel({
           .filter(([, items]) => items.length > 0)
           .map(([label, items]) => (
             <div key={label} className="space-y-1">
-              <div className="text-[10px] uppercase tracking-wider text-muted">
+              <div className="text-[11px] uppercase tracking-wider text-muted">
                 {label}
               </div>
               <div className="flex flex-wrap gap-1">
                 {items.map((name) => (
                   <span
                     key={name}
-                    className="font-mono text-[11px] rounded-md border border-line bg-bg-elevated/60 px-1.5 py-0.5"
+                    className="font-mono text-xs rounded-md border border-line bg-bg-elevated/60 px-1.5 py-0.5"
                   >
                     {name}
                   </span>
@@ -388,7 +383,7 @@ function CatalogPlanPanel({
             </div>
           ))}
       </div>
-      <p className="text-[11px] text-muted">
+      <p className="text-xs text-muted">
         {applied
           ? "These were added to this environment's Nautobot as part of the import."
           : "Check the spelling — these are created in your Nautobot exactly as written. Uncheck the box above to import against the existing catalog only."}
@@ -402,8 +397,8 @@ function RowCell({ row }: { row: SotBulkRow }) {
     row.status === "error"
       ? "var(--critical)"
       : row.status === "created"
-        ? "var(--accent-emerald, #10b981)"
-        : "var(--muted, #94a3b8)";
+        ? "var(--accent)"
+        : "var(--text-muted)";
   const Icon =
     row.status === "error"
       ? AlertCircle
@@ -415,12 +410,12 @@ function RowCell({ row }: { row: SotBulkRow }) {
       <td className="px-3 py-2 text-muted font-mono">{row.row}</td>
       <td className="px-3 py-2">
         <span className="inline-flex items-center gap-1" style={{ color: accent }}>
-          <Icon className="h-3 w-3" />
-          <span className="uppercase text-[10px] tracking-wider">{row.status}</span>
+          <Icon className="h-3 w-3" aria-hidden />
+          <span className="uppercase text-[11px] tracking-wider">{row.status}</span>
         </span>
       </td>
       <td className="px-3 py-2 font-medium">{row.name || "—"}</td>
-      <td className="px-3 py-2 font-mono text-[11px]">{row.primary_ip || "—"}</td>
+      <td className="px-3 py-2 font-mono text-xs">{row.primary_ip || "—"}</td>
       <td className="px-3 py-2">{row.transport || "—"}</td>
       <td className="px-3 py-2">{row.site || "—"}</td>
       <td className="px-3 py-2">{row.device_type || "—"}</td>
@@ -431,7 +426,7 @@ function RowCell({ row }: { row: SotBulkRow }) {
         ) : (
           <>
             {row.device_id && (
-              <span className="font-mono text-[10px]">
+              <span className="font-mono text-[11px]">
                 {row.device_id.slice(0, 8)}
               </span>
             )}
@@ -440,8 +435,7 @@ function RowCell({ row }: { row: SotBulkRow }) {
             {row.warnings?.map((w, i) => (
               <div
                 key={i}
-                className="mt-0.5 text-[11px]"
-                style={{ color: "var(--warning, #f59e0b)" }}
+                className="mt-0.5 text-xs text-signal-warning"
               >
                 {w}
               </div>

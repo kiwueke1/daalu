@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowRight, GitPullRequest } from "lucide-react";
 import { api } from "@/lib/api";
 import { formatRelative } from "@/lib/utils";
+import { LoadState } from "@/components/ui/load-state";
 
 /**
  * Drift tab — currently-drifted devices.
@@ -13,12 +14,13 @@ import { formatRelative } from "@/lib/utils";
  * is the page the NetOps team's daily standup tends to start on.
  */
 export function DriftView() {
-  const { data, isLoading, error } = useQuery({
+  const driftQ = useQuery({
     queryKey: ["change-proposals", "drift"],
     queryFn: () =>
       api.changeProposals.list({ kind: "drift", status: "pending" }),
     refetchInterval: 15_000,
   });
+  const { data } = driftQ;
 
   // Group by device — multiple proposals per device are rare (the
   // reconciler dedupes by "no drift-on-drift"), but possible historically.
@@ -52,21 +54,13 @@ export function DriftView() {
         difference and opened a proposal for you to decide what to do.
       </p>
 
-      {isLoading && (
-        <div className="text-sm text-muted">Loading drift queue…</div>
-      )}
-      {error && (
-        <div className="text-sm text-[color:var(--critical)]">
-          Couldn't load drift queue.
-        </div>
-      )}
-
-      {!isLoading && groups.length === 0 && (
-        <div className="surface p-6 text-center text-sm text-muted">
-          No devices currently drifted. ✓
-        </div>
-      )}
-
+      <LoadState
+        query={driftQ}
+        loadingText="Loading drift queue…"
+        empty={groups.length === 0}
+        emptyTitle="No devices are drifted"
+        emptyHint="Every device matches its Source of Truth. New drift shows up here within 5 minutes."
+      >
       <div className="space-y-2">
         {groups.map((g) => {
           const headline = g.rows![0];
@@ -86,26 +80,26 @@ export function DriftView() {
               <div className="pointer-events-none flex items-center gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-[10px] uppercase tracking-wider text-[color:var(--warning)] font-semibold">
-                      drift
+                    <span className="text-[11px] uppercase tracking-wider text-[color:var(--warning)] font-semibold">
+                      Drift
                     </span>
-                    <span className="text-[10px] uppercase tracking-wider text-muted">
+                    <span className="text-[11px] uppercase tracking-wider text-muted">
                       device {g.device_id.slice(0, 8)}
                     </span>
                     {g.rows!.length > 1 && (
-                      <span className="text-[10px] text-muted">
+                      <span className="text-xs text-muted">
                         · {g.rows!.length} open proposals
                       </span>
                     )}
-                    <span className="text-[10px] text-muted ml-auto">
+                    <span className="text-xs text-muted ml-auto">
                       first seen {formatRelative(g.latest)}
                     </span>
                   </div>
                   <div className="text-sm font-medium truncate">
                     {diffSummary}
                   </div>
-                  <div className="text-[11px] text-muted mt-1 flex items-center gap-2">
-                    <GitPullRequest className="h-3 w-3" />
+                  <div className="text-xs text-muted mt-1 flex items-center gap-2">
+                    <GitPullRequest className="h-3 w-3" aria-hidden />
                     <Link
                       href={`/proposals/${headline.id}`}
                       className="pointer-events-auto relative z-10 hover:text-[color:var(--text)] underline"
@@ -113,7 +107,7 @@ export function DriftView() {
                       Open proposal
                     </Link>
                     <span className="ml-auto inline-flex items-center gap-1">
-                      Open device <ArrowRight className="h-3 w-3" />
+                      Open device <ArrowRight className="h-3 w-3" aria-hidden />
                     </span>
                   </div>
                 </div>
@@ -122,6 +116,7 @@ export function DriftView() {
           );
         })}
       </div>
+      </LoadState>
     </div>
   );
 }

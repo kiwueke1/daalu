@@ -72,6 +72,7 @@ export function ImportView({
             key={t.id}
             type="button"
             onClick={() => select(t.id)}
+            aria-pressed={active === t.id}
             className={
               active === t.id
                 ? "text-xs h-8 px-3 rounded-lg border border-line bg-bg-elevated/80 text-[color:var(--text)]"
@@ -86,8 +87,8 @@ export function ImportView({
       {active === "devices" ? (
         <>
           <div className="text-xs text-muted inline-flex items-center gap-1.5">
-            <HardDrive className="h-3.5 w-3.5" />
-            Start here — the fabric artifacts all reference devices by name.
+            <HardDrive className="h-3.5 w-3.5" aria-hidden />
+            Start here: the fabric artifacts all reference devices by name.
           </div>
           <BulkImportView env={env} />
         </>

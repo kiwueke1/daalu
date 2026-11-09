@@ -9,6 +9,8 @@ import remarkGfm from "remark-gfm";
 import { ArrowLeft, FileText, Link2, Check } from "lucide-react";
 import { api } from "@/lib/api";
 import { Accordion, AccordionItem } from "@/components/ui/accordion";
+import { LoadState } from "@/components/ui/load-state";
+import { Button } from "@/components/ui/button";
 import { parseSections, toneFor } from "@/components/hero-briefing";
 
 const norm = (t: string) => t.replace(/[*_`#>\s]+/g, " ").trim().toLowerCase();
@@ -29,11 +31,12 @@ export default function BriefingDetailPage() {
   const id = params.id;
   const [copied, setCopied] = useState(false);
 
-  const { data: briefing, isLoading, error } = useQuery({
+  const q = useQuery({
     queryKey: ["briefing", id],
     queryFn: () => api.briefings.get(id),
     enabled: !!id,
   });
+  const briefing = q.data;
 
   const copyPermalink = async () => {
     if (typeof window === "undefined") return;
@@ -42,22 +45,24 @@ export default function BriefingDetailPage() {
     setTimeout(() => setCopied(false), 1500);
   };
 
-  if (isLoading) {
-    return <div className="text-sm text-muted">Loading briefing…</div>;
-  }
-
-  if (error || !briefing) {
+  if (!briefing) {
     return (
       <div className="space-y-4 max-w-[1000px]">
         <Link
           href="/reports"
           className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg transition-colors"
         >
-          <ArrowLeft className="h-3.5 w-3.5" /> Back to Reports
+          <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> Back to Reports
         </Link>
-        <div className="rounded-xl border border-line bg-bg-card p-6 text-sm text-muted">
-          Briefing not found.
-        </div>
+        <LoadState
+          query={q}
+          loadingText="Loading briefing…"
+          empty
+          emptyTitle="Briefing not found"
+          emptyHint="It may have been removed. The Reports page lists every briefing."
+        >
+          {null}
+        </LoadState>
       </div>
     );
   }
@@ -74,46 +79,50 @@ export default function BriefingDetailPage() {
     !(preamble && restated(preambleN)) &&
     !(sections.length === 0 && restated(norm(briefing.body_markdown ?? "")));
 
+  // Open the section that needs the user (incidents first, then recommended
+  // actions) instead of whatever happens to come first.
+  const needsUser = (kind: string) =>
+    sections.findIndex((sec) => toneFor(sec.title).tone === kind && sec.items > 0);
+  const openIdx = [needsUser("critical"), needsUser("accent")].find((i) => i >= 0) ?? 0;
+
   return (
-    <div className="space-y-6 max-w-[1000px]">
+    <div className="space-y-6 max-w-[1000px] motion-enter">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <Link
           href="/reports"
           className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg transition-colors"
         >
-          <ArrowLeft className="h-3.5 w-3.5" /> Back to Reports
+          <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> Back to Reports
         </Link>
-        <button
-          type="button"
+        <Button
+          size="sm"
           onClick={copyPermalink}
-          className="text-xs inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-line text-muted hover:text-fg hover:bg-bg-elevated/60 transition-colors"
+          icon={
+            copied ? (
+              <Check className="h-3.5 w-3.5 motion-success" aria-hidden />
+            ) : (
+              <Link2 className="h-3.5 w-3.5" aria-hidden />
+            )
+          }
         >
-          {copied ? (
-            <>
-              <Check className="h-3.5 w-3.5" /> Copied
-            </>
-          ) : (
-            <>
-              <Link2 className="h-3.5 w-3.5" /> Copy permalink
-            </>
-          )}
-        </button>
+          <span role="status">{copied ? "Copied" : "Copy permalink"}</span>
+        </Button>
       </div>
 
       <article className="gradient-border p-6 lg:p-8 bg-hero-grad">
-        <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-accent-blue mb-2">
-          <FileText className="h-3.5 w-3.5" /> {briefing.channel} ·{" "}
+        <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-accent mb-2">
+          <FileText className="h-3.5 w-3.5" aria-hidden /> {briefing.channel} ·{" "}
           {briefing.coverage_date}
         </div>
         <h1 className="text-2xl font-semibold mb-3">{briefing.title}</h1>
-        {showSummary && <p className="text-fg/70 mb-4">{briefing.summary}</p>}
+        {showSummary && <p className="text-muted mb-4">{briefing.summary}</p>}
         {preamble && (
           <div className="prose prose-sm dark:prose-invert max-w-none mb-4">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{preamble}</ReactMarkdown>
           </div>
         )}
         {sections.length > 0 ? (
-          <Accordion defaultOpen="s0">
+          <Accordion defaultOpen={`s${openIdx}`}>
             {sections.map((sec, i) => {
               const tone = toneFor(sec.title);
               const Icon = tone.icon;
@@ -157,7 +166,7 @@ export default function BriefingDetailPage() {
             {briefing.source_event_ids.length} event
             {briefing.source_event_ids.length === 1 ? "" : "s"} fed this briefing.
             Open the{" "}
-            <Link href="/reports?tab=query" className="text-accent-blue hover:underline">
+            <Link href="/reports?tab=query" className="text-accent hover:underline">
               Query tab
             </Link>{" "}
             to inspect them.

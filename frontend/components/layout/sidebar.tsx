@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -24,56 +25,124 @@ import {
   SlidersHorizontal,
   Workflow,
   X,
+  type LucideIcon,
 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
+import { useAutomationState } from "@/lib/use-automation-state";
 import { cn } from "@/lib/utils";
 
-// Devices and Proposals used to be top-level entries; they're now tabs
-// inside /operations (the SoT hub). The /devices/[id] and /proposals/[id]
-// detail pages still resolve directly, but the list views are reached
-// through /operations.
-const NAV = [
-  { href: "/", label: "Home", icon: Home },
-  { href: "/operations", label: "Operations", icon: LayoutGrid },
-  { href: "/agents", label: "Agents", icon: Bot },
-  { href: "/automations", label: "Automations", icon: Workflow },
-  { href: "/reports", label: "Reports", icon: FileText },
-  { href: "/alerts", label: "Alerts", icon: AlertTriangle },
-  { href: "/workflows", label: "Workflows", icon: ListChecks },
-  // Integrations is now a tab inside /managed-infra (its standalone route
-  // redirects there) — wiring external systems is managed-infra work.
-  // Coding assistant — browser IDE + chat. The page itself surfaces
-  // an eligibility CTA for tenants whose LLM tier doesn't include a
-  // coding-purpose route. Keeping the entry always visible is the
-  // simplest UX; otherwise eligible-after-upgrade tenants wouldn't
-  // know the feature exists.
-  { href: "/workspace", label: "Workspace", icon: Code2 },
-  { href: "/ai-factory", label: "AI Factory", icon: Factory },
-  // Topology is deliberately NOT a top-level entry: the fabric belongs to one
-  // NV-CM management environment, and there's no sensible environment-less
-  // version of the page. It's reached per-environment from Managed infra →
-  // Network & servers → <environment> → Consoles.
-  { href: "/dashboards", label: "Dashboards", icon: LayoutDashboard },
-  // Clusters & observability, Network & servers, and Onboarding are now
-  // tabs inside /managed-infra (their standalone routes still resolve).
-  { href: "/managed-infra", label: "Managed infra", icon: Boxes },
+type Tone = "critical" | "warning" | "accent" | "muted";
+type Badge = { text: string; tone: Tone; attention?: boolean };
+type Item = { href: string; label: string; icon: LucideIcon };
+
+// The sidebar is grouped by what you came to do, most urgent first.
+//
+// Devices and Proposals are tabs inside /operations (the SoT hub); Integrations,
+// Clusters & observability, Network & servers and Onboarding are tabs inside
+// /managed-infra. Their standalone routes still resolve. Topology is deliberately
+// not an entry: it belongs to one NV-CM environment and is reached from Managed
+// infra → Network & servers → <environment> → Consoles. Workspace stays visible
+// for every tenant; the page itself explains how to become eligible.
+const HOME: Item = { href: "/", label: "Home", icon: Home };
+
+const GROUPS: { label: string; items: Item[] }[] = [
+  {
+    label: "Respond",
+    items: [
+      { href: "/alerts", label: "Alerts", icon: AlertTriangle },
+      { href: "/investigations", label: "Investigations", icon: SearchCheck },
+      { href: "/workflows", label: "Workflows", icon: ListChecks },
+    ],
+  },
+  {
+    label: "Automate",
+    items: [
+      { href: "/automations", label: "Automations", icon: Workflow },
+      { href: "/agents", label: "Agents", icon: Bot },
+      { href: "/runbooks", label: "Runbooks", icon: BookMarked },
+      { href: "/autonomy", label: "Autonomy policy", icon: SlidersHorizontal },
+    ],
+  },
+  {
+    label: "Infrastructure",
+    items: [
+      { href: "/managed-infra", label: "Managed infra", icon: Boxes },
+      { href: "/ai-factory", label: "AI Factory", icon: Factory },
+      { href: "/operations", label: "Operations", icon: LayoutGrid },
+      { href: "/workspace", label: "Workspace", icon: Code2 },
+    ],
+  },
+  {
+    label: "Insights",
+    items: [
+      { href: "/dashboards", label: "Dashboards", icon: LayoutDashboard },
+      { href: "/reports", label: "Reports", icon: FileText },
+      // AI-Ops Maturity Model (docs/design/ai-ops-maturity.md §12).
+      { href: "/maturity", label: "Maturity", icon: Gauge },
+      { href: "/evals", label: "Evals", icon: FlaskConical },
+      { href: "/audit", label: "Audit log", icon: ScrollText },
+    ],
+  },
+];
+
+const BOTTOM: Item[] = [
   { href: "/billing", label: "Usage & Pricing", icon: Receipt },
-];
-
-// AI-Ops Maturity Model (docs/design/ai-ops-maturity.md §12): how the team
-// works with the AI SRE — level, policy, learning loop, audit.
-const AI_OPS = [
-  { href: "/maturity", label: "Maturity", icon: Gauge },
-  { href: "/autonomy", label: "Autonomy policy", icon: SlidersHorizontal },
-  { href: "/investigations", label: "Investigations", icon: SearchCheck },
-  { href: "/runbooks", label: "Runbooks", icon: BookMarked },
-  { href: "/evals", label: "Evals", icon: FlaskConical },
-  { href: "/audit", label: "Audit log", icon: ScrollText },
-];
-
-const BOTTOM = [
   { href: "/settings", label: "Settings", icon: Settings },
   { href: "/help", label: "Help & Feedback", icon: HelpCircle },
 ];
+
+/**
+ * What needs someone, keyed by route, so it shows from any page. Only things a
+ * person can act on get a badge; nothing shows until the query has answered, and
+ * a query the user can't read (403) just means no badge.
+ */
+function useNavBadges(): Record<string, Badge | undefined> {
+  const { user } = useAuth();
+  const { paused, tripped } = useAutomationState();
+  // Same keys as the header and the rail, so these share fetches with what's
+  // already on screen. 30 days is the Investigations page's default window.
+  const { data: alerts } = useQuery({
+    queryKey: ["alerts", "open-summary"],
+    queryFn: () => api.alerts.list({ status: "open" }),
+    refetchInterval: 60_000,
+    enabled: !!user,
+  });
+  const { data: runs } = useQuery({
+    queryKey: ["workflow-runs", "right-panel"],
+    queryFn: () => api.workflows.runs(),
+    refetchInterval: 60_000,
+    enabled: !!user,
+  });
+  const { data: ungraded } = useQuery({
+    queryKey: ["aiops-investigations", "nav-needs-verdict"],
+    queryFn: () => api.aiops.investigations.list({ days: 30, needs_verdict: true }),
+    refetchInterval: 60_000,
+    enabled: !!user,
+    retry: false,
+  });
+
+  const critical = (alerts ?? []).filter((a) => a.severity === "critical").length;
+  const warning = (alerts ?? []).filter((a) => a.severity === "warning").length;
+  const toApprove = (runs ?? []).filter((r) => r.status === "waiting_for_approval").length;
+  const toGrade = ungraded?.length ?? 0;
+
+  return {
+    "/alerts": critical
+      ? { text: `${critical} critical`, tone: "critical", attention: true }
+      : warning
+        ? { text: `${warning} warning${warning === 1 ? "" : "s"}`, tone: "warning" }
+        : undefined,
+    "/investigations": toGrade ? { text: `${toGrade} to grade`, tone: "muted" } : undefined,
+    "/workflows": toApprove ? { text: `${toApprove} to approve`, tone: "accent", attention: true } : undefined,
+    "/autonomy": paused
+      ? { text: "Paused", tone: "warning", attention: true }
+      : tripped
+        ? { text: `${tripped} tripped`, tone: "warning", attention: true }
+        : undefined,
+  };
+}
 
 /**
  * The sidebar reads as a glowing operational conduit, not a panel.
@@ -97,6 +166,18 @@ export function Sidebar({
   onMobileClose?: () => void;
 } = {}) {
   const pathname = usePathname();
+  const badges = useNavBadges();
+
+  // The drawer is an overlay on a phone: Escape closes it, like every other one.
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onMobileClose?.();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [mobileOpen, onMobileClose]);
+
   return (
     <>
       {/* Mobile backdrop — only present when the drawer is open. Tapping
@@ -111,19 +192,21 @@ export function Sidebar({
         )}
       />
       <aside
-        // Desktop: a normal 240px flex column that participates in the
+        // Desktop: a normal 260px flex column that participates in the
         // page-level flex layout. Mobile: a fixed-position drawer that
         // slides in from the left, sitting above the backdrop.
         //
         // The sidebar must always be a positioned ancestor — its
         // circuit overlay and specular sheen children are absolutely
         // positioned inside it — so we switch between `fixed` on
-        // mobile and `md:relative` on desktop (never `static`).
+        // mobile and `md:sticky` on desktop (never `static`).
         className={cn(
           "sidebar-shell flex flex-col w-[260px] shrink-0 overflow-hidden",
-          "fixed inset-y-0 left-0 z-50 transition-transform duration-[260ms] ease-out",
-          mobileOpen ? "translate-x-0" : "-translate-x-full",
-          "md:relative md:translate-x-0 md:w-[240px] md:z-auto md:transition-none"
+          "fixed inset-y-0 left-0 z-50 [transition:transform_260ms_ease-out,visibility_260ms]",
+          // `invisible` keeps a closed drawer's links out of the keyboard's tab order.
+          mobileOpen ? "translate-x-0" : "-translate-x-full max-md:invisible",
+          // Stays on screen while a long page scrolls, so Settings is always reachable.
+          "md:sticky md:top-0 md:h-dvh md:translate-x-0 md:z-auto md:transition-none"
         )}
       >
       {/* Photographic circuit overlay — paired light + dark variants
@@ -164,7 +247,7 @@ export function Sidebar({
          *  the theme tokens — so light/dark "just work" with no asset
          *  swap. The brand face is Quicksand (var(--font-brand), wired
          *  in app/layout.tsx). */}
-        <div className="px-4 pt-6 pb-5" aria-label="Daalu">
+        <div className="px-4 pt-5 pb-3" aria-label="Daalu">
           <div
             className="leading-none text-[34px] font-bold tracking-[-0.02em] text-[color:var(--text)]"
             style={{ fontFamily: "var(--font-brand)" }}
@@ -179,56 +262,45 @@ export function Sidebar({
           </div>
         </div>
 
-        {/* Primary nav. Each row gets a frosted chip behind it so the
-         *  label reads cleanly over the photographic circuit pattern.
-         *  The chip's backdrop-filter blurs the bit of pattern under
-         *  the button while leaving the gaps between buttons untouched
-         *  — the user keeps the wallpaper, the labels stay legible. */}
-        {/* The nav lists scroll on short screens; the bottom block stays
-         *  pinned. */}
-        <div className="flex-1 min-h-0 overflow-y-auto">
-          <nav className="px-3 py-1 space-y-1">
-            {NAV.map((item) => (
-              <NavItem
-                key={item.label}
-                {...item}
-                pathname={pathname}
-                onClick={onMobileClose}
-              />
-            ))}
-          </nav>
-          <div className="px-3 pt-4 pb-2">
-            <div className="px-3 pb-1.5 text-[10px] uppercase tracking-wider font-semibold text-[color:var(--text)] opacity-60">
-              AI Ops
+        {/* The nav scrolls on short screens; the bottom block stays pinned. */}
+        <nav aria-label="Main" className="flex-1 min-h-0 overflow-y-auto px-2 pb-2">
+          <NavItem {...HOME} pathname={pathname} onClick={onMobileClose} />
+          {GROUPS.map((group) => (
+            <div key={group.label} role="group" aria-labelledby={`nav-${group.label}`} className="mt-3">
+              <div
+                id={`nav-${group.label}`}
+                className="px-2.5 pb-1 text-[11px] uppercase tracking-wider font-semibold text-muted"
+              >
+                {group.label}
+              </div>
+              <div className="space-y-0.5">
+                {group.items.map((item) => (
+                  <NavItem
+                    key={item.href}
+                    {...item}
+                    badge={badges[item.href]}
+                    pathname={pathname}
+                    onClick={onMobileClose}
+                  />
+                ))}
+              </div>
             </div>
-            <nav aria-label="AI Ops" className="space-y-1">
-              {AI_OPS.map((item) => (
-                <NavItem
-                  key={item.label}
-                  {...item}
-                  pathname={pathname}
-                  onClick={onMobileClose}
-                />
-              ))}
-            </nav>
-          </div>
-        </div>
+          ))}
+        </nav>
 
-        {/* Bottom nav — separated by light, not by a hard rule. Same
-         *  chip treatment so the bottom block reads at the same weight
-         *  as the primary nav (currently quieter on purpose — these
-         *  are secondary destinations). */}
-        <div className="shrink-0 px-3 pb-5 pt-5 space-y-1 relative">
+        {/* Bottom nav: secondary destinations, quieter on purpose. */}
+        <div className="shrink-0 px-2 py-2 space-y-0.5 relative">
           <div
             aria-hidden
-            className="absolute inset-x-3 top-0 h-px pointer-events-none sidebar-divider"
+            className="absolute inset-x-2 top-0 h-px pointer-events-none sidebar-divider"
           />
           {BOTTOM.map(({ href, label, icon: Icon }) => (
             <Link
               key={label}
               href={href}
               onClick={onMobileClose}
-              className="group relative flex items-center gap-3 px-3 py-2.5 md:py-2 rounded-lg text-[13px] text-[color:var(--text)] opacity-80 hover:opacity-100 transition-opacity sidebar-nav-chip"
+              aria-current={pathname.startsWith(href) ? "page" : undefined}
+              className="group relative flex items-center gap-2 px-2.5 h-11 md:h-7 rounded-lg text-[13px] text-muted hover:text-[color:var(--text)] transition-colors"
             >
               <span
                 aria-hidden
@@ -245,16 +317,22 @@ export function Sidebar({
   );
 }
 
+const BADGE_TONES: Record<Tone, string> = {
+  critical: "var(--critical)",
+  warning: "var(--warning)",
+  accent: "var(--accent)",
+  muted: "var(--text-muted)",
+};
+
 function NavItem({
   href,
   label,
   icon: Icon,
+  badge,
   pathname,
   onClick,
-}: {
-  href: string;
-  label: string;
-  icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
+}: Item & {
+  badge?: Badge;
   pathname: string;
   onClick?: () => void;
 }) {
@@ -262,37 +340,39 @@ function NavItem({
   return (
     <Link
       href={href}
+      aria-current={active ? "page" : undefined}
       onClick={onClick}
       className={cn(
-        "group relative flex items-center gap-3 px-3 py-2.5 md:py-2 rounded-lg text-[13px] transition-all duration-[220ms] sidebar-nav-chip",
-        active
-          ? "text-[color:var(--text)] sidebar-nav-active"
-          : "text-[color:var(--text)] opacity-90 hover:opacity-100"
+        "group relative flex items-center gap-2 px-2.5 h-11 md:h-8 rounded-lg text-[13px] text-[color:var(--text)] transition-colors",
+        active && "sidebar-nav-active"
       )}
     >
       {!active && (
         <span
           aria-hidden
-          className="absolute inset-0 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-[220ms] sidebar-nav-hover"
+          className="absolute inset-0 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity sidebar-nav-hover"
         />
       )}
       <Icon
-        className={cn(
-          "relative h-4 w-4 transition-transform duration-[220ms]",
-          active && "scale-105"
-        )}
+        aria-hidden
+        className="relative h-4 w-4 shrink-0"
         style={active ? { color: "var(--accent)" } : undefined}
       />
-      <span className="relative flex-1 font-medium">{label}</span>
-      {active && (
+      <span className="relative flex-1 min-w-0 truncate font-medium">{label}</span>
+      {badge && (
         <span
-          aria-hidden
-          className="relative h-1.5 w-1.5 rounded-full"
+          className={cn(
+            "relative shrink-0 rounded-full px-1.5 py-px text-xs font-semibold tabular-nums whitespace-nowrap",
+            badge.attention && "motion-attention"
+          )}
           style={{
-            background: "var(--accent)",
-            boxShadow: "0 0 8px var(--accent-bloom), 0 0 16px var(--accent-glow)",
+            color: BADGE_TONES[badge.tone],
+            // Opaque, so the text keeps its contrast over the circuit wallpaper.
+            background: `color-mix(in srgb, ${BADGE_TONES[badge.tone]} 10%, var(--bg-card))`,
           }}
-        />
+        >
+          {badge.text}
+        </span>
       )}
     </Link>
   );

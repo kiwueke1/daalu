@@ -2,15 +2,16 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Eye, FlaskConical, History, Loader2, Power, RotateCcw, ShieldAlert } from "lucide-react";
+import { Eye, FlaskConical, History, Power, RotateCcw, ShieldAlert } from "lucide-react";
 import { api, type AutonomyPolicy, type PolicyDecision } from "@/lib/api";
 import { LoadState } from "@/components/ui/load-state";
 import { ConfirmButton } from "@/components/ui/confirm-button";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast";
+import { errorText } from "@/lib/errors";
 import {
   Chip,
   ErrorNote,
-  btnPrimary,
-  btnSecondary,
   fmtDateTime,
   fmtRate,
   inputCls,
@@ -37,11 +38,17 @@ export function ModeChip({ mode }: { mode: string }) {
  */
 export function KillSwitchCard({ policy }: { policy: AutonomyPolicy }) {
   const qc = useQueryClient();
+  const toast = useToast();
   const toggle = useMutation({
     mutationFn: (enabled: boolean) => api.aiops.policy.killSwitch(enabled),
     onSuccess: (p) => {
       qc.setQueryData(["aiops-policy"], p);
       qc.invalidateQueries({ queryKey: ["aiops-trust"] });
+      toast.success(
+        p.kill_switch
+          ? "Automation paused. Every write now waits for approval."
+          : "Automation resumed under the policy."
+      );
     },
   });
   const on = policy.kill_switch;
@@ -56,7 +63,7 @@ export function KillSwitchCard({ policy }: { policy: AutonomyPolicy }) {
         border: `1px solid ${on ? "color-mix(in srgb, var(--critical) 50%, var(--line))" : color}`,
       }}
     >
-      <Power className="h-6 w-6 shrink-0" style={{ color: on ? "var(--critical)" : "var(--text-muted)" }} />
+      <Power aria-hidden className="h-6 w-6 shrink-0" style={{ color: on ? "var(--critical)" : "var(--text-muted)" }} />
       <div className="flex-1 min-w-[14rem]">
         <div className="text-[15px] font-semibold">
           Kill switch {on ? "is ON — all automatic actions are paused" : "is off"}
@@ -74,22 +81,23 @@ export function KillSwitchCard({ policy }: { policy: AutonomyPolicy }) {
       </div>
       {on ? (
         <ConfirmButton
-          label="Turn off"
-          confirmLabel="Resume automation"
-          consequence="Auto actions resume under the policy."
+          label="Resume automation"
+          confirmLabel="Resume now"
+          consequence="Auto actions start running again under the policy."
           onConfirm={() => toggle.mutate(false)}
           pending={toggle.isPending}
-          icon={<Power className="h-3.5 w-3.5" />}
+          icon={<Power className="h-3.5 w-3.5" aria-hidden />}
         />
       ) : (
         <button
           type="button"
           disabled={toggle.isPending}
+          aria-busy={toggle.isPending || undefined}
           onClick={() => toggle.mutate(true)}
-          className="h-10 px-4 rounded-lg text-sm font-semibold inline-flex items-center gap-2 disabled:opacity-50"
+          className="motion-press h-10 px-4 rounded-lg text-sm font-semibold inline-flex items-center gap-2 disabled:opacity-50"
           style={{ background: "var(--critical)", color: "var(--bg-base)" }}
         >
-          {toggle.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Power className="h-4 w-4" />}
+          <Power className={toggle.isPending ? "h-4 w-4 animate-pulse" : "h-4 w-4"} aria-hidden />
           Pause all automation
         </button>
       )}
@@ -124,7 +132,7 @@ export function PolicySimulator({ draftYaml }: { draftYaml: string }) {
   return (
     <section className="rounded-2xl border border-line bg-bg-card p-4 lg:p-5 space-y-3">
       <div className="flex items-center gap-2 text-[15px] font-medium">
-        <FlaskConical className="h-4 w-4 text-accent" /> Test a write
+        <FlaskConical aria-hidden className="h-4 w-4 text-accent" /> Test a write
       </div>
       <div className="grid grid-cols-2 gap-2 text-xs">
         <label className="space-y-1 col-span-2">
@@ -165,13 +173,16 @@ export function PolicySimulator({ draftYaml }: { draftYaml: string }) {
           </label>
         </div>
       </div>
-      <button type="button" className={btnPrimary} disabled={sim.isPending} onClick={() => sim.mutate()}>
-        {sim.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+      <Button variant="secondary" size="sm" pending={sim.isPending} onClick={() => sim.mutate()}>
         Run test
-      </button>
+      </Button>
       <ErrorNote error={sim.error} prefix={useDraft ? "The draft doesn't validate:" : "Couldn't simulate:"} />
       {d && !sim.error && (
-        <div className="rounded-lg border border-line bg-bg-elevated/40 p-3 space-y-1.5 text-xs">
+        <div
+          key={sim.submittedAt}
+          role="status"
+          className="motion-enter rounded-lg border border-line bg-bg-elevated/40 p-3 space-y-1.5 text-xs"
+        >
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-muted">Decision</span>
             <ModeChip mode={d.mode} />
@@ -207,13 +218,16 @@ export function PolicySimulator({ draftYaml }: { draftYaml: string }) {
 
 export function TrustTable({ isAdmin }: { isAdmin: boolean }) {
   const qc = useQueryClient();
+  const toast = useToast();
   const q = useQuery({ queryKey: ["aiops-trust"], queryFn: () => api.aiops.trust() });
   const reset = useMutation({
     mutationFn: (ruleId: string) => api.aiops.policy.resetBreaker(ruleId),
-    onSuccess: (p) => {
+    onSuccess: (p, ruleId) => {
       qc.setQueryData(["aiops-policy"], p);
       qc.invalidateQueries({ queryKey: ["aiops-trust"] });
+      toast.success(`Breaker reset: ${ruleId} can run automatically again.`);
     },
+    onError: (e) => toast.error(errorText(e)),
   });
   const rows = q.data ?? [];
   return (
@@ -234,7 +248,7 @@ export function TrustTable({ isAdmin }: { isAdmin: boolean }) {
       >
         <div className="rounded-2xl border border-line bg-bg-card overflow-x-auto">
           <table className="w-full min-w-[720px] text-sm">
-            <thead className="text-[10px] uppercase tracking-wider text-muted bg-bg-elevated/50">
+            <thead className="text-[11px] uppercase tracking-wider text-muted bg-bg-elevated/50">
               <tr>
                 <th className="text-left px-4 py-2">Rule</th>
                 <th className="text-left px-4 py-2">Mode</th>
@@ -252,7 +266,7 @@ export function TrustTable({ isAdmin }: { isAdmin: boolean }) {
                   <tr key={r.rule_id} className="border-t border-line/60">
                     <td className="px-4 py-2">
                       <div className="font-mono text-[13px]">{r.rule_id}</div>
-                      <div className="text-[11px] text-muted">{r.tools.join(", ")}</div>
+                      <div className="text-xs text-muted">{r.tools.join(", ")}</div>
                     </td>
                     <td className="px-4 py-2">
                       <ModeChip mode={r.mode} />
@@ -279,17 +293,18 @@ export function TrustTable({ isAdmin }: { isAdmin: boolean }) {
                       {tripped ? (
                         <div className="flex flex-wrap items-center gap-2">
                           <Chip tone="critical">
-                            <ShieldAlert className="h-3 w-3" /> until {fmtDateTime(r.breaker_until)}
+                            <ShieldAlert aria-hidden className="h-3 w-3" /> until {fmtDateTime(r.breaker_until)}
                           </Chip>
                           {isAdmin && (
-                            <button
-                              type="button"
-                              className="text-[11px] text-muted hover:text-fg underline underline-offset-2"
+                            <ConfirmButton
+                              label="Reset breaker"
+                              confirmLabel="Reset now"
+                              consequence="This rule's auto actions resume immediately."
+                              icon={<RotateCcw className="h-3.5 w-3.5" aria-hidden />}
+                              pending={reset.isPending && reset.variables === r.rule_id}
                               disabled={reset.isPending}
-                              onClick={() => reset.mutate(r.rule_id)}
-                            >
-                              Reset
-                            </button>
+                              onConfirm={() => reset.mutate(r.rule_id)}
+                            />
                           )}
                         </div>
                       ) : (
@@ -310,22 +325,31 @@ export function TrustTable({ isAdmin }: { isAdmin: boolean }) {
 /** Breakers on the defaults (not a named rule) only show on the policy. */
 export function DefaultsBreaker({ policy, isAdmin }: { policy: AutonomyPolicy; isAdmin: boolean }) {
   const qc = useQueryClient();
+  const toast = useToast();
   const reset = useMutation({
     mutationFn: () => api.aiops.policy.resetBreaker(""),
-    onSuccess: (p) => qc.setQueryData(["aiops-policy"], p),
+    onSuccess: (p) => {
+      qc.setQueryData(["aiops-policy"], p);
+      toast.success("Breaker reset: auto actions under the defaults resume.");
+    },
   });
   const until = policy.breaker?.["__defaults__"];
   if (!until || new Date(until) <= new Date()) return null;
   return (
     <div className="rounded-lg border border-line bg-bg-card px-3 py-2 text-xs flex flex-wrap items-center gap-2">
       <Chip tone="critical">
-        <ShieldAlert className="h-3 w-3" /> breaker tripped
+        <ShieldAlert aria-hidden className="h-3 w-3" /> breaker tripped
       </Chip>
       Auto actions under the defaults are demoted to approve until {fmtDateTime(until)}.
       {isAdmin && (
-        <button type="button" className={btnSecondary} disabled={reset.isPending} onClick={() => reset.mutate()}>
-          <RotateCcw className="h-3.5 w-3.5" /> Reset breaker
-        </button>
+        <ConfirmButton
+          label="Reset breaker"
+          confirmLabel="Reset now"
+          consequence="Auto actions under the defaults resume immediately."
+          icon={<RotateCcw className="h-3.5 w-3.5" aria-hidden />}
+          pending={reset.isPending}
+          onConfirm={() => reset.mutate()}
+        />
       )}
       <ErrorNote error={reset.error} />
     </div>
@@ -348,7 +372,7 @@ export function PolicyHistory({
   return (
     <section className="space-y-2">
       <div className="flex items-center gap-2 text-[15px] font-medium">
-        <History className="h-4 w-4 text-accent" /> Version history
+        <History aria-hidden className="h-4 w-4 text-accent" /> Version history
       </div>
       <LoadState
         query={q}
@@ -366,21 +390,26 @@ export function PolicyHistory({
                   {v.updated_by || "—"} · {fmtDateTime(v.updated_at)}
                 </span>
                 <span className="text-xs text-fg/80 flex-1 min-w-[8rem] truncate">{v.note}</span>
-                <button
-                  type="button"
-                  className={btnSecondary}
+                <Button
+                  size="sm"
+                  aria-expanded={viewing === v.version}
+                  icon={<Eye className="h-3.5 w-3.5" aria-hidden />}
                   onClick={() => setViewing(viewing === v.version ? null : v.version)}
                 >
-                  <Eye className="h-3.5 w-3.5" /> {viewing === v.version ? "Hide" : "View"}
-                </button>
+                  {viewing === v.version ? "Hide YAML" : "View YAML"}
+                </Button>
                 {v.version !== activeVersion && (
-                  <button type="button" className={btnSecondary} onClick={() => onRestore(v.yaml, v.version)}>
-                    <RotateCcw className="h-3.5 w-3.5" /> Restore into editor
-                  </button>
+                  <Button
+                    size="sm"
+                    icon={<RotateCcw className="h-3.5 w-3.5" aria-hidden />}
+                    onClick={() => onRestore(v.yaml, v.version)}
+                  >
+                    Restore into editor
+                  </Button>
                 )}
               </div>
               {viewing === v.version && (
-                <pre className="mt-2 text-[12px] font-mono whitespace-pre-wrap bg-bg-elevated/60 border border-line rounded-lg p-3 max-h-[320px] overflow-auto">
+                <pre className="motion-enter mt-2 text-xs font-mono whitespace-pre-wrap bg-bg-elevated/60 border border-line rounded-lg p-3 max-h-[320px] overflow-auto">
                   {v.yaml}
                 </pre>
               )}

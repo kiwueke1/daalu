@@ -25,7 +25,7 @@ export default function DiagnosticsPage() {
   return (
     <FactoryPageShell
       title="Diagnostics"
-      subtitle="Run dcgmi diag (quick health pass) or the NCCL interconnect test against the factory floor, and review past runs."
+      subtitle="Check each GPU's health and the links between GPUs, and review past runs (dcgmi diag, NCCL)."
     >
       <LoadState query={overview} loadingText="Checking your access…">
         {!isAdmin || role === "none" ? (

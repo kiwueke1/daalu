@@ -3,7 +3,9 @@
 import { AlertTriangle } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { ApiError } from "@/lib/api";
+import { errorText } from "@/lib/errors";
 import { cn } from "@/lib/utils";
+import { buttonClass } from "@/components/ui/button";
 
 /** Shared bits for the AI Ops pages (/maturity, /autonomy, /investigations,
  *  /runbooks, /evals, /audit) and the alert-page additions. */
@@ -61,7 +63,7 @@ export function Chip({
     <span
       title={title}
       className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider whitespace-nowrap",
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider whitespace-nowrap",
         className
       )}
       style={
@@ -93,14 +95,14 @@ export function StatTile({
 }) {
   return (
     <div className="rounded-2xl border border-line bg-bg-card p-4">
-      <div className="text-[10px] uppercase tracking-wider text-muted">{label}</div>
+      <div className="text-[11px] uppercase tracking-wider text-muted">{label}</div>
       <div
         className="text-2xl font-semibold mt-1 tabular-nums"
         style={tone ? { color: TONE_VAR[tone] } : undefined}
       >
         {value}
       </div>
-      {hint && <div className="text-[11px] text-muted mt-1">{hint}</div>}
+      {hint && <div className="text-xs text-muted mt-1">{hint}</div>}
     </div>
   );
 }
@@ -172,18 +174,8 @@ export function ErrorNote({ error, prefix }: { error: unknown; prefix?: string }
   );
 }
 
-/** Human-readable error: FastAPI's `detail` for an API error, with a plain
- *  sentence for a 403. */
-export function errorText(error: unknown): string {
-  if (error instanceof ApiError) {
-    if (error.status === 403) {
-      return `Only a tenant admin can do this.${error.detail ? ` (${error.detail})` : ""}`;
-    }
-    return error.detail || error.message;
-  }
-  if (error instanceof Error) return error.message;
-  return String(error);
-}
+/** Human-readable error; see `lib/errors.ts`. */
+export { errorText };
 
 export function isStatus(error: unknown, status: number): boolean {
   return error instanceof ApiError && error.status === status;
@@ -224,11 +216,11 @@ export function fmtDateTime(iso: string | null | undefined): string {
   });
 }
 
+// The global :focus-visible ring is the focus style, so no outline-none here.
 export const inputCls =
-  "h-8 rounded-lg bg-bg-elevated/60 border border-line px-2.5 text-xs focus:outline-none focus:border-accent/60";
+  "h-8 rounded-lg bg-bg-elevated/60 border border-line px-2.5 text-xs focus:border-accent/60";
 
-export const btnSecondary =
-  "h-8 px-3 rounded-lg border border-line text-xs inline-flex items-center gap-1.5 hover:bg-bg-elevated/60 disabled:opacity-50";
+/** Prefer `<Button>`; these keep older call sites on the same look. */
+export const btnSecondary = buttonClass("secondary", "sm");
 
-export const btnPrimary =
-  "h-8 px-3 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 text-bg-base disabled:opacity-50 bg-gradient-to-r from-accent-emerald to-accent-cyan";
+export const btnPrimary = buttonClass("primary", "sm");

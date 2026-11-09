@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, Circle, Loader2 } from "lucide-react";
+import { Check, Circle, Lock } from "lucide-react";
 import {
   CartesianGrid,
   Legend,
@@ -15,7 +15,9 @@ import {
 } from "recharts";
 import { api, type AiopsMetrics, type Maturity } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { ErrorNote, btnPrimary } from "./ui";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast";
+import { ErrorNote } from "./ui";
 
 /** The 0–5 ladder: which levels are met, the current one highlighted. */
 export function MaturityLadder({ maturity }: { maturity: Maturity }) {
@@ -23,31 +25,46 @@ export function MaturityLadder({ maturity }: { maturity: Maturity }) {
     <ol className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
       {maturity.levels.map((l) => {
         const current = l.level === maturity.level;
+        // A level counts only when every level below it is met too, so a met
+        // level above the current one is "met but blocked", not achieved.
+        const blockedBy = l.met
+          ? maturity.levels.find((b) => b.level < l.level && !b.met)?.level
+          : undefined;
+        const achieved = l.met && blockedBy === undefined;
         return (
           <li
             key={l.level}
             className={cn(
               "rounded-xl border p-3 text-xs",
-              current ? "border-accent/60" : "border-line",
-              !l.met && !current && "opacity-70"
+              current ? "border-accent/60" : "border-line"
             )}
             style={
               current
                 ? { background: "color-mix(in srgb, var(--accent) 12%, var(--bg-card))" }
                 : { background: "var(--bg-card)" }
             }
-            title={l.description}
           >
             <div className="flex items-center gap-1.5">
-              {l.met ? (
-                <Check className="h-3.5 w-3.5 text-accent" />
+              {achieved ? (
+                <Check aria-hidden className="h-3.5 w-3.5 shrink-0 text-accent" />
+              ) : blockedBy !== undefined ? (
+                <Lock aria-hidden className="h-3.5 w-3.5 shrink-0 text-muted" />
               ) : (
-                <Circle className="h-3.5 w-3.5 text-muted" />
+                <Circle aria-hidden className="h-3.5 w-3.5 shrink-0 text-muted" />
               )}
               <span className="font-semibold tabular-nums">L{l.level}</span>
-              <span className="font-medium truncate">{l.name}</span>
+              <span className="font-medium min-w-0 break-words">{l.name}</span>
             </div>
-            <div className="text-[11px] text-muted mt-1 line-clamp-3">{l.description}</div>
+            <div className={cn("mt-1 text-xs", achieved ? "text-accent" : "text-muted")}>
+              {achieved
+                ? current
+                  ? "Your level"
+                  : "Met"
+                : blockedBy !== undefined
+                  ? `Criteria met · blocked by L${blockedBy}`
+                  : "Not met yet"}
+            </div>
+            <div className="text-xs text-muted mt-1 leading-snug">{l.description}</div>
           </li>
         );
       })}
@@ -115,6 +132,7 @@ export function MetricsTrend({ daily }: { daily: AiopsMetrics["daily"] }) {
 /** Yes/no per question, grouped by level; submit → self-assessed level. */
 export function AssessmentForm({ maturity, days }: { maturity: Maturity; days: number }) {
   const qc = useQueryClient();
+  const toast = useToast();
   const [answers, setAnswers] = useState<Record<string, boolean>>({});
   useEffect(() => {
     setAnswers({ ...(maturity.assessment?.answers ?? {}) });
@@ -133,7 +151,10 @@ export function AssessmentForm({ maturity, days }: { maturity: Maturity; days: n
       api.aiops.maturity.assess(
         Object.fromEntries(maturity.questions.map((q) => [q.id, answers[q.id] === true]))
       ),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["aiops-maturity", days] }),
+    onSuccess: (a) => {
+      qc.invalidateQueries({ queryKey: ["aiops-maturity", days] });
+      toast.success(`Self-assessment saved: L${a.level}`);
+    },
   });
 
   if (!maturity.questions.length) {
@@ -145,7 +166,7 @@ export function AssessmentForm({ maturity, days }: { maturity: Maturity; days: n
     <div className="space-y-4">
       {byLevel.map(([level, qs]) => (
         <div key={level}>
-          <div className="text-[10px] uppercase tracking-wider text-muted mb-1.5">
+          <div className="text-[11px] uppercase tracking-wider text-muted mb-1.5">
             Level {level} · {levelName(level)}
           </div>
           <ul className="space-y-1.5">
@@ -166,7 +187,7 @@ export function AssessmentForm({ maturity, days }: { maturity: Maturity; days: n
                         aria-checked={v === opt}
                         onClick={() => setAnswers((a) => ({ ...a, [q.id]: opt }))}
                         className={cn(
-                          "h-7 px-3 rounded-md text-xs border",
+                          "motion-press h-7 px-3 rounded-md text-xs border",
                           v === opt
                             ? opt
                               ? "border-accent/60 bg-accent/15 text-accent font-semibold"
@@ -185,15 +206,9 @@ export function AssessmentForm({ maturity, days }: { maturity: Maturity; days: n
         </div>
       ))}
       <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          className={btnPrimary}
-          disabled={submit.isPending}
-          onClick={() => submit.mutate()}
-        >
-          {submit.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+        <Button variant="primary" size="sm" pending={submit.isPending} onClick={() => submit.mutate()}>
           Save self-assessment
-        </button>
+        </Button>
         <span className="text-xs text-muted">
           Unanswered questions count as &ldquo;no&rdquo;.
         </span>

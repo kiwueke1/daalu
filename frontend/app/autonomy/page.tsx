@@ -2,15 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Save, SlidersHorizontal, Undo2 } from "lucide-react";
+import { Save, SlidersHorizontal, Undo2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { LoadState } from "@/components/ui/load-state";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast";
+import { useUnsavedGuard } from "@/components/ui/use-unsaved-guard";
 import {
   ErrorNote,
   PageHeader,
-  btnPrimary,
-  btnSecondary,
   fmtDateTime,
   inputCls,
   isStatus,
@@ -31,6 +32,7 @@ import { STARTER_POLICIES } from "@/components/aiops/starter-policies";
  */
 export default function AutonomyPage() {
   const qc = useQueryClient();
+  const toast = useToast();
   const { user } = useAuth();
   const isAdmin = !!(user?.is_admin || user?.is_superuser);
 
@@ -59,10 +61,12 @@ export default function AutonomyPage() {
       qc.invalidateQueries({ queryKey: ["aiops-trust"] });
       setNote("");
       setRestoredFrom(null);
+      toast.success(`Policy saved as v${p.version}`);
     },
   });
 
   const dirty = !!policy && draft !== policy.yaml;
+  useUnsavedGuard(dirty);
 
   return (
     <div className="space-y-6 max-w-[1200px]">
@@ -83,7 +87,7 @@ export default function AutonomyPage() {
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="text-[15px] font-medium flex-1 min-w-[10rem]">
                     {policy.version === 0 ? (
-                      "Built-in default (not saved yet)"
+                      "No saved policy — the built-in default below is active"
                     ) : (
                       <>
                         Version {policy.version}
@@ -96,7 +100,7 @@ export default function AutonomyPage() {
                     )}
                   </div>
                   <select
-                    aria-label="Starter policies"
+                    aria-label="Load a starter policy into the editor"
                     value=""
                     onChange={(e) => {
                       const s = STARTER_POLICIES.find((p) => p.id === e.target.value);
@@ -121,11 +125,14 @@ export default function AutonomyPage() {
                     Loaded version {restoredFrom} into the editor. Saving it creates a new version.
                   </div>
                 )}
+                <label htmlFor="policy-yaml" className="sr-only">
+                  Policy YAML
+                </label>
                 <textarea
+                  id="policy-yaml"
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
                   spellCheck={false}
-                  aria-label="Policy YAML"
                   rows={26}
                   className="w-full rounded-lg bg-bg-elevated/60 border border-line px-3 py-2 font-mono text-[12.5px] leading-relaxed focus:outline-none focus:border-accent/60 resize-y"
                 />
@@ -136,41 +143,49 @@ export default function AutonomyPage() {
                     <ErrorNote error={save.error} prefix="Couldn't save:" />
                   )
                 ) : null}
-                <div className="flex flex-wrap items-center gap-2">
-                  <input
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                    maxLength={512}
-                    placeholder="What changed and why (saved with the version)"
-                    className={`${inputCls} flex-1 min-w-[14rem]`}
-                  />
-                  <button
-                    type="button"
-                    className={btnSecondary}
+                <div className="flex flex-wrap items-end gap-2">
+                  <label className="flex flex-col gap-1 flex-1 min-w-[14rem] text-xs text-muted">
+                    Version note
+                    <input
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                      maxLength={512}
+                      placeholder="What changed and why"
+                      className={`${inputCls} w-full`}
+                    />
+                  </label>
+                  <Button
+                    size="sm"
                     disabled={!dirty || save.isPending}
+                    disabledReason={dirty ? undefined : "Nothing to discard"}
+                    icon={<Undo2 className="h-3.5 w-3.5" aria-hidden />}
                     onClick={() => {
                       setDraft(policy.yaml);
                       setRestoredFrom(null);
                       save.reset();
                     }}
                   >
-                    <Undo2 className="h-3.5 w-3.5" /> Discard
-                  </button>
-                  <button
-                    type="button"
-                    className={btnPrimary}
-                    disabled={!dirty || save.isPending || !isAdmin}
-                    title={isAdmin ? undefined : "Only a tenant admin can change the policy"}
+                    Discard changes
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    disabled={!dirty || !isAdmin}
+                    pending={save.isPending}
+                    disabledReason={
+                      !isAdmin
+                        ? "Only a tenant admin can change the policy"
+                        : !dirty
+                          ? "Edit the policy to save a new version"
+                          : undefined
+                    }
+                    icon={<Save className="h-3.5 w-3.5" aria-hidden />}
                     onClick={() => save.mutate()}
                   >
-                    {save.isPending ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Save className="h-3.5 w-3.5" />
-                    )}
                     Save new version
-                  </button>
+                  </Button>
                 </div>
+                {dirty && <div className="text-xs text-signal-warning">Unsaved changes in the editor.</div>}
                 {!isAdmin && (
                   <div className="text-xs text-muted">
                     Only a tenant admin can save the policy. You can still edit

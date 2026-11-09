@@ -99,7 +99,7 @@ export function ProposalsView() {
                 {all.data && (
                   <span
                     className={cn(
-                      "tabular-nums text-[10px]",
+                      "tabular-nums text-[11px]",
                       f.id === "pending" && n
                         ? "text-accent font-semibold"
                         : "text-muted"
@@ -131,7 +131,7 @@ export function ProposalsView() {
               href="/operations?tab=drift"
               className="text-xs text-accent hover:underline inline-flex items-center gap-1"
             >
-              View drift <ArrowRight className="h-3.5 w-3.5" />
+              View drift <ArrowRight className="h-3.5 w-3.5" aria-hidden />
             </Link>
           ) : undefined
         }
