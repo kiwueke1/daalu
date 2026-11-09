@@ -39,9 +39,11 @@ instance so a human can decide which it is.
 ## Setting it up
 
 Before any of the reconciler / drift / proposals machinery does
-anything for you, four things have to be in place. The
-*Operations* page in the sidebar will show empty tabs and a
-"Couldn't load devices" error until they are.
+anything for you, four things have to be in place. Until a
+Nautobot is connected, the *Operations* page (sidebar →
+Infrastructure) shows a neutral *"Source of Truth isn't connected
+yet"* panel with a **Set up Nautobot** button, rather than an
+error.
 
 Where you do this depends on which Nautobot you use — and the
 common path now involves **no wizard at all**.
@@ -162,8 +164,8 @@ closes the gap.
 
 ## What you see in the UI
 
-Everything SoT lives on a single page — *Operations* in the
-sidebar — organised into tabs:
+Everything SoT lives on a single page — *Operations*, under
+Infrastructure in the sidebar — organised into tabs:
 
 - **Overview** — vocabulary refresher plus the three KPIs you
   care about (devices in SoT, devices in sync, open drift).
@@ -181,10 +183,15 @@ sidebar — organised into tabs:
 Each device's detail page shows:
 
 - Its identity (hostname, transport, primary IP, tags).
-- A "Reconcile now" button to trigger an on-demand check —
-  surfaces the result inline (in sync / drift / skipped / error).
+- A **Reconcile now** button to trigger an on-demand check. It
+  asks you to confirm in place (**Check device now**) and says
+  what it will do: connect to the device and compare it with its
+  intended config, opening a proposal for any difference but
+  pushing nothing. The result shows inline (in sync / drift /
+  skipped / error).
 - The intended config editor.
-- A jump-off link to any open proposals scoped to that device.
+- A **Related proposals** link to the proposals scoped to that
+  device.
 
 ---
 
@@ -202,8 +209,11 @@ The flow is two-phase by design:
 2. You see a row-by-row preview: green for valid, red for the
    rows that won't import (with the reason). Nothing has been
    written yet.
-3. Click **Apply** and Daalu creates each valid row. Rows with
-   errors are skipped without aborting the batch.
+3. Click **Apply N devices**. The button asks you to confirm in
+   place (**Apply to Nautobot**) and says how many objects it
+   will write, and that there is no undo. Daalu then creates each
+   valid row. Rows with errors are skipped without aborting the
+   batch.
 
 The expected YAML shape:
 

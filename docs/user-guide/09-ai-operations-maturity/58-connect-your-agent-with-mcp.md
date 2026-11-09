@@ -170,7 +170,7 @@ approved it runs and is verified exactly like a fix from Daalu's AI, and the
 agent can call `get_investigation` to see the outcome.
 
 Every tool call your agent makes is written to the audit log as `mcp.call`
-under your email; filter **Kind** `mcp.call` on the **Audit log** page
+under your email; set the **Kind** filter to **Tool call (MCP)** on the **Audit log** page
 (chapter 56) to see them.
 
 > **Have someone else approve.** Your agent proposes as you, and Daalu does

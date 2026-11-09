@@ -1,8 +1,14 @@
-# 29. Notifications (Slack, PagerDuty, email)
+# 29. Notifications (Slack, email, PagerDuty)
 
-The notification integrations are how Daalu reaches a human.
-Each is independent — you can have only Slack, only PagerDuty,
-both, neither.
+The notification channels are how Daalu reaches a human. There
+are two, Slack and email, and each is independent — you can have
+only Slack, only email, both, or neither. PagerDuty works the
+other way round: it's an alert *source*, covered at the end of
+this chapter.
+
+Both channels live in *Managed infra → Integrations →
+Notification channels*. Each card shows **Configured** or
+**Needs setup**.
 
 ---
 
@@ -10,89 +16,47 @@ both, neither.
 
 ### Setup
 
-1. *Managed Infra → Notifications → Add → Slack.*
-2. Click **"Authorize with Slack."** A new tab opens to
-   Slack's OAuth flow.
-3. Pick the workspace, accept the requested scopes
-   (`chat:write`, `channels:read`, `users:read`).
-4. You're redirected back to Daalu with the connection
-   active.
-5. In the next dialog, pick which channels Daalu may post
-   to. Daalu has to be invited to private channels with
-   `/invite @daalu` from inside Slack.
+Daalu posts to Slack through an **incoming webhook**.
 
-### Capabilities
+1. In Slack, create an incoming webhook for your workspace (via
+   a Slack app with incoming webhooks turned on) and copy its
+   URL.
+2. In Daalu, *Managed infra → Integrations → Notification
+   channels → **Set up Slack notifications***.
+3. Fill in:
+   - **Incoming-webhook URL** —
+     `https://hooks.slack.com/services/...`.
+   - **Briefing channel** — optional, for example
+     `#operations`.
+   - **Incidents channel** — optional, for example
+     `#incidents`. Leave it blank to use the briefing channel.
+4. Click **Test connection**. Daalu posts a short test message
+   through the webhook; "Slack accepted the test message" means
+   it worked. Then click **Connect Slack notifications**.
 
-- Post to channels you authorized.
-- Post to user DMs (for personal notifications).
-- React with emoji on its own messages (for
-  acknowledgment indicators).
-- Read recent messages in a channel (only on demand, via
-  the Assistant; not stored).
+To change any of this later, click **Edit Slack
+notifications** on the same card.
 
-Daalu **cannot:**
+### What Daalu posts
 
-- Post in channels you didn't authorize.
-- Read messages outside its allowed channels.
-- Mention users it can't see.
+- **Incident updates** — status updates for an incident go to
+  the incidents channel.
+- **Scheduled reports** — a saved query delivered on a
+  schedule (*Reports → Schedules*, Chapter 23) can go to Slack.
+  Each schedule can name its own channel; if it doesn't, Daalu
+  uses the briefing channel.
 
-### Per-channel routing
+Daalu sends the channel name with each post. Slack may still
+deliver to the channel the webhook was created for, depending on
+how the webhook was set up, so create the webhook for the channel
+you want most.
 
-In *Settings → Notifications*, set which Slack channels get
-which kinds of alert. Common pattern:
-
-- `#ops-alerts` — all warnings and criticals.
-- `#netops` — alerts labelled `team: netops`.
-- `#proposals` — change-proposal notifications.
-- `#daalu-heartbeat` — the Watchdog alert.
-
-### Removing
-
-*Managed Infra → Notifications → Slack row → Disconnect.*
-Posts stop immediately. In Slack, also remove the Daalu app
-from the workspace via `Apps → Daalu → Remove app`.
-
----
-
-## PagerDuty
-
-### Setup
-
-1. In PagerDuty, create a service (or pick an existing one)
-   you want Daalu's alerts to flow into.
-2. Add an **Events API V2 integration** to that service.
-   Copy the integration key.
-3. *Managed Infra → Notifications → Add → PagerDuty* in
-   Daalu. Paste the integration key.
-4. Daalu fires a test event; you should see "Triggered,
-   then resolved by Daalu" in the service.
-
-### Capabilities
-
-- Trigger PagerDuty incidents (severity → priority mapping
-  configurable).
-- Resolve PagerDuty incidents when the underlying alert
-  clears.
-- Add a note when a Daalu user acknowledges.
-
-PagerDuty's escalation policies are what actually do the
-paging. Daalu is just the source.
-
-### Multiple services
-
-Common pattern is one PagerDuty service per on-call rotation:
-
-- `platform-prod`
-- `netops`
-- `data-platform`
-
-Connect each as a separate Daalu integration. Route alerts to
-the right one based on labels.
+Daalu only sends. It doesn't read your Slack messages.
 
 ### Removing
 
-Disconnect in Daalu; optionally delete the Events API V2
-integration in PagerDuty.
+Revoke or delete the incoming webhook in Slack (or remove the
+Slack app it belongs to). Posts stop immediately.
 
 ---
 
@@ -100,57 +64,61 @@ integration in PagerDuty.
 
 ### Setup
 
-Daalu's transactional email is configured at the platform level —
-the from-address and SMTP relay are managed by us. You don't
-configure anything tenant-side except:
+Invites and sign-up emails are sent by Daalu; you don't need to
+set anything up for those.
 
-1. Per-user "send me email notifications" toggle.
-2. Per-route "send to this email" rule in *Settings →
-   Notifications.*
+To have Daalu send incident and report email through your own
+mail relay:
 
-### Capabilities
+1. *Managed infra → Integrations → Notification channels →
+   **Set up Email (SMTP)***.
+2. Fill in **SMTP host**, **Port** (usually `587`; Daalu uses
+   STARTTLS), **Username**, **Password**, **From address**, and
+   optionally an **On-call recipient**.
+3. Click **Test connection**, then save.
 
-- Alert digests (configurable cadence).
-- Daily briefing as an HTML email.
-- Mentions in change proposals.
-- Invite emails (this is how users get added to your tenant).
+### What Daalu emails
 
-### Limits
+- **Incident updates** — sent to the on-call recipient, if you
+  set one.
+- **Scheduled reports** — a schedule in *Reports → Schedules*
+  with the email destination goes to the address it names.
+- **Invites** — how teammates join your organisation
+  (Chapter 6).
 
-- 100 emails per tenant per hour by default. Mostly enough.
-- Increase by writing to support if you have a use case (a
-  big weekly digest distributed across the team).
+### Your own preferences
+
+Each person chooses what they want to hear about in *Settings →
+Notifications*: **Email me on critical alerts**, **Email the
+daily briefing**, and two in-app switches (a change proposal is
+ready for review; a workflow failed). They're off until you turn
+them on.
 
 ### Spam
 
-Daalu emails sometimes land in junk on first send. We've
-authenticated SPF/DKIM/DMARC properly; the cause is usually
-your mail filter not having a positive sender reputation yet.
-Allow-list your deployment's notification sender address on first use.
+Daalu emails sometimes land in junk on first send. The cause is
+usually your mail filter not yet trusting the sender. Add the
+from-address to your allow list on first use.
 
 ---
 
-## Browser push
+## PagerDuty (alert source)
 
-Not a separate integration — built into the operator app. Enable
-in *Settings → Preferences → Browser push.* Daalu asks for
-permission; once granted, you get desktop notifications when
-the tab is open.
+PagerDuty brings your **open PagerDuty incidents into Daalu's
+alerts feed**, so the AI can investigate them next to everything
+else. Daalu doesn't page through PagerDuty.
 
----
+1. In PagerDuty, create an API token for Daalu to read
+   incidents with.
+2. In Daalu, set PagerDuty up on *Managed infra → Onboarding*
+   and paste the **PagerDuty API token**.
+3. On *Managed infra → Integrations → Ingest sources*, the
+   PagerDuty card now reads **Configured**. Click **Check now**
+   to pull the current triggered and acknowledged incidents
+   into the alerts feed.
 
-## Suppression and rate-limiting
-
-Two protections built into Daalu's notification system:
-
-- **Deduplication.** The same alert firing twice in a short
-  window only generates one notification.
-- **Per-channel rate limit.** Daalu won't flood a Slack
-  channel with more than a configurable rate of messages per
-  minute. Excess gets batched into a digest.
-
-Defaults are sensible. Tune in *Settings → Notifications →
-Advanced.*
+Repeat firings of the same incident collapse into one alert
+rather than piling up as duplicates.
 
 ---
 

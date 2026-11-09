@@ -31,10 +31,10 @@ doesn't need any inbound holes.
 In the operator app:
 
 1. *Managed infra → Clusters & observability → Onboard cluster.*
-2. Pick a friendly name (e.g., `acme-eu-prod`).
-3. Choose the tenant's WireGuard subnet allocation. Default
-   is fine.
-4. Click **Generate invite.** Daalu produces:
+2. Fill in a **Slug** (e.g., `acme-eu-prod`) and a
+   **Display name**. The tunnel address is allocated for you.
+3. Click **Create cluster & get install snippet.** Daalu
+   produces:
    - A **bootstrap token** (single-use, expires in 1 hour).
    - A copy-paste **helm install** command pre-filled with
      the token.
@@ -88,13 +88,13 @@ dead one.
 Back in *Managed infra → Clusters & observability*, the new row should be:
 
 - **Status: connected** (green).
-- **Tunnel IP**: a `10.200.0.x` address.
+- **Tunnel IP**: a private address on Daalu's tunnel network.
 - **Last handshake:** <2 minutes ago.
 
-Click the row for the detail page. Verify:
+Click **Open** on the row for the detail page. Verify:
 
 - The node list shows your cluster's nodes.
-- The "kubectl run" panel can execute `kubectl get nodes`
+- The **Run kubectl** tab can execute `kubectl get nodes`
   through the tunnel.
 
 If any of this is off, see the troubleshooting section.
@@ -112,16 +112,22 @@ After Step 2, in the `daalu-edge` namespace you'll have:
 - **RBAC** granting the SA permissions to talk to the API
   server on Daalu's behalf.
 
-The RBAC is scoped by default to:
+By default the ServiceAccount is bound to the `cluster-admin`
+ClusterRole, the same access as the kubeconfig it replaces, so
+every Daalu feature that touches the cluster works.
 
-- Read pods, services, deployments, statefulsets, daemonsets
-  cluster-wide.
-- Read events.
-- Read logs (`pods/log`).
+To tighten it, point the chart at a narrower ClusterRole of your
+own and upgrade:
 
-To widen this (so the Assistant can read more, or so write
-proposals can be applied), edit *Settings → Clusters → \[cluster\]
-→ RBAC.* Daalu generates the patch for you to apply.
+```bash
+helm upgrade daalu-edge oci://ghcr.io/daalu/charts/daalu-edge \
+  --namespace daalu-edge --reuse-values \
+  --set kubeRegistration.clusterRole=<your-scoped-role>
+```
+
+There's no RBAC setting in the app. With a narrower role,
+features whose verbs are denied fail individually (for example,
+applying a write proposal), while the rest keep working.
 
 ---
 
@@ -143,13 +149,14 @@ A few things that are explicitly *not* present:
 
 - **Restart behaviour.** If the edge pod dies, Kubernetes
   restarts it. The tunnel reconnects in seconds. The Daalu
-  side notes the dropped handshake; if it's down for >15
-  minutes, a critical alert fires.
+  side notes the dropped handshake: the cluster row turns
+  **degraded** after about 3 minutes without one, and **error**
+  after about 10.
 - **Cluster reboots.** Reboots are transparent. Once the edge
   pod schedules and starts, the tunnel comes back.
 - **Updates.** The chart can be upgraded with `helm upgrade`.
-  We publish releases as needed; check the integration detail
-  page for "Available update."
+  We publish releases as needed; the app doesn't flag a newer
+  version, so upgrade on your own schedule.
 
 ---
 
@@ -157,8 +164,10 @@ A few things that are explicitly *not* present:
 
 `helm uninstall -n daalu-edge daalu-edge` and the tunnel dies
 immediately. In the operator app, the cluster row will go to
-**disconnected** within seconds. Delete the cluster row from
-the UI to clean up the Daalu side as well.
+**disconnected** within seconds. Click **Tear down** on the
+cluster row to clean up the Daalu side as well; it asks you
+to confirm in place ("Removes the tunnel; Daalu stops reaching
+this cluster.") before anything is removed.
 
 ---
 

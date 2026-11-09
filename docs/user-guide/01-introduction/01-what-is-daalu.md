@@ -80,9 +80,9 @@ Concretely, when you log in to Daalu Automation you get:
   first, with cloud LLMs as fallback. You pay for the GPU once and
   the AI calls are effectively free.
 
-- **One bill.** Cloud spend, local GPU usage, and Daalu's own subscription
-  appear together in the billing page so you can see total cost per
-  tenant rather than juggling vendor invoices.
+- **One clear bill.** Your plan, your AI usage, and how much of it ran on
+  your own GPU appear together on the *Usage & Pricing* page, so you can see
+  what Daalu costs per tenant at a glance.
 
 The rest of this book is a tour of those capabilities. Chapter 2
 explains the architecture at a high level so the rest makes sense.

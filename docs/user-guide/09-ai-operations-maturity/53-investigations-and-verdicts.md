@@ -46,11 +46,13 @@ Columns:
 | **Alert** | The alert's title, with its severity underneath. |
 | **Started** | When the AI started investigating. |
 | **To triage** | Time from the alert firing to the AI's root cause; "—" if it hasn't named one. |
-| **Actions P / A / R / Auto** | Fixes the AI **P**roposed, that people **A**pproved, that people **R**ejected, and that ran **Auto**matically. |
+| **Actions** | Counts of fixes the AI **proposed**, that people **approved**, that people **rejected**, and that ran **automatic**ally. Zero counts are left out. |
 | **Resolution** | How the alert ended (below). |
 | **Verdict** | Your team's grade, a "needs verdict" chip if it's waiting for one, or "—" if there's nothing to grade yet. |
 
-The list refreshes every 30 seconds. Click a row to open the drawer.
+The list refreshes every 30 seconds. Click a row to open the drawer. On a
+phone the table becomes a stack of cards, one per investigation, with the
+verdict and resolution on each card.
 
 ### What each resolution means
 
@@ -117,8 +119,10 @@ Click one of:
 - **Partly right** — on the right track but incomplete or imprecise.
 - **Wrong** — it missed.
 
-Add an optional note ("what was actually wrong?") in the box underneath
-before you click — the note is saved with the verdict.
+The optional note box ("What was actually wrong?") sits above the buttons.
+Fill it in first: clicking a verdict saves straight away, with the note. A
+short message confirms the save ("Verdict saved: Correct. It now counts
+toward the agreement rate.").
 
 Once saved, the panel shows "Your team said: **Correct**", by whom and when,
 and the note. Click **Change** to re-grade; the newest verdict replaces the

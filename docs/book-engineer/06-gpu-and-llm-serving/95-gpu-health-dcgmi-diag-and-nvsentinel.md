@@ -57,9 +57,10 @@ id returns 404 (`gpu_metrics.py:558-567`).
 (`diagnostics.py:117`) returns a warning for anything heavier than a level-1
 diag. If the request doesn't carry `acknowledged: true`, the API answers
 **412** with `{requires_acknowledgement, warning, kind, level}`
-(`gpu_metrics.py:508-519`). The diagnostics panel shows the warning in a
-confirm dialog and re-submits with `acknowledged: true`
-(`diagnostics-panel.tsx:27-58`, `:150-160`).
+(`gpu_metrics.py:508-519`). The diagnostics panel holds the request
+(`diagnostics-panel.tsx:33-38`, `:55-58`), shows the warning in a
+`Dialog` (`AckModal`, `:168-177`, `:182`) and re-submits with
+`acknowledged: true` on confirm.
 
 | Level | What the code says it does (`diagnostics.py:113-146`) | Ack? |
 |---|---|---|
@@ -70,7 +71,7 @@ confirm dialog and re-submits with `acknowledged: true`
 
 **Levels are 1–3.** `clamp_level` (`diagnostics.py:24-28`) clamps anything
 else into that range (default 1), and the UI offers only 1/2/3
-(`diagnostics-panel.tsx:21-25`). DCGM itself also has a level 4; Daalu does not
+(`diagnostics-panel.tsx:102-104`). DCGM itself also has a level 4; Daalu does not
 expose it. These are `dcgmi` test depths, unrelated to the AI-Ops maturity
 levels (chapters 81–90).
 
@@ -196,7 +197,7 @@ Plus two blocks:
 
 When NVSentinel isn't scraped, the panel says: "Auto-remediation is not active
 yet — GPU faults page a human via the runbook"
-(`reliability-panel.tsx:135-136`).
+(`reliability-panel.tsx:161-162`).
 
 **Design rule: the hub never drives remediation.** The reliability route
 comment (`gpu_metrics.py:821-828`), the install doc and the plan all say the

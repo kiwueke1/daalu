@@ -1,6 +1,7 @@
 # 48. Dashboards — your Grafana boards, rendered natively
 
-**Dashboards** in the sidebar (`https://ops.example.com/dashboards`) shows
+**Dashboards** in the sidebar, under *Insights*
+(`https://ops.example.com/dashboards`), shows
 your Grafana dashboards **inside Daalu** — no iframe, no Grafana detour.
 Grafana stays the *catalog* (the list of boards and each board's panel
 definitions); Daalu renders the panels itself by running their PromQL and
@@ -39,7 +40,8 @@ flowchart LR
 The page needs a connected **Grafana** integration (URL + API token) so
 Daalu can read your catalog. If it isn't connected yet, the page shows a
 **Grafana not connected** banner pointing you at **Managed infra →
-Integrations**. Chapter 31 covers the setup; if your Grafana is inside a
+Clusters & observability**, where Grafana is a row under
+*Observability*. Chapter 31 covers the setup; if your Grafana is inside a
 connected cluster, tick the tunnel option and use its in-cluster URL as
 usual.
 
@@ -59,14 +61,16 @@ Click one to open it:
 
 ## Create with AI
 
-The **Create with AI** button opens a prompt modal:
+The **Create with AI** button opens a dialog, *Create a dashboard with
+AI*:
 
 1. **What to show** — describe the board in plain language, e.g.
    `Cluster-wide CPU and memory by namespace, plus pod restart counts`.
    Example prompts are one click away.
-2. **Title** (optional) and **Data** — Metrics (Prometheus), Logs
-   (Loki), or Mixed.
-3. Click **Generate**. Daalu's AI writes a complete Grafana dashboard
+2. **Title** (optional — named from your description if blank) and
+   **Data** — Metrics (Prometheus), Logs (Loki), or Mixed.
+3. Click **Generate dashboard** (it stays disabled until you've
+   described what to show). Daalu's AI writes a complete Grafana dashboard
    (PromQL/LogQL panels, layout, units), **saves it into your Grafana**,
    and opens it here.
 
@@ -78,8 +82,8 @@ for another one.
 
 ## Where dashboards show up elsewhere
 
-- The **cluster detail page** (chapter 17) shows a *related dashboards*
-  section under the health overview.
+- The **cluster detail page** (chapter 17) shows the related
+  dashboards on its **Dashboards** tab.
 - The **Managed infra** observability rows link into the same boards.
 - For GPU fleets, the **AI Factory** page (chapter 50) has its own native
   GPU panels built on the same data plane.

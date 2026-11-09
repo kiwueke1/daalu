@@ -63,24 +63,21 @@ A reminder from Chapter 6, with one or two clarifications:
 
 | Action | Admin | User |
 |---|---|---|
-| Invite/remove users | Yes | No |
-| Change roles | Yes | No |
+| Invite users | Yes | No |
+| Remove users, change roles | Via your operator | No |
 | Add/remove integrations | Yes | No |
-| Edit tenant settings | Yes | No |
-| See *Billing* page | Yes | No |
+| See *Usage & Pricing* | Yes | Yes |
+| Switch plan | Yes | No |
 | Approve proposals | Yes (incl. others') | Yes (not their own) |
 | Open proposals | Yes | Yes |
 | Use the Assistant | Yes | Yes |
 | Investigate | Yes | Yes |
-| Mint own PATs | Yes | Yes |
-| Mint others' PATs | Yes | No |
-| Revoke own PATs | Yes | Yes |
-| Revoke others' PATs | Yes | No (admin only) |
+| Mint and revoke own PATs | Yes | Yes |
 
-The last few rows are subtle: a user can manage *their own*
-personal access tokens, including listing them and revoking them.
-They cannot see or touch anyone else's PATs. Admins can do both
-for everyone.
+Personal access tokens are always personal: everyone manages
+*their own* in *Settings → API tokens*, and nobody — admin or
+not — can see or revoke someone else's there. To cut off another
+person's access, ask your operator (Chapter 6).
 
 ---
 

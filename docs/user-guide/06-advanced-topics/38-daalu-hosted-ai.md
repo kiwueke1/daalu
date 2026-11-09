@@ -72,9 +72,9 @@ Two line items on the billing page, both per million tokens:
 prompt (input) and completion (output). The per-token rates are
 set by whoever operates the hosted tier.
 
-Your billing page (Chapter 22) shows daalu-hosted
-spend broken out by source — "chat", "classifier", "coding" — so you
-can see which feature is burning the budget.
+*Usage & Pricing* shows spend broken out by source under **Top
+sources this period**, so you can see which feature is burning the
+budget.
 
 ---
 
@@ -102,8 +102,8 @@ your **overage policy**:
   you pay the cloud passthrough rate). Default for production plans
   where AI uptime matters more than the few dollars of overflow.
 
-You can switch policies any time on `/settings → AI tier`. The
-change takes effect on the next call.
+To switch policies, ask your operator; there's no setting for it
+in the app. The change takes effect on the next call.
 
 ---
 
@@ -120,11 +120,6 @@ We treat the daalu-hosted tier the same as the rest of our platform:
 * **The audit log records** *that* a call happened, the tenant,
   the user, the source (which agent or feature triggered it), the
   model, the token counts, and the latency. No prompt body.
-* **Opt-in full capture.** If you want full prompt+completion
-  capture for debugging, turn on `tenant.audit.full_capture` and
-  point it at an S3 bucket you control. Captures go straight there,
-  not to Daalu's database.
-
 We never use customers' prompts for training, fine-tuning, or
 anything else.
 
@@ -132,20 +127,16 @@ anything else.
 
 ## Enabling the tier
 
-Your operator can turn it on for your tenant, or — if self-serve
-is allowed — toggle it in `/settings → AI tier`:
+There's no switch for this tier in the app. Your operator turns
+it on for your tenant; tell them the **monthly limit** you want and
+your **overage policy** (see above).
 
-1. Click **Enable Daalu-hosted inference**.
-2. Pick a **monthly limit**.
-3. Pick an **overage policy** (see above).
-4. Save.
-
-Within about 60 seconds your next inference call will start using
-the daalu-hosted pool. Watch the **Billing page → "Source" panel**
-to confirm — calls that previously showed `cloud:anthropic` will
-start showing `local` (because the daalu-hosted pool is the LOCAL
-tier from the router's point of view; see Chapter 36's terminology
-note).
+Once it's on, your next inference call starts using the
+daalu-hosted pool. To confirm, watch **Where tokens were made**
+on *Usage & Pricing*: calls that used to land on an external
+model start landing on the local tier (the daalu-hosted pool is
+the local tier from the router's point of view; see Chapter 36's
+terminology note).
 
 ---
 

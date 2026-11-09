@@ -46,27 +46,30 @@ nothing — they're the ambient hum of a working environment.
 
 ## Alert rules: turning events into alerts
 
-An **alert rule** is the recipe that promotes some events into
-**alerts**. Rules are defined either:
+An **alert rule** is the recipe that turns a signal into an
+**alert**. Daalu doesn't ask you to write rules twice: they live
+in the systems that already have them.
 
-- **In your observability stack.** Prometheus alerting rules and
-  Grafana alert rules are pulled in by the adapter and treated
-  as Daalu alert rules. You don't have to author them twice.
-- **In Daalu.** *Settings → Alert rules* lets you write rules in
-  Daalu's own DSL. We expect most customers to use this rarely
-  — most rules already exist in their observability stack.
+- **Prometheus / Alertmanager.** Your alerting rules stay in
+  Prometheus. Every couple of minutes Daalu pulls the alerts that
+  are firing (from Alertmanager, or from Prometheus itself when
+  there's no Alertmanager).
+- **AWS CloudWatch.** Alarms in the *ALARM* state come in every
+  minute once an AWS account is connected.
+- **PagerDuty.** Open PagerDuty incidents come in as alerts once
+  PagerDuty is connected.
+- **Your own sources.** Anything that can send an HTTP request
+  can post events to Daalu's ingest endpoint (Chapter 33).
 
-A rule looks roughly like: "if more than three events of kind
-`device.config.drifted` arrive from source `nautobot/main` in 10
-minutes, fire an alert at severity `warning` with the label
-`mass-drift`."
+To add or change a rule, change it where it lives — for example,
+in your Prometheus rule files. There's no rule editor in Daalu.
 
-When a rule fires, Daalu writes an **alert** row. Alerts are the
+When an upstream alert fires, Daalu writes an **alert** row. Alerts are the
 unit a human looks at. They have:
 
 - A title, suitable for paging text.
 - A severity.
-- A status (`firing` or `resolved`).
+- A status (`open`, `acknowledged`, or `resolved`).
 - A start time and (if resolved) an end time.
 - A set of labels (`{cluster: eu-west, device: edge-router-3}`).
 - A pointer back to the events that triggered it.
@@ -82,7 +85,7 @@ has cleared, and a re-fire of the same rule collapses back onto
 one alert rather than duplicating.
 
 The *Alerts* page in the sidebar is the inbox of alerts for your
-tenant. You can filter by severity, status, source, label.
+tenant, with Open, Acknowledged and Resolved tabs.
 
 ---
 
@@ -101,23 +104,23 @@ on-call systems use:
   facing service is down; a security policy was modified;
   the operator app's own health is degraded.
 
-Whether each severity triggers a notification depends on your
-**notification rules** — the rest of this chapter.
+Whether an alert reaches you outside Daalu depends on the
+channels you've connected and your own notification settings —
+the rest of this chapter.
 
 ---
 
 ## Incidents: when one alert isn't enough
 
-An **incident** is a grouping of one or more alerts under a
-single ongoing investigation. Incidents have:
+An **incident** is a record that something bigger than one alert
+is going on. Incidents have:
 
-- A title (auto-generated or user-set).
+- A title and an optional summary (scope, who's impacted).
+- A severity.
 - A status (`open` or `resolved`).
-- An assignee.
-- A timeline (the alerts that joined it, comments by humans,
-  Assistant suggestions).
-- A postmortem document (a starter is generated when the
-  incident is closed).
+- The AI's likely root cause and suggested remediation, when the
+  AI opened it.
+- Evidence — the alerts and events behind it.
 
 Incidents are the right unit for cross-functional collaboration.
 When an SRE pulls in a NetOps colleague to help with a routing
@@ -125,10 +128,16 @@ issue, they share an incident, not an alert.
 
 Incidents are created two ways:
 
-- **By an agent.** When multiple related alerts fire in a short
-  window, an agent groups them and proposes opening an incident.
+- **By the AI.** When it triages a serious alert, the AI can open
+  an incident with its findings attached.
 - **By you.** From any alert's detail page, **"Promote to
   incident."**
+
+Open incidents are counted on the home page's **Open now** tile
+and appear in briefings; you can list them on *Reports → Query*.
+To announce one to your team, run the **Coordinate an incident**
+automation (Chapter 21), which posts to your incidents Slack
+channel.
 
 A single alert is *not* automatically an incident. Most alerts
 don't need that overhead.
@@ -138,82 +147,46 @@ don't need that overhead.
 ## Notifications: the part that pings your phone
 
 A **notification** is the outbound message that Daalu sends to
-get a human's attention. Notifications go through one or more of
-your configured channels:
+get a human's attention. Two channels are available, set up under
+*Managed infra → Integrations → Notification channels*:
 
-- **Slack** — a message in a channel or DM.
-- **PagerDuty** — an incident in PagerDuty, which then handles
-  paging via its own escalation policies.
-- **Email** — a transactional email to the user.
-- **Browser push** — a notification on the *Home* page and (if
-  enabled) a desktop notification when you have the tab open.
-- **SMS / phone** — only via PagerDuty integration. Daalu
-  doesn't operate its own SMS gateway.
+- **Slack** — where Daalu posts daily briefings and incident
+  updates.
+- **Email (SMTP)** — on-call escalations, optional daily-briefing
+  emails, and invites.
 
-You configure which channels get used at *Settings →
-Notifications*. The configuration has three levels of detail:
+Paging belongs to the tool you already page with: Daalu brings
+PagerDuty incidents *in* as alerts, and doesn't send pages or
+SMS of its own.
 
-1. **Per-user defaults.** "By default, I want critical alerts to
-   page me on PagerDuty and warnings to ping me on Slack." Each
-   user sets their own.
-2. **Per-route overrides.** "Alerts labelled `team: netops`
-   should go to the #netops Slack channel regardless of who's on
-   call." Admins set these.
-3. **Per-rule overrides.** "This specific alert rule, when it
-   fires, should always page the platform on-call." Set when
-   authoring the rule.
+Each person chooses what reaches them in *Settings →
+Notifications*:
 
-The system resolves to the most specific match. If you find an
-alert paged you that you didn't expect, the alert's detail page
-shows the routing decision: "this alert matched
-`team=platform` → routed to PagerDuty service `platform-prod`."
+- Email me on critical alerts.
+- Email the daily briefing.
+- In-app: a change proposal is ready for review.
+- In-app: workflow failed.
+
+All four start off; turn on what you want. Inside the app, the
+right rail's **Alerts** section and the sidebar badges show what's
+firing and what's waiting for you, whatever your settings.
+
+Saved reports can also be delivered on a schedule to Slack or
+email from *Reports → Schedules* (Chapter 23).
 
 ---
 
 ## "Should this page me?" — a cheat sheet
 
-A quick reference. Pin this somewhere if you're new to on-call:
+A quick reference for what each severity usually deserves. Your
+paging tool decides who gets woken up; this is how to think about
+it:
 
-| Severity | What's typical | Default behaviour |
+| Severity | What's typical | Sensible handling |
 |---|---|---|
 | info | Routine events | Recorded only |
-| warning | Work-hours look | Slack to assignee/channel |
-| critical | Wake-up | PagerDuty page |
-
-Override any of this at *Settings → Notifications*.
-
----
-
-## The Watchdog alert
-
-One specific alert exists in every Daalu tenant: **Watchdog**. It
-fires constantly. Its purpose is to verify the *Alerts pipeline
-itself* — if Watchdog stops appearing in Slack/PagerDuty, you
-know notifications are broken, even when no other alert has
-fired in a while.
-
-You can configure Watchdog's destination at *Settings → Alerts →
-Watchdog*. We recommend pointing it at a low-volume channel
-nobody routinely watches — its job is to be a heartbeat, not a
-distraction. The absence of beats is the signal.
-
----
-
-## Snoozing alerts
-
-You can snooze an alert (suppress further notifications for it)
-from the alert's detail page. **"Snooze for"** offers:
-
-- 30 minutes
-- 2 hours
-- 8 hours ("until tomorrow")
-- Until a custom time
-
-Snoozing only affects *your* notifications. Other users on the
-alert still get pinged unless they snooze too.
-
-Snoozing doesn't resolve the alert. It silences notifications.
-The alert stays *firing* until whatever's wrong gets fixed.
+| warning | Work-hours look | Slack, or the Alerts page |
+| critical | Wake-up | Page through your paging tool; email if you've turned it on |
 
 ---
 
@@ -228,18 +201,21 @@ many of them." A few patterns:
   spikes.
 - **Mass-event noise.** A storm of events from one source
   (e.g., 200 device drifts at once because someone applied a
-  template change) deserves *one* alert, not 200. Configure
-  rate-limiting on the rule.
+  template change) deserves *one* alert, not 200. Daalu already
+  folds re-fires of the same alert onto one card ("fired N×");
+  for the rest, group or rate-limit in the rule upstream.
 - **Bad labels.** If you can't route an alert, you can't tune
   it. Make sure your alert rules emit useful labels.
 - **No runbook.** An alert without a documented "what to do
   when this fires" turns every page into an investigation from
-  zero. Attach a runbook URL to the rule; it'll appear on the
-  detail page when the alert fires.
+  zero. Write the fix down as a runbook on the **Runbooks** page
+  (Chapter 54); a published runbook that matches an alert goes
+  into the AI's triage context.
 
-The *Alerts* page has a **"Top alerts by volume this week"**
-section at the bottom. Spend 15 minutes on that list once a week
-in your first month; it pays for itself.
+To find your noisiest alerts, sort by the **Fired N×** count on
+the Alerts page, or ask the Assistant ("which alerts fired most
+this week?"). Spend 15 minutes on that list once a week in your
+first month; it pays for itself.
 
 ---
 

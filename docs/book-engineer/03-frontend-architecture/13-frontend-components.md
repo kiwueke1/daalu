@@ -1,8 +1,12 @@
 # 13. Shared components and the design system
 
 `frontend/components/` houses the reusable UI building blocks.
-We use Radix UI primitives + Tailwind for styling, layered
-with our own opinionated set of components.
+We don't use a component library: the primitives are a handful
+of files in `components/ui/` that we own, styled with Tailwind
+over the theme tokens in `app/globals.css`. The rules every
+screen follows (tabs vs accordions, how actions explain
+themselves, states, motion, accessibility, layout) live in
+`frontend/DESIGN.md`; this chapter is the map of where things are.
 
 ---
 
@@ -10,216 +14,287 @@ with our own opinionated set of components.
 
 ```
 frontend/components/
-├── ui/                  # primitive components (Button, Input, Card, …)
-├── layout/              # Sidebar, TopBar, AssistantPanel
-├── alerts/              # alert-specific components
-├── proposals/           # proposal-specific components
-├── billing/             # billing visualizations
-├── assistant/           # assistant chat UI
-├── forms/               # form helpers, fields, validators
-└── theme/               # ThemeProvider, dark mode toggle
+├── ui/                  # primitives: Button, Dialog, TabBar, Accordion,
+│                        #   ConfirmButton, LoadState, toast, useUnsavedGuard
+├── layout/              # AppShell, Sidebar, Header, RightPanel, AssistantSheet
+├── alerts/              # alert tile, alert chat + its right rail, investigation tabs
+├── aiops/               # autonomy, investigations, maturity, runbook editor, verdicts
+├── cards/               # Home tiles (summary, metrics, event feed, insights, …)
+├── copilot/             # Markdown renderer + thinking dots for Assistant answers
+├── managed-infra/       # Managed infra tabs (clusters, network & servers)
+├── operations/          # Operations tabs (devices, drift, proposals, imports)
+├── integrations/ gpu/ network/ onboarding/ proposals/ reports/
+├── topology/ workflows/ brand/
+├── command-bar.tsx      # the header's ask/search bar
+├── greeting-hero.tsx, hero-briefing.tsx   # Home
 ```
 
 The pattern: domain components compose primitive components.
+Client helpers that aren't components live in `lib/`:
+`errors.ts` (`errorText`), `timeout.ts` (`withTimeout`),
+`use-automation-state.ts`, `theme.tsx`, `auth.tsx`, `api.ts`.
 
 ---
 
 ## Primitives (`components/ui/`)
 
-Following the **shadcn/ui** approach: we vendor the
-components rather than installing them. Each primitive lives
-as a .tsx file we own, can edit, and don't have to upgrade.
+| Component | File | Use for |
+|---|---|---|
+| `Button`, `buttonClass` | `button.tsx` | Every button. Variants `primary` / `secondary` / `danger` / `ghost` / `icon`; sizes `sm` / `md`. `pending` shows a spinner; `disabledReason` explains a disabled button (tooltip + screen reader). `variant="icon"` requires `aria-label` at the type level. |
+| `Dialog` | `dialog.tsx` | Every overlay. `variant="modal"` (default), `"drawer"` (slides from the right) or `"sheet"` (rises from the bottom, for phones). Gives `role="dialog"`, a labelled title, Escape and backdrop close, a focus trap, focus return to the opener and scroll lock. It unmounts its children on close. |
+| `TabBar`, `TabPanel`, `useUrlTab` | `tabs.tsx` | Page-level peer sections. `useUrlTab` keeps the active tab in `?tab=` so links and reloads land on it. A tab can carry a `badge` (accent = needs attention, muted = informational). Scrolls sideways on narrow screens. |
+| `Accordion`, `AccordionItem` | `accordion.tsx` | Folded lists, one item open at a time. Folded rows show a one-line summary and a right-aligned `meta`. |
+| `ConfirmButton` | `confirm-button.tsx` | One-click changes and removals. The first click asks in place: the `consequence` sentence plus a confirm/cancel pair, no modal. The question resets after 8 s. |
+| `LoadState` | `load-state.tsx` | Loading, error, empty and "not set up yet" for a query. Never show "0" or "none" while loading. Errors render through `errorText()`. |
+| `ToastProvider`, `useToast` | `toast.tsx` | Confirming what just happened (`toast.success("Runbook published", { action: { label: "View", … } })`) and announcing failures (`toast.error(errorText(err))`). `aria-live`, dismissible, paused on hover/focus, at most four on screen. |
+| `useUnsavedGuard` | `use-unsaved-guard.ts` | Any editor or form: `useUnsavedGuard(draft !== saved)` makes the browser warn before reload or close. |
 
-Examples:
-- `<Button>` — variants (primary, secondary, ghost, destructive),
-  sizes (sm, md, lg, icon).
-- `<Input>`, `<Textarea>`, `<Select>`, `<Checkbox>`, `<Switch>`.
-- `<Card>` — wrapper for panel-like content.
-- `<Dialog>` — modal.
-- `<Sheet>` — side panel that slides in.
-- `<Popover>`, `<Tooltip>`, `<HoverCard>`.
-- `<Table>` — semantic table styling, no built-in pagination.
-- `<Tabs>` — uses Radix Tabs under the hood.
-- `<Badge>` — for status pills.
+Two `lib/` helpers sit alongside them:
 
-Each is a single-file component, typed in TypeScript, using
-`class-variance-authority` (CVA) for variant-based class
-composition.
+- `errorText(error)` (`lib/errors.ts`) is the only way an error
+  reaches the screen. See Chapter 12.
+- `useAutomationState()` (`lib/use-automation-state.ts`) returns
+  `{ paused, tripped }` from the autonomy policy (kill switch and
+  breakers whose cooldown hasn't ended). The header pill and the
+  sidebar's Autonomy badge both read it, so they can't disagree.
+
+---
+
+## Confirmations
+
+Native `confirm()` and `window.prompt()` are not used anywhere.
+A change or removal confirms in place instead:
+
+- **Most actions:** `ConfirmButton`, with `label` (the first
+  click), `confirmLabel` (the second) and `consequence` (one
+  sentence on what will happen). Example: Resolve on an alert,
+  Resume automation on the Autonomy page.
+- **Something that needs more than a sentence** (a warning to
+  acknowledge, extra input): a `Dialog` whose footer has the
+  primary action last. Example: the stressful-diagnostic
+  acknowledgement in `app/ai-factory/components/diagnostics-panel.tsx`
+  (`AckModal`).
+- **Irreversible teardown:** type-the-name confirmation. Example:
+  `DeleteEnvironmentDialog` in
+  `components/managed-infra/network-view.tsx`.
+
+Deletes are permanent (no model has a `deleted_at`), so they
+confirm first; the toast's `action` slot is ready for an Undo
+once soft delete exists.
 
 ---
 
 ## Layout components
 
+The app shell (`components/layout/app-shell.tsx`, Chapter 10)
+places these.
+
 ### `<Sidebar>`
 
-`components/layout/sidebar.tsx`. The left navigation. Sourced
-from a static `NAV` array of items:
+`components/layout/sidebar.tsx`. The left navigation, grouped by
+what you came to do. Home sits on top, then four labelled groups,
+then a quieter bottom block:
 
 ```tsx
-const NAV = [
-  { href: "/", label: "Home", icon: Home },
-  { href: "/integrations", label: "Managed Infra", icon: Cloud },
-  { href: "/operations", label: "Operations", icon: Settings },
-  { href: "/agents", label: "Agents", icon: Bot },
-  { href: "/alerts", label: "Alerts", icon: AlertTriangle },
-  { href: "/automations", label: "Automations", icon: Workflow },
-  { href: "/reports", label: "Reports", icon: BarChart },
-  { href: "/billing", label: "Billing", icon: CreditCard },
-  { href: "/devices", label: "Devices", icon: Server },
-  { href: "/clusters", label: "Clusters", icon: Boxes },
-  { href: "/proposals", label: "Proposals", icon: GitPullRequest },
+const HOME: Item = { href: "/", label: "Home", icon: Home };
+
+const GROUPS = [
+  { label: "Respond",        items: [Alerts, Investigations, Workflows] },
+  { label: "Automate",       items: [Automations, Agents, Runbooks, "Autonomy policy"] },
+  { label: "Infrastructure", items: ["Managed infra", "AI Factory", Operations, Workspace] },
+  { label: "Insights",       items: [Dashboards, Reports, Maturity, Evals, "Audit log"] },
 ];
 
-const BOTTOM = [
-  { href: "/settings", label: "Settings", icon: Settings },
-  { href: "/help", label: "Help & Feedback", icon: HelpCircle },
-];
+const BOTTOM = ["Usage & Pricing" (/billing), Settings, "Help & Feedback"];
 ```
 
-The `usePathname()` hook highlights the active item. Each
-link is a Next.js `<Link>` for client-side navigation.
+(Abridged; the file has the `href`/`icon` for each.) There is no
+"AI Ops" section any more: its pages joined these groups. Several
+older routes are tabs elsewhere and are deliberately not entries:
+Devices and Proposals are tabs in `/operations`; Integrations,
+Clusters & observability, Network & servers and Onboarding are
+tabs in `/managed-infra`. Their old routes still resolve.
+Topology is not an entry either; it belongs to one NV-CM
+environment and is reached from Managed infra → Network & servers
+→ (environment) (Chapter 79). A new page joins an existing group;
+the list must fit 1440×900 without scrolling.
 
-### `<TopBar>`
+**"Needs you" badges.** `useNavBadges()` in the same file puts a
+badge on an entry only when a person can act on something:
 
-Search input, notifications bell (popover with feed), profile
-menu (dropdown with Settings, Help, Logout). Sticky to the top.
+| Entry | Badge | Source |
+|---|---|---|
+| Alerts | "N critical" (else "N warnings") | `api.alerts.list({ status: "open" })`, key `["alerts", "open-summary"]` (shared with the header and Assistant sheet) |
+| Investigations | "N to grade" (muted) | `api.aiops.investigations.list({ days: 30, needs_verdict: true })` |
+| Workflows | "N to approve" | `api.workflows.runs()` filtered to `status === "waiting_for_approval"`, key `["workflow-runs", "right-panel"]` (shared with the rail) |
+| Autonomy policy | "Paused" or "N tripped" | `useAutomationState()` |
 
-### `<AssistantPanel>`
+Each refetches every 60 s. Nothing shows until its query has
+answered, and a query the user can't read (403) just means no
+badge. Urgent badges use `motion-attention` (pops in, rings
+twice, stops).
 
-The right-side AI Assistant panel. Always rendered (in the
-authed layout) but collapsed to a thin strip by default.
+The active entry is matched with `usePathname()` (prefix match,
+except `/`). From `md` up the sidebar is `sticky` at full
+viewport height, so Settings stays reachable on a long page; the
+nav list scrolls on short screens while the bottom block stays
+pinned. Below `md` it is a drawer with a backdrop, closed by
+Escape, the backdrop, the close button or navigating; a closed
+drawer is `invisible` so its links leave the tab order.
 
-Has its own state machine for the chat:
-- `idle` — waiting for input.
-- `streaming` — receiving tokens from the SSE stream.
-- `tool-running` — between streaming chunks, a tool call is
-  executing.
-- `error` — terminal state for the current turn.
+### `<Header>`
 
-State is in a Zustand store at `components/assistant/store.ts`
-because multiple components (panel header, message thread,
-input) need to read and write it.
+`components/layout/header.tsx`. Sticky, 64px. Left to right: the
+phone-only menu button (opens the sidebar drawer), an alert
+status computed from open alerts ("2 critical alerts", "No open
+alerts", never a static "all nominal"), the **Automation paused**
+/ **N breakers tripped** pill when `useAutomationState()` says so
+(links to `/autonomy`), the `CommandBar`, the theme toggle, an
+alerts bell with a severity dot, and the account menu (name,
+email, Sign out).
+
+### `<RightPanel>` (the right rail)
+
+`components/layout/right-panel.tsx`. Shown from `xl` up. Four
+sections, each a pill in a slim 76px strip on the right edge:
+**Assistant** (AI Assistant chat), **Alerts** (Notifications),
+**Sessions** (Active sessions) and **Health** (System health).
+Every section is collapsed by default, so the main column gets
+the width; clicking a pill opens that section in a 340px column
+beside the strip, and several can be open at once (they render
+in rail order, not click order). The open set is saved in
+`localStorage["daalu-right-rail-open"]` per browser; first visit
+is fully collapsed, and the server render is always collapsed so
+the main column never flashes narrow.
+
+While Notifications is collapsed, its pill shows a severity dot
+for open alerts (`OpenAlertDot`), so a firing critical is still
+visible. The Assistant section is `CopilotBody`, a question/answer
+list over `api.copilot.ask()` rendered with
+`components/copilot/markdown.tsx`; it is not streamed.
+
+Alert detail pages (`/alerts/<id>`) don't get this rail; they
+render `components/alerts/alert-chat-rail.tsx`, a remediation chat
+bound to that alert.
+
+### `<AssistantSheet>`
+
+`components/layout/assistant-sheet.tsx`. Below `xl`, where the
+rail doesn't fit, a floating **Assistant** button (bottom right,
+with the open-alert count) opens a `Dialog variant="sheet"` with
+three tabs: Ask, Notifications and System health. It reuses the
+rail's `CopilotBody`, `NotificationsBody` and `SystemHealthBody`.
+The conversation is held in the sheet component, above the
+`Dialog`, because `Dialog` unmounts its children on close; so it
+survives closing the sheet and changing page, but not a reload.
+The button is hidden on `/alerts/<id>` and `/workspace`
+(`hidesAssistantButton` in the app shell).
 
 ---
 
 ## Tables
 
-We don't use a heavy table library (TanStack Table is great
-but overkill for our needs). Tables are hand-rolled with the
-`<Table>` primitive:
+We don't use a table library. Tables are plain `<table>` markup
+styled with Tailwind. Two rules from `DESIGN.md`:
 
-```tsx
-<Table>
-  <thead>
-    <tr>
-      <th>Severity</th>
-      <th>Title</th>
-      <th>Source</th>
-      <th>First seen</th>
-    </tr>
-  </thead>
-  <tbody>
-    {alerts.map((a) => (
-      <tr key={a.id} onClick={() => router.push(`/alerts/${a.id}`)}>
-        <td><Badge variant={a.severity}>{a.severity}</Badge></td>
-        <td>{a.title}</td>
-        <td>{a.source}</td>
-        <td>{relativeTime(a.started_at)}</td>
-      </tr>
-    ))}
-  </tbody>
-</Table>
-```
+- A table sits in a `relative overflow-x-auto` wrapper (never
+  `overflow-hidden`), or becomes stacked cards below `md`, so
+  action columns stay reachable on a phone. The wrapper must be
+  `relative`, or an `sr-only` header escapes it and widens the
+  page.
+- A clickable row puts a real `<Link>` or `<button>` in the row;
+  never `onClick` on a `<tr>` alone.
 
-Sorting is done client-side for small lists; server-side via
-query params for larger ones. The filtering pattern: store
-filters in URL search params with `useSearchParams`, derive
-the query key from them.
+Filters that should survive a reload live in URL search params.
 
 ---
 
 ## Charts
 
-`components/charts/` uses **Recharts** for time-series, bars,
-pies. Wrapped in our own helper components so a chart's
-inputs are typed and a "no data" empty state is consistent.
-
-For more bespoke visualizations (the diff view, the topology
-graph) we drop down to D3 directly.
+**Recharts** for time series and bars: the Grafana-backed
+dashboards (`app/dashboards/[uid]`), report dashboards, billing,
+AI Factory and the maturity trend (`components/aiops/maturity-parts.tsx`).
+The topology graph (`components/topology/FabricGraph.tsx`) is
+hand-drawn SVG.
 
 ---
 
 ## Forms
 
-Simple forms: controlled inputs + a `useForm` hook from
-`react-hook-form` + Zod for schema validation:
-
-```tsx
-const schema = z.object({
-  name: z.string().min(1).max(255),
-  expiresAt: z.string().optional(),
-});
-
-function CreateTokenForm() {
-  const form = useForm<z.infer<typeof schema>>({ resolver: zodResolver(schema) });
-  const onSubmit = form.handleSubmit(async (values) => { ... });
-  return (
-    <form onSubmit={onSubmit}>
-      <Field {...form.register("name")} label="Name" />
-      <Field {...form.register("expiresAt")} label="Expires (optional)" type="date" />
-      <Button type="submit">Create</Button>
-    </form>
-  );
-}
-```
-
-The `<Field>` component handles label, input, and error
-display.
+Forms are controlled inputs with `useState`; there is no form
+library. Every input has a visible label above it, never a
+placeholder alone, and phone inputs are at least 16px so iOS
+doesn't zoom on focus. The submit button says what happens
+("Save new version", not "Submit") and uses `disabledReason` when
+it can't work yet. Editors call `useUnsavedGuard(dirty)`.
 
 ---
 
 ## Color and theme
 
-We define semantic color tokens in CSS variables:
+Semantic colour tokens are CSS variables in `app/globals.css`:
+`--accent`, `--accent-glow`, `--text`, `--text-muted`,
+`--bg-base`, `--bg-card`, `--bg-elevated`, `--line`, `--critical`,
+`--warning`, `--info`. `:root` holds the dark values and
+`html[data-theme="light"]` overrides them, so the theme is the
+`data-theme` attribute on `<html>`. `tailwind.config.ts` maps
+them to classes (`text-fg`, `bg-accent`, `bg-signal-critical`, …)
+through `color-mix()`, so opacity modifiers like `bg-accent/10`
+work. `bg-[color:var(--x)]/10` still compiles to nothing; use the
+named token.
 
-```css
-:root {
-  --background: 0 0% 100%;
-  --foreground: 240 10% 3.9%;
-  --primary: 240 88% 60%;
-  --destructive: 0 84% 60%;
-  --muted: 240 5% 84%;
-  --border: 240 6% 90%;
-}
-.dark {
-  --background: 240 10% 3.9%;
-  --foreground: 0 0% 98%;
-  /* ... */
-}
-```
+Attention is `--accent`, operator/manual is `--warning`, failure
+is `--critical`. Never hard-code a hex value in a component.
 
-Tailwind references them as `bg-background text-foreground
-border-border` via the `tailwind.config.js` mapping.
-
-Accent color is a separate variable swapped via the
-`data-accent` attribute on `<html>`, set by the
-ThemeProvider based on `user.preferences.accent`.
+The theme follows the OS until the user picks one with the header
+toggle (saved as `localStorage["daalu-theme"]`), and it is applied
+by an inline script in `app/layout.tsx` before first paint
+(Chapter 10).
 
 ---
 
 ## Accessibility
 
-Radix primitives give us keyboard navigation, focus
-management, and ARIA attributes for free. We layer on:
+The target is WCAG 2.2 AA. What's built in:
 
-- Visible focus rings (Tailwind `focus-visible:ring-2 …`).
-- `aria-label` on icon-only buttons.
-- `role="alert"` on toast messages.
-- Color isn't the only signal — every status badge has a
-  word too.
+- Text tokens clear 4.5:1 on every surface in both themes; the
+  sidebar badges use an opaque background so their contrast
+  doesn't depend on the wallpaper behind them.
+- A global `:focus-visible` ring (`app/globals.css`) and a "Skip
+  to content" link in the app shell.
+- `Dialog` handles role, label, Escape, focus trap and focus
+  return; `Button variant="icon"` requires an `aria-label`.
+- Results of async actions are announced: `useToast()` is
+  `aria-live`, `LoadState` errors are `role="alert"`, and the
+  header's automation pill is `role="status"`.
+- Status is never colour alone: every badge and dot has a word.
+- Tap targets are at least 24×24px (sidebar rows are 44px tall on
+  a phone).
 
-We don't claim WCAG 2.1 AA compliance officially; the project
-is on that track and audit reports go in `docs/accessibility/`.
+---
+
+## Motion
+
+Motion does one of three jobs or none: confirm an action
+(`motion-press` on every `Button`, toasts, `motion-success`),
+direct attention (`motion-attention` on "needs you" badges and the
+automation pill, `motion-update`), or soften a transition
+(`motion-enter` on route changes and loaded content,
+`motion-dialog` / `motion-drawer` / `motion-sheet`). Durations
+come from `--dur-fast`, `--dur` and `--dur-slow`, all under
+400ms. A `prefers-reduced-motion: reduce` block at the bottom of
+`globals.css` turns all of it off. Nothing loops for decoration.
+
+---
+
+## Checking a UI change
+
+`npm run test:visual` runs the Playwright screenshot tests in
+`e2e/visual.spec.ts` against fixtures in `e2e/fixtures` (key
+screens, the grouped sidebar and the phone Assistant sheet); it
+runs in CI. Update the baselines in `e2e/__screenshots__/` in the
+same commit as an intended change. `scripts/ui-shots.mjs` takes
+read-only screenshots against real data.
 
 ---
 

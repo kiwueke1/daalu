@@ -8,7 +8,7 @@ truth, a workflow engine, a config store and renderer, and optional
 zero-touch provisioning and DHCP) that Daalu installs, upgrades, heals, and
 drives on your behalf. You work entirely in the Daalu UI.
 
-Where to find it: **Managed infra → Network & servers** in the sidebar
+Where to find it: **Managed infra → Network & servers** (sidebar → Infrastructure)
 (`https://ops.example.com/managed-infra?tab=network`).
 
 ## 27.1 What it manages
@@ -116,9 +116,12 @@ name, status badge (`active`, `provisioning`, `error`…), namespace, chart
 version, and a one-line summary (*"4 components running"*, or *"5/9 pods
 ready"* mid-install). Click a tile to open it.
 
-An **active** environment's detail view shows:
+An **active** environment's detail view shows **All components are
+ready** — the green completion banner — and then four tabs:
+**Consoles**, **Devices**, **Observability** and **Workloads**.
 
-- **All components are ready** — the green completion banner.
+The **Consoles** tab holds:
+
 - **Stack consoles** — link cards into the stack's own web UIs, each named
   for what it does:
   - **Source of truth** — inventory, addressing, and intended state.
@@ -132,9 +135,14 @@ An **active** environment's detail view shows:
   Daalu identity (§27.7) and Daalu drives them for you day to day.
 - **In Daalu** — jump-offs to **Topology** (see the live fabric, chapter
   49) and **Operations** (onboard devices, review drift, approve changes).
-- **Onboard your devices** — on the primary environment, the inline
+  Topology isn't in the sidebar; this card is how you reach it.
+
+The other tabs:
+
+- **Devices** — on the primary environment, the inline
   device-onboarding panel (§27.9).
-- **Workloads** — the pod list again, collapsed now that everything is
+- **Observability** — the environment's observability stack.
+- **Workloads** — the pod list again, now that everything is
   healthy.
 
 ## 27.7 One login for everything
@@ -168,8 +176,8 @@ an account.
 
 ## 27.9 Onboarding your devices
 
-Device onboarding lives right on the primary environment's detail view —
-the **Onboard your devices** panel. It's a short checklist, and the first
+Device onboarding lives right on the primary environment's detail view,
+on its **Devices** tab — the **Onboard your devices** panel. It's a short checklist, and the first
 item is already done for you:
 
 1. **Source of truth: connected.** The environment's bundled source of
@@ -227,8 +235,10 @@ view (*Chart v1.3.0*). When Daalu ships a newer version, an **Upgrade
 available** badge and an **Upgrade** button appear next to it
 (admins only).
 
-Click **Upgrade** and the rollout is scheduled immediately — like the
-install, it runs in the background for a few minutes, the environment tile
+Click **Upgrade**. It asks you to confirm in place (**Upgrade now**)
+and says what happens: the stack rolls to the new version, and its
+tools may restart for a few minutes. Once you confirm, the rollout is
+scheduled immediately — like the install, it runs in the background for a few minutes, the environment tile
 shows the rollout live, and you can leave the page. Each environment
 upgrades independently, so you can move `Lab` first and `Production` a
 week later.

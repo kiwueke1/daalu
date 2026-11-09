@@ -29,19 +29,22 @@ A signal worth a human's attention. Created when an event
 matches an alert rule. See Chapter 11.
 
 **alert rule**
-The recipe that promotes events into alerts. Defined either
-in your observability stack or in Daalu's *Settings → Alert
-rules*.
+The recipe that promotes events into alerts. Defined in your
+observability stack (for example, Prometheus alert rules);
+Daalu picks up what fires there. Custom sources open alerts by
+sending an alert-type event (Chapter 33).
 
 **API token** — see *personal access token*.
 
 **Assistant**
-The AI co-pilot. A chat panel that can investigate, propose,
-and notify. See Chapter 12.
+The AI co-pilot that can investigate, propose, and notify.
+Lives in the right rail, or behind the **Assistant** button on
+phones and smaller windows. See Chapter 12.
 
 **audit log**
-Tenant-wide log of every state-changing action. Admin-only.
-See Chapter 24.
+Tenant-wide, hash-chained log of what the AI and your team
+did. Anyone on the team can read and verify it (*Insights →
+Audit log*). See Chapter 56.
 
 **bootstrap token**
 The one-shot credential used to set up cluster federation.
@@ -58,8 +61,8 @@ The auto-generated summary on the home page. Runs daily. See
 Chapter 5 and Chapter 19.
 
 **briefing time**
-The hour at which the briefing agent runs in your tenant's
-time zone. Configurable.
+The time of day the briefing agent runs. Set by Daalu; you can
+also click **Regenerate** on the home page for a fresh one.
 
 **chat (tier)**
 The default LLM SKU for typical Assistant turns. See Chapter
@@ -146,7 +149,7 @@ similar webhook endpoints. Different from PATs. See Chapter
 
 **integration**
 Daalu's connection to one of your external systems. The unit
-of configuration on the Managed Infra page. See Chapter 10.
+of configuration on the Managed infra page. See Chapter 10.
 
 **invite**
 The single-use link sent to a teammate to join your tenant.
@@ -246,8 +249,9 @@ some via proposal. See Chapter 12.
 
 **topology (fabric topology)**
 The live network map: nodes from the source of truth, links
-coloured by observed LLDP adjacency and telemetry. See
-Chapter 49.
+coloured by observed LLDP adjacency and telemetry. Opened from
+an environment's **Consoles** tab (*Managed infra → Network &
+servers*), not the sidebar. See Chapter 49.
 
 **tunnel** — see *federation tunnel*.
 

@@ -235,8 +235,12 @@ path added only to the base silently vanishes in the overlay.
 critical = down, warning = miscabled, faint = mgmt/unknown), tier-based
 layout, a node drawer (SoT facts + live LLDP neighbours from
 `GET /topology/nodes/{id}` — served from the same cached sweep, so opening
-the drawer costs no extra SSH), and the xterm.js terminal. Sidebar entry
-"Topology". The xterm imports are **type-only** (erased at build; the runtime
+the drawer costs no extra SSH), and the xterm.js terminal. Topology is not a
+sidebar entry: it belongs to one NV-CM environment, so it is reached from
+**Managed infra → Network & servers → (environment) → Topology**
+(`internalLinks` in `frontend/components/managed-infra/network-view.tsx`,
+which appends `?env=<slug>&env_name=<name>`) or from the "Onboard your
+devices" panel. `/network/topology` still resolves directly. The xterm imports are **type-only** (erased at build; the runtime
 module is dynamically imported) because `next lint` doesn't register
 `@typescript-eslint` rules — plus a `*.css` ambient module declaration for
 xterm's stylesheet under `moduleResolution: bundler`.

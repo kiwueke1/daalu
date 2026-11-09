@@ -127,26 +127,27 @@ The choice is influenced by:
   capability is equivalent.
 
 This is invisible to the user. The Assistant's response
-mentions which model answered if you ask, but the routing
-choice itself isn't surfaced unless you click "Show details"
-on a reply.
+mentions which model answered if you ask; the routing choice
+itself isn't shown on the reply.
 
 ---
 
 ## Per-tenant overrides
 
-In *Settings → LLM router*:
+Routing is set per organisation by the plan you're on.
+Each plan card on *Usage & Pricing → Plans* states its routing
+policy:
 
-- **Force local** — every call goes local; if local is down,
-  the request fails rather than spilling to cloud. Strict
-  privacy mode.
-- **Force cloud** — every call goes cloud; local is ignored.
-  Useful for debugging.
-- **Per-tier rules** — override the routing per tier.
-  "Embeddings always cloud," for instance.
-- **Per-user rules** — some users always go cloud; helpful
-  for "the eng-leads team is allowed cloud, everyone else is
-  local."
+- **Local GPU first; external models for hard questions.**
+- **Local first for everything; external on miss.**
+- **External models only, no local routing.**
+- **Your own GPU, federated cluster.**
+
+Switching plan changes routing from that moment; the
+**Switch to …** button asks you to confirm in place first.
+There are no per-user or per-tier overrides in the app; if you
+need a policy none of the plans offers, talk to Daalu
+support.
 
 ---
 
@@ -182,11 +183,10 @@ These are rough. Your mileage varies.
 
 Two ways:
 
-- **Per-call.** On any Assistant reply, click "Show
-  details" → "Routing." You'll see the destination chosen
-  and the reason ("local, online, tier=chat, tokens=124").
-- **Aggregate.** *Billing → Local GPU* shows the
-  local/cloud split over time.
+- **Aggregate.** *Usage & Pricing* shows **Where tokens were
+  made** (local GPU vs external) and **Top sources this
+  period** for the current billing period.
+- **Per-call.** Ask the Assistant which model answered.
 
 ---
 
@@ -196,12 +196,10 @@ It will happen. The 8B local model gives a poor answer; you
 re-ask the same question expecting better. The router
 considers it a fresh call and may route local again.
 
-Workaround: prefix with `cloud:` (`cloud: <question>`) — a
-power-user prefix that forces the next call to cloud. The
-prefix is consumed by the router and not sent in the prompt.
-
-For systematic problems, change the tenant override in
-*Settings → LLM router.*
+For systematic problems, move to a plan whose routing policy
+sends more work to external models (*Usage & Pricing →
+Plans*), or connect a bigger local GPU so a larger model can
+serve locally (Chapter 35).
 
 ---
 

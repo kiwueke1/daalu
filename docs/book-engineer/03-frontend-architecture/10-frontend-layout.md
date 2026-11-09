@@ -11,14 +11,16 @@ overall structure; Chapter 11 is the per-page tour, Chapter
 
 ```
 frontend/
-├── app/                     # App Router routes
-├── components/              # shared UI components
-├── lib/                     # client utilities (API client, auth helpers)
-├── styles/                  # Tailwind config + globals.css
+├── app/                     # App Router routes, globals.css, providers.tsx
+├── components/              # shared UI components (layout/, ui/, per-domain dirs)
+├── lib/                     # client utilities (API client, auth, theme, errors)
 ├── public/                  # static assets
+├── e2e/                     # Playwright screenshot tests + fixtures
+├── scripts/                 # ui-shots.mjs (real-data screenshots)
+├── DESIGN.md                # the UI rules every screen follows
 ├── package.json
 ├── next.config.js
-├── tailwind.config.js
+├── tailwind.config.ts
 ├── tsconfig.json
 └── Dockerfile
 ```
@@ -29,11 +31,12 @@ We're on Next.js 14 with the App Router. Pages live under
 Server components vs client components:
 
 - The default in App Router is server components.
-- We mark client components explicitly with `"use client"` at
-  the top of files that need interactivity (most of them, in
-  practice).
-- Server components do the initial data fetch on the server,
-  bumping perceived performance.
+- In practice every page is a client component (`"use client"`
+  at the top). The few `page.tsx` files without it, such as
+  `app/network/page.tsx` and `app/proposals/page.tsx`, only
+  call `redirect()` to the tab that replaced them.
+- Data is fetched in the browser with React Query; there is no
+  server-side data fetch.
 
 ---
 
@@ -50,17 +53,11 @@ app/settings/page.tsx     → /settings
 app/help/page.tsx         → /help
 ```
 
-Nested layouts:
-
-- `app/layout.tsx` — root layout with `<html>`, `<body>`,
-  global providers.
-- `app/(authed)/layout.tsx` — wraps every authed page with
-  the sidebar and top bar.
-
-We use route groups (parentheses-named directories) for
-shared layouts without affecting the URL. `(authed)` is the
-main one; `(public)` would group login/signup if we split
-them out.
+There is one layout, `app/layout.tsx`, and no route groups.
+The authenticated chrome (sidebar, header, right rail) is not a
+layout file: it is the `AppShell` client component, which the
+root layout wraps around every page and which decides per route
+what to draw (see "The app shell" below).
 
 ---
 
@@ -70,200 +67,196 @@ them out.
 
 ```tsx
 "use client";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ThemeProvider } from "@/components/theme-provider";
-
 export function Providers({ children }: { children: React.ReactNode }) {
-  const [queryClient] = useState(() => new QueryClient({
-    defaultOptions: {
-      queries: {
-        staleTime: 30_000,
-        retry: 1,
-      },
-    },
-  }));
+  const [client] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: { staleTime: 15_000, refetchOnWindowFocus: false, retry: false },
+        },
+      })
+  );
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider>{children}</ThemeProvider>
+    <QueryClientProvider client={client}>
+      <ThemeProvider>
+        <ToastProvider>
+          <AuthProvider>{children}</AuthProvider>
+        </ToastProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }
 ```
 
-Wrapped at `app/layout.tsx`:
-
-```tsx
-<body>
-  <Providers>{children}</Providers>
-</body>
-```
-
 React Query is the data layer for nearly every page.
-ThemeProvider toggles dark/light/system.
+`ThemeProvider` (`lib/theme.tsx`) holds dark/light.
+`ToastProvider` (`components/ui/toast.tsx`) backs `useToast()`.
+`AuthProvider` (`lib/auth.tsx`) loads the current user from
+`GET /api/v1/auth/me` and exposes `useAuth()`.
 
 ---
 
 ## The root layout
 
-`app/layout.tsx`:
+`app/layout.tsx` (trimmed):
 
 ```tsx
-import "./globals.css";
-
-export const metadata = {
-  title: "Daalu Automation",
-  description: "Operations cockpit",
-};
+const THEME_BOOT = `try{var t=localStorage.getItem("daalu-theme");…document.documentElement.dataset.theme=t}catch(e){}`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className="min-h-screen bg-background font-sans antialiased">
-        <Providers>{children}</Providers>
+    <html lang="en" data-theme="dark" className={quicksand.variable} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
+      </head>
+      <body className="ambient-bg min-h-screen text-[color:var(--text)]">
+        <Providers>
+          <AppShell>{children}</AppShell>
+        </Providers>
       </body>
     </html>
   );
 }
 ```
 
-`suppressHydrationWarning` is for the theme provider — the
-class applied on initial server render doesn't match the
-client because we read `localStorage` for the theme. The
-provider handles the mismatch correctly; this just tells
-React not to scream about it.
+The theme is applied before first paint. `THEME_BOOT` is an
+inline `<head>` script that reads the saved choice from
+`localStorage["daalu-theme"]`, falls back to the OS
+`prefers-color-scheme`, and sets `data-theme` on `<html>`.
+Without it a light-mode user saw a dark flash on every load,
+because `ThemeProvider` only runs after hydration. With no saved
+choice the provider keeps following the OS if it switches.
+`suppressHydrationWarning` is there because the script changes
+`data-theme` before React hydrates.
 
 ---
 
-## The authed layout
+## The app shell
 
-`app/(authed)/layout.tsx`:
+`components/layout/app-shell.tsx` picks one of four renderings
+by route:
+
+- **Public routes** (`/login`, `/signup`, `/verify-email`, and
+  anything under the `/accept-invite` prefix): the page alone,
+  no chrome, no auth wait.
+- **Loading**: a centred "Loading…" while `useAuth()` resolves.
+- **Focused routes** (`/cli/activate`): signed in, but no
+  sidebar, header or rail, so a consent step has the whole screen.
+- **Everything else**:
 
 ```tsx
-import { Sidebar } from "@/components/layout/sidebar";
-import { TopBar } from "@/components/layout/top-bar";
-import { AssistantPanel } from "@/components/assistant/panel";
-import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
-
-export default async function AuthedLayout({
-  children,
-}: { children: React.ReactNode }) {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
-  return (
-    <div className="flex h-screen">
-      <Sidebar />
-      <div className="flex flex-1 flex-col">
-        <TopBar user={user} />
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
-      </div>
-      <AssistantPanel />
+<div className="flex min-h-screen">
+  <a href="#main" className="skip-link">Skip to content</a>
+  <Sidebar mobileOpen={mobileNavOpen} onMobileClose={…} />
+  <div className="flex-1 min-w-0">
+    <Header onMobileNavOpen={…} />
+    <div className="flex">
+      <main id="main" tabIndex={-1} className="flex-1 min-w-0 …">
+        <div key={pathname} className="motion-enter">{children}</div>
+      </main>
+      {!skipGlobalRail && <RightPanel />}
     </div>
-  );
-}
+  </div>
+  {showAssistantButton && <AssistantSheet />}
+</div>
 ```
 
-The `getCurrentUser` helper hits `/api/v1/auth/me` server-side
-with the request's cookies; if it returns 401, we redirect to
-`/login`. This makes every authed page deny-by-default at the
-layout level.
+- `Sidebar` (`components/layout/sidebar.tsx`) is the grouped left
+  nav. On a phone it is a drawer opened from the header's menu
+  button; the shell closes it on route change and locks body
+  scroll while it is open.
+- `Header` (`components/layout/header.tsx`) is sticky and 64px
+  tall. Pages that need an inner scroll area size themselves with
+  `h-[calc(100dvh-4rem)]`; `<main>` has no height of its own.
+- `RightPanel` (`components/layout/right-panel.tsx`) is the right
+  rail, shown from the `xl` breakpoint up. Alert detail pages
+  (`/alerts/<id>`) skip it (`ownsRightRail`) because they render
+  their own remediation-chat rail.
+- `AssistantSheet` (`components/layout/assistant-sheet.tsx`) is the
+  rail's stand-in below `xl`: a floating Assistant button and a
+  bottom sheet. It is hidden on `/alerts/<id>` and `/workspace`
+  (`hidesAssistantButton`).
+- The page content is re-keyed per route so each page fades in
+  (`motion-enter`), and the skip link jumps to `#main`.
+
+Auth is enforced by the API, not by the layout. Any API call that
+returns 401 makes `lib/api.ts` send the browser to
+`/login?next=<current path>` (except on the public routes). An
+uncaught render error lands in `app/error.tsx`, the root error
+boundary.
+
+Chapter 13 covers the sidebar, header and rail in detail.
 
 ---
 
 ## Data fetching patterns
 
-We use two patterns, chosen by latency sensitivity:
-
-### Server components for initial loads
+Every page fetches in the browser with React Query through the
+`api` client in `lib/api.ts` (Chapter 12):
 
 ```tsx
 // app/alerts/page.tsx
-import { fetchAlerts } from "@/lib/api";
-
-export default async function AlertsPage() {
-  const alerts = await fetchAlerts();   // server-side fetch
-  return <AlertsList initial={alerts} />;
-}
+const openQ = useQuery({
+  queryKey: ["alerts", "open"],
+  queryFn: () => api.alerts.list({ status: "open" }),
+  refetchInterval: 10_000,
+});
 ```
 
-The initial render has data; React Query takes over from
-there.
+Two conventions hold everywhere:
 
-### React Query for interactive updates
+- **Query keys are shared on purpose.** The header status, the
+  sidebar's Alerts badge and the Assistant sheet all use
+  `["alerts", "open-summary"]`, so they are one fetch and always
+  agree. Reuse an existing key when you show the same data.
+- **Never render a zero or an empty state while loading or
+  failed.** Wrap the result in `LoadState`
+  (`components/ui/load-state.tsx`), which handles loading, error,
+  empty and "not set up yet". A query backed by live infra
+  (Prometheus, a GPU node) is wrapped in `withTimeout()` from
+  `lib/timeout.ts`, so it gives up after 15 s
+  (`LIVE_INFRA_TIMEOUT_MS`) with a `TimeoutError` instead of
+  spinning forever; `isUnreachable(error)` tells that case (and a
+  502/504) apart from other errors.
 
-```tsx
-"use client";
-function AlertsList({ initial }: { initial: Alert[] }) {
-  const { data } = useQuery({
-    queryKey: ["alerts"],
-    queryFn: () => apiClient.alerts.list(),
-    initialData: initial,
-    refetchInterval: 30_000,
-  });
-  return <Table data={data} />;
-}
-```
-
-The `initialData` from the server avoids a flash of empty
-content.
-
----
-
-## Cookie auth from server components
-
-The session cookie is HttpOnly. Server components can read it
-because they execute on the server with access to the request
-headers:
-
-```tsx
-// lib/auth.ts
-import { cookies } from "next/headers";
-
-export async function getCurrentUser() {
-  const c = cookies();
-  const session = c.get("daalu_session");
-  if (!session) return null;
-  const r = await fetch(`${process.env.API_URL}/api/v1/auth/me`, {
-    headers: { Cookie: `daalu_session=${session.value}` },
-  });
-  if (!r.ok) return null;
-  return r.json();
-}
-```
-
-Client components call `/api/v1/auth/me` without explicit
-cookie handling — the browser sends the cookie automatically.
+The session cookie is HttpOnly. Client components never read it;
+the browser sends it with every same-origin request
+(`credentials: "include"`).
 
 ---
 
 ## Styling
 
-Tailwind + `globals.css` + a small set of CSS variables for
-theming:
+Tailwind + `app/globals.css`. Colours are CSS variables defined
+twice in `globals.css`, once per theme, and switched by the
+`data-theme` attribute on `<html>`:
 
 ```css
+/* dark is the default */
 :root {
-  --background: 0 0% 100%;
-  --foreground: 240 10% 3.9%;
+  --accent: #22d3a6;
+  --text: #e7efe9;
+  --text-muted: #8a9a93;
+  --critical: #f26161;
   /* ... */
 }
-.dark {
-  --background: 240 10% 3.9%;
-  --foreground: 0 0% 98%;
+html[data-theme="light"] {
+  --text: #0a1612;
+  --text-muted: #56655f;
+  /* ... */
 }
 ```
 
-Components reference these as `bg-background text-foreground`.
-Theme toggle swaps the `.dark` class on `<html>`.
-
-We pick a few accent colors per user pref:
-
-```css
-[data-accent="indigo"] { --primary: 240 88% 60%; }
-[data-accent="green"]  { --primary: 142 76% 36%; }
-```
-
-The accent comes from `users.preferences.accent`.
+`tailwind.config.ts` maps them to class names (`text-fg`,
+`bg-accent`, `bg-signal-critical`, …) through a `color-mix()`
+helper, so opacity modifiers like `bg-accent/10` work.
+Components use the tokens, never a hard-coded hex value. The text
+tokens are tuned to clear WCAG AA (4.5:1) on every surface in both
+themes. Motion classes (`motion-enter`, `motion-press`,
+`motion-attention`, …) and their durations live at the bottom of
+`globals.css`, and a `prefers-reduced-motion: reduce` block there
+turns them all off. `frontend/DESIGN.md` is the rulebook for
+tokens, motion, states and layout.
 
 ---
 

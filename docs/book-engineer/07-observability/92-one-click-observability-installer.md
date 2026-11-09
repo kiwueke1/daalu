@@ -15,7 +15,7 @@ Only two stores are installable. Prometheus, Thanos and Loki are
 | Installer | `src/daalu_automation/core/observability_install.py` (283 lines) |
 | Route | `POST /observability/{provider}/install`, `api/routers/observability.py:208-236` |
 | Vendored manifests | `src/daalu_automation/deploy_assets/observability/{opensearch,fluent-bit,grafana}.yaml` |
-| UI | `frontend/components/managed-infra/network-view.tsx:1690` (`OBS_INSTALLABLE`), `EnvObservability` at 1692 |
+| UI | `frontend/components/managed-infra/network-view.tsx:1691` (`OBS_INSTALLABLE`), `EnvObservability` at 1693 |
 | API client | `frontend/lib/api.ts:739` (`api.observability.install`) |
 | Consumers | `core/observability_console.py` (OpenSearch console), `core/grafana.py` (`/dashboards`) |
 | Tests | `tests/test_observability_install.py` |
@@ -236,11 +236,11 @@ data point.
 ## 92.6 The UI
 
 The **Observability** section of an environment's detail view
-(`EnvObservability`, `network-view.tsx:1692`, mounted at line 1255 inside the
+(`EnvObservability`, `network-view.tsx:1693`, mounted at line 1262 inside the
 Managed-infra page) shows four tiles: Metrics (`prometheus`), Logs (`loki`),
 Search & analytics (`opensearch`), Dashboards (`grafana`). A tile is
 "connected" when **any Integration row with that provider exists**
-(`connected` is built from `/integrations/config`, line 1698). Tiles in
+(`connected` is built from `/integrations/config`, line 1700). Tiles in
 `OBS_INSTALLABLE` (`grafana`, `opensearch`) get an **Install into cluster**
 button next to "connect an existing one"; on success the query is invalidated
 and the result line reads "Installed: N objects applied", plus "finishing setup
@@ -249,7 +249,7 @@ in the background…" when `finalizing` is true.
 Be precise about when the tile turns green: the row is written with status
 `connected` **in the install request**, so the tile flips as soon as the API
 returns — before OpenSearch or Grafana is Ready. The success message's wording
-("the tile flips to connected once the store answers", line 1782) is not what
+("the tile flips to connected once the store answers", line 1784) is not what
 the code does. To know the store is actually up, watch the pods, open the
 console (its overview calls the store and reports `reachable`), or wait for the
 integration health sweep (`OpenSearchAdapter.health` probes `/_cluster/health`,

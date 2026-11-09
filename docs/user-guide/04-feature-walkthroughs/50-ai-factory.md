@@ -1,6 +1,7 @@
 # 50. AI Factory — GPU observability and operations
 
-**AI Factory** in the sidebar (`https://ops.example.com/ai-factory`) is the
+**AI Factory** in the sidebar, under *Infrastructure*
+(`https://ops.example.com/ai-factory`), is the
 window into the GPUs that serve your AI: live utilisation, thermals,
 memory, and power for every card, plus the "factory operations" — health
 diagnostics, benchmarks, and reliability checks — you run against the
@@ -26,7 +27,9 @@ can't clutter the whole floor.
   own card, keyed by the card's hardware UUID. Each shows model,
   utilisation, temperature, memory, and power at a glance.
 - **Factory operations** — four tiles that launch fleet-wide checks, each
-  with a small last-run pill and a **Run** shortcut:
+  with a small last-run pill. The first two have a run shortcut
+  (**Run health check**, **Run self-check**); starting one shows a short
+  message saying where the results will appear:
   - **Diagnostics** — GPU health diagnostics (device-level checks and
     multi-GPU communication tests).
   - **Observability check** — a self-test of the metrics pipeline itself:
@@ -39,7 +42,8 @@ can't clutter the whole floor.
 
 Click a GPU card to drill into it: metric cards, time-series charts
 (Utilisation / Temp / Memory / Power over selectable ranges), hardware
-error counters (XID errors, uncorrectable ECC), firing alerts, and that
+error counters (**Driver errors (XID)**, **Memory errors (ECC)**), firing
+alerts, and that
 card's reliability history.
 
 ---

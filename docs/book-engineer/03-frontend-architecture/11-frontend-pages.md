@@ -5,6 +5,25 @@ and where the corresponding backend route lives.
 
 This is a reference. Skip to the page you're working on.
 
+The sidebar (`components/layout/sidebar.tsx`, Chapter 13) groups
+these routes by task:
+
+| Group | Entries |
+|---|---|
+| (top) | Home `/` |
+| Respond | Alerts `/alerts`, Investigations `/investigations`, Workflows `/workflows` |
+| Automate | Automations `/automations`, Agents `/agents`, Runbooks `/runbooks`, Autonomy policy `/autonomy` |
+| Infrastructure | Managed infra `/managed-infra`, AI Factory `/ai-factory`, Operations `/operations`, Workspace `/workspace` |
+| Insights | Dashboards `/dashboards`, Reports `/reports`, Maturity `/maturity`, Evals `/evals`, Audit log `/audit` |
+| (bottom) | Usage & Pricing `/billing`, Settings `/settings`, Help & Feedback `/help` |
+
+Routes that aren't entries are reached from a page: Devices and
+Proposals are tabs in `/operations`; Integrations, clusters and
+Network & servers are tabs in `/managed-infra`; `/network/topology`
+opens from an environment card. The old standalone routes
+(`/devices`, `/proposals`, `/clusters`, `/network`, `/integrations`)
+redirect to those tabs.
+
 ---
 
 ## `/` — Home
@@ -55,39 +74,18 @@ on the backend lives in `api/routers/onboarding.py`.
 
 ## `/managed-infra` — Managed Infrastructure
 
-**File:** `frontend/app/integrations/page.tsx`.
+**File:** `frontend/app/managed-infra/page.tsx`.
 
-(The route is `/managed-infra` but the file is at `integrations`
-for historical reasons; we may rename.)
+A `TabBar` with the active tab in `?tab=`:
 
-Server fetch: `GET /api/v1/integrations`.
+- Clusters & observability (`?tab=clusters`)
+- Network & servers (`?tab=network`) — NV-CM environment cards,
+  their consoles, observability and the Topology link
+- Onboarding (`?tab=onboarding`)
+- Integrations (`?tab=integrations`, `IntegrationsView` from
+  `components/integrations/integrations-view.tsx`)
 
-Sections rendered:
-- `<CloudAccountsSection>`
-- `<ClustersSection>` (cluster federation)
-- `<ObservabilitySection>`
-- `<SoTSection>`
-- `<BusinessSystemsSection>`
-- `<NotificationsSection>`
-- `<WebhooksSection>`
-
-Each section is its own component, fetches its own slice with
-React Query, renders a list of rows.
-
----
-
-## `/managed-infra/[id]` — Integration detail
-
-**File:** `frontend/app/integrations/[id]/page.tsx`.
-
-Tabs:
-- Inventory
-- Cost
-- Health
-- Settings
-
-The shape varies by integration type, dispatched via a
-`switch (integration.type)` to a per-type detail component.
+`/clusters`, `/network` and `/integrations` redirect here.
 
 ---
 
@@ -95,17 +93,15 @@ The shape varies by integration type, dispatched via a
 
 **File:** `frontend/app/operations/page.tsx`.
 
-Tabs:
-- Devices (`<DevicesTab>`)
-- Drift (`<DriftTab>`)
-- Proposals (`<ProposalsTab>`)
-- Routine runs (`<RuntimeTab>`)
+Tabs (`?tab=`), each a view in `components/operations/`:
+- Overview (`OverviewView`)
+- Devices (`DevicesView`)
+- Drift (`DriftView`)
+- Proposals (`ProposalsView`)
+- Bulk import (`ImportView`)
+- Routine runs (`RoutineRunsView`)
 
-Each is its own component. Routes:
-- `GET /api/v1/sot/devices`
-- `GET /api/v1/sot/drift`
-- `GET /api/v1/proposals`
-- `GET /api/v1/agents/runs`
+`/devices` and `/proposals` redirect to their tabs.
 
 ---
 
@@ -187,8 +183,10 @@ Sections:
 - Labels
 - Related
 
-The Assistant panel auto-binds to this alert's context for
-prompts.
+This page replaces the global right rail with its own
+remediation chat rail (`components/alerts/alert-chat-rail.tsx`),
+bound to this alert; the app shell skips `RightPanel` and the
+phone Assistant button on `/alerts/<id>` (`ownsRightRail`).
 
 ---
 
@@ -310,13 +308,14 @@ tour stays a complete map:
 | `/workspace` (+ terminal card) | `frontend/app/workspace/page.tsx` | "Use Daalu from your terminal" express-login card (ch. 77) |
 
 One styling landmine worth recording here because it *will* recur
-(PR #114): `bg-accent-emerald/90` compiles to **no CSS at all** —
-`accent-emerald` resolves to `var(--accent)`, a bare hex, and Tailwind can
-only apply an opacity modifier to a CSS-variable colour declared with the
-`<alpha-value>` placeholder. Buttons styled that way render with no
-background (they look like dim grey text) until `:hover` applies the
-unmodified class. The house convention is solid `bg-accent` +
-`hover:opacity-90`.
+(PR #114): an opacity modifier on an arbitrary colour,
+`bg-[color:var(--accent)]/10`, compiles to **no CSS at all**, because
+Tailwind can only apply `/NN` to a colour it can mix. Buttons styled
+that way render with no background until `:hover` applies the
+unmodified class. The named tokens in `tailwind.config.ts` (`bg-accent`,
+`bg-signal-critical`, `text-fg`, …) are declared through a `color-mix()`
+helper, so `bg-accent/10` and `bg-accent-emerald/90` do work now; use
+them (`frontend/DESIGN.md` §5).
 
 ---
 

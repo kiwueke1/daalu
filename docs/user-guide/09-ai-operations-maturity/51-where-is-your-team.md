@@ -44,7 +44,7 @@ chain** verifies. [Chapter 55](55-metrics-dashboard.md) explains every one.
 | 4 | Learning | Every incident improves the next: verdicts, runbooks, evals, metrics. |
 | 5 | Autonomous | AI resolves most routine incidents; humans own policy and exceptions. |
 
-Those are the exact descriptions the page shows when you hover a level.
+Those are the exact descriptions the page shows on each level's tile.
 
 ### The thresholds behind each level
 
@@ -107,10 +107,11 @@ right with that level, who saved it, and when.
 
 ### The ladder
 
-Six tiles, Level 0 to Level 5. Your current level is highlighted. Each tile
-shows whether that level's *own* criteria are met. You can meet a higher
-level's criteria without being at it yet — the ladder makes that visible, so
-you can see which lower-level gap is holding you back.
+Six tiles, Level 0 to Level 5, each with its description. Your current level
+is highlighted and reads **Your level**. Every other tile reads **Met**,
+**Not met yet**, or **Criteria met · blocked by L***n*. You can meet a higher
+level's criteria without being at it yet; the "blocked by" tile shows that
+and names the lower level whose gap is holding you back.
 
 ### The stat tiles
 

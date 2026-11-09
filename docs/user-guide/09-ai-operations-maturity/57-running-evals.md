@@ -109,20 +109,17 @@ so a model that finds the right fix but misdiagnoses the cause doesn't pass.
 
 ## The Evals page
 
-### How to run
-
-A reminder of the commands above.
-
 ### Leaderboard
 
 One row per label, best first: **#**, **Label**, **Mean score**, **Pass
 rate**, **Runs**, **Scenarios** (how many different scenarios it was tested
 on). Click a row to filter the runs below to that label. Invalid runs are
-excluded.
+excluded. On a phone each label is a card showing the same numbers.
 
 ### Runs
 
-Filter by scenario (**All scenarios** or one) and by **Label (model)**.
+Filter by **Scenario** (**All scenarios** or one) and by **Label (model)**
+(blank means any).
 Columns: **Scenario**, **Label**, **Score**, **Result** (pass / fail),
 **Started**. Click a row to expand it: each check with pass/fail, its score
 out of its weight and the reason ("matched ['ImagePullBackOff']", "called
@@ -133,6 +130,11 @@ kubectl steps, errors, the model that answered and the transcript.
 
 A card per scenario with its id, title, description, namespace and alert;
 **Expectations** expands the answer key.
+
+### Run an eval from your terminal
+
+A collapsed section at the end of the page. Open it for a reminder of the
+commands above and how a run is graded.
 
 ---
 

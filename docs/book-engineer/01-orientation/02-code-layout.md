@@ -195,22 +195,28 @@ frontend/
 │   ├── automations/
 │   ├── billing/
 │   ├── reports/
-│   ├── settings/            # new
-│   ├── help/                # new
-│   ├── integrations/
-│   ├── devices/
-│   ├── clusters/
-│   ├── proposals/
-│   └── providers.tsx        # React Query, theme provider
+│   ├── settings/
+│   ├── help/
+│   ├── managed-infra/       # tabs: clusters, network, onboarding, integrations
+│   ├── investigations/ runbooks/ autonomy/ maturity/ evals/ audit/
+│   ├── integrations/        # redirect → /managed-infra?tab=integrations
+│   ├── devices/             # redirect → /operations?tab=devices (+ [id] detail)
+│   ├── clusters/            # redirect → /managed-infra?tab=clusters (+ [slug] console)
+│   ├── proposals/           # redirect → /operations?tab=proposals (+ [id] detail)
+│   ├── …
+│   ├── globals.css          # theme tokens, motion, focus ring
+│   └── providers.tsx        # React Query, theme, toasts, auth
 ├── components/              # shared UI components
-│   ├── layout/sidebar.tsx
-│   └── …
+│   ├── layout/              # app-shell, sidebar, header, right-panel, assistant-sheet
+│   ├── ui/                  # Button, Dialog, TabBar, Accordion, ConfirmButton, LoadState, toast
+│   └── …                    # per-domain folders (alerts/, aiops/, managed-infra/, …)
 ├── lib/                     # client utilities
 │   ├── api.ts               # API client (fetch wrappers)
-│   ├── auth.ts              # cookie handling
+│   ├── auth.tsx             # AuthProvider / useAuth
+│   ├── errors.ts            # errorText(): every error shown to people
 │   └── …
-└── styles/
-    └── globals.css
+├── DESIGN.md                # UI rules every screen follows
+└── e2e/                     # Playwright screenshot tests
 ```
 
 Each route directory has a `page.tsx` (the route's main

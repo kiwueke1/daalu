@@ -79,8 +79,8 @@ That's it. In particular, you do **not** need to:
 
 ## Connecting the GPU
 
-1. Open **Usage & Pricing** in the sidebar and find the **Local GPU**
-   card. Click **Connect your GPU**.
+1. Open **AI Factory** (sidebar, under **Infrastructure**) and click **Add GPU**. (The same
+   form is on **Usage & Pricing → Local GPU → Connect your GPU**.)
 2. **Cluster** — pick the connected cluster the GPU lives in. The form
    immediately shows the **detected GPUs** on that cluster: node name,
    the derived GPU class, and how many GPUs the node exposes. Click a
@@ -92,9 +92,12 @@ That's it. In particular, you do **not** need to:
 4. **HF token** — paste your Hugging Face read token (only needed for
    gated models, and only on first deploy — weights are cached on the
    node afterwards).
-5. **Served model** — the default `meta/llama-3.1-8b-instruct` is right
-   for a 16 GB card. Larger cards can serve larger models.
-6. Click **Deploy & connect.**
+5. **Served model** — picked for you from the GPU class: the largest
+   model that fits the card (for example `meta/llama-3.1-8b-instruct` on a
+   16 GB card, a larger Qwen model on a 48 GB one). You can change it.
+6. Click **Deploy & connect.** The button asks in place, naming the model
+   and the node it will deploy onto; click **Deploy & connect** again to
+   go ahead.
 
 The request is accepted **immediately** — the deploy itself runs in the
 background on your cluster, and the card flips to **Deploying…**. You can
@@ -152,8 +155,10 @@ actually serving.
 
 ## Disconnecting
 
-**Usage & Pricing → Local GPU → Disconnect** removes the endpoint from
-the router. Your tenant falls back to the next configured tier (chapter
+**Disconnect GPU…** on the Local GPU card (**Usage & Pricing**), or on the
+GPU's own card in **AI Factory**, removes the endpoint from the router. It
+asks you to confirm in place ("Inference falls back to external models,
+billed at external rates.") before anything happens. Your tenant falls back to the next configured tier (chapter
 36); nothing else changes. The serving stack in your cluster is torn down
 by the same controller that deployed it.
 

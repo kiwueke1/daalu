@@ -11,8 +11,8 @@ you want to know what some specific element on the page does.
 
 ## URL
 
-`https://ops.example.com/` — no path. Also reached by clicking the
-Daalu logo in the top-left of any page.
+`https://ops.example.com/` — no path. Also reached from **Home** at
+the top of the sidebar on any page.
 
 ---
 
@@ -20,16 +20,22 @@ Daalu logo in the top-left of any page.
 
 The bar at the very top is shared by every page:
 
-- **Daalu logo** (top-left). Click to return to the home page.
-- **Tenant name** next to the logo. If you're in multiple
-  tenants, click to switch.
-- **Search input** in the middle. A unified search across
-  alerts, devices, change proposals, integrations, and event
-  history. Hit `/` to focus from anywhere.
-- **Notifications bell**. Personal notifications. Numeric badge
-  if any are unread.
-- **Profile menu** (top-right). Opens to *Profile, Settings,
-  Help & Feedback, Log out*.
+- **Menu button** (phones only). Opens the sidebar as a drawer.
+- **Alert status** (left). "No open alerts", "2 warnings" or
+  "1 critical alert", coloured to match. Click to open *Alerts*.
+- **Automation status.** Only shown when it matters: *Automation
+  paused*, or *N breakers tripped* when a circuit breaker has
+  switched an automatic rule back to needing approval. Click to
+  open *Autonomy policy*.
+- **Ask box** in the middle — *Ask anything about operations…*.
+  Type a question and press Enter for an answer right under the
+  box, or pick one of the suggested questions. `Cmd-K` / `Ctrl-K`
+  focuses it from anywhere; `Escape` closes the answer.
+- **Theme toggle.** Switches between light and dark. By default
+  Daalu follows your operating system's setting.
+- **Bell.** Opens *Alerts*. A dot shows when something is firing.
+- **Account menu** (top-right, your initial). Shows your name and
+  email, and **Sign out**.
 
 ---
 
@@ -62,42 +68,27 @@ resolve.
 
 In order from top to bottom:
 
-### 1. Status pill
+### 1. Greeting
 
-A colored pill displaying one of:
+"Good morning, Jane." (Or afternoon / evening based on your local
+time.) A small label above it reads *AI operating · Morning
+summary*. Below the greeting, one status line:
 
-- "All systems nominal" (green)
-- "X alerts firing" (amber, where X = warning count)
-- "Degraded — Y critical" (red, where Y = critical count)
+- "No open alerts. Everything is running smoothly." when nothing
+  is firing.
+- "*N critical alerts* need attention" (or "*N open alerts*" when
+  none are critical), followed by the total open count when it's
+  higher. The phrase links to the open alerts.
 
-Hover for a breakdown by severity. Click to jump to the *Alerts*
-page filtered to the relevant set.
-
-### 2. Greeting
-
-"Good morning, Jane." (Or afternoon / evening based on your time
-zone.) Below the greeting, the current local time and a tiny
-weather indicator if you've enabled the personal-preferences
-weather widget. Otherwise just the date.
-
-### 3. AI Assistant card
-
-A condensed view of the Assistant panel for quick questions
-without opening the side panel. Includes:
-
-- A single-line input — type a question, hit Enter, get a
-  response inline.
-- A "Open full Assistant" link that pops the side panel.
-- A list of suggested prompts that change daily ("What's been
-  happening since yesterday?", "Anything degraded right now?").
-
-### 4. AI briefing
+### 2. AI briefing
 
 The generated daily briefing, presented as:
 
-- a **headline summary** line,
+- a **headline summary** line (long headlines are shortened; hover
+  for the full text, and **Read the full summary** unfolds the rest),
 - **metric chips** — the day's key figures as big numbers with
-  small labels,
+  small labels, under a note that they cover *this briefing's
+  window*,
 - and a grid of **clickable section tiles** (typically *Last 24
   hours*, *Active incidents*, *Recommended actions*, *Capacity
   & cost*), each showing an icon and a one-line preview.
@@ -108,47 +99,33 @@ Inputs include alerts that fired/resolved overnight, new cloud
 resources detected, open change proposals, spend anomalies, and
 agent-generated highlights.
 
-Click **"Regenerate"** to rerun with fresh data, or **View full
-briefing** to open it as a page (past briefings live under
-*Reports → Briefings*).
+Click **Regenerate** to rerun with fresh data (it reads *Writing a
+new briefing…* while it works), or **Open the full briefing** to
+open it as a page (past briefings live under *Reports →
+Briefings*).
 
-### 5. Notifications
+### 3. Summary tiles
 
-Personal notifications:
+Five tiles, each a link. Each names its own time window, since
+they are live counts and needn't match the briefing's figures:
 
-- Mentions in change-proposal threads.
-- Alerts assigned to you.
-- @-mentions from the Assistant.
-- Direct messages from teammates.
+- **Open now** — open alerts, with the critical count and any open
+  incidents. Opens *Alerts* on the open tab.
+- **Seen in last 24h** — distinct alerts plus events from the last
+  day, with a sparkline. Opens *Alerts*.
+- **Workflows running** — runs in flight or waiting for approval,
+  and how many completed today. Opens *Workflows*.
+- **Active agents** — opens *Agents*.
+- **Briefings on file** — opens *Reports*.
 
-Each row has a timestamp, source icon, and a "mark read" check.
-The bell badge in the top bar reflects this same feed.
+On a phone the tiles sit in one row you swipe sideways.
 
-### 6. System health
-
-A single percentage value — "X% of integrations healthy" — with
-a sparkline showing the last 7 days. Click to land on *Managed
-Infra* filtered to "unhealthy first."
-
-### 7. Quick actions
-
-Four large buttons:
-
-- **Open Assistant** — expands the right panel.
-- **View alerts** — jumps to *Alerts*.
-- **Approve proposals** — jumps to *Operations → Proposals*
-  filtered to "waiting for me."
-- **Add integration** — jumps to *Managed Infra → Add*.
-
-### 8. Recent activity (footer)
-
-A timeline of the last 20 significant events in your tenant.
-Each row includes the kind, source, and a one-line description.
-Click any row to drill into the source object.
+Notifications, active sessions and system health aren't in the main
+column; they live in the right rail, below.
 
 ---
 
-## Right panel — Assistant
+## Right rail — Assistant, alerts, sessions, health
 
 On a wide screen, a slim strip runs down the right side of most pages,
 with four sections you open and close independently. They start closed
@@ -173,18 +150,14 @@ An alert's detail page replaces all of this with a chat about that alert.
 
 ## Keyboard shortcuts on this page
 
-A few that work from the home page:
+These work from any page, not just home:
 
-- `/` — focus the top-bar search.
-- `Cmd-K` / `Ctrl-K` — open/close the Assistant panel.
-- `G` then `A` — jump to *Alerts*.
-- `G` then `M` — jump to *Managed Infra*.
-- `G` then `O` — jump to *Operations*.
-- `G` then `S` — jump to *Settings*.
-- `?` — show the full shortcuts cheat sheet.
-
-The cheat sheet lists every shortcut available on the current
-page.
+- `Cmd-K` / `Ctrl-K` — focus the *Ask anything about operations…*
+  box in the top bar.
+- `Escape` — close the answer under the ask box, or close the
+  sidebar drawer on a phone.
+- `Tab` from the top of the page — the first stop is a **Skip to
+  content** link that jumps past the sidebar.
 
 ---
 
@@ -192,21 +165,21 @@ page.
 
 On a brand-new tenant the page is mostly empty states:
 
-- Pill: "All systems nominal."
-- Briefing: "Welcome to Daalu. There isn't anything to report
-  yet…"
-- Notifications: empty.
-- System health: "100% (0 of 0)" — vacuously true.
-- Recent activity: empty.
+- Top bar and greeting: "No open alerts."
+- Briefing: "No briefing yet for the infra channel.", with a
+  **Generate today's briefing** button and a **connect a source**
+  link.
+- Summary tiles: zeros.
+- Right rail: "No critical alerts.", "No warnings.", "No new
+  recommendations." System health reads 100 % — vacuously true.
 
-The empty states are deliberately friendly with calls-to-action
-("Connect a cloud", "Invite a teammate"). Click through to get
-the first signal flowing.
+The empty states say what to do next rather than showing an error.
+Click through to get the first signal flowing.
 
 ---
 
 ## What's next
 
-Chapter 17 covers the *Managed Infra* page — the inventory of
+Chapter 17 covers the *Managed infra* page — the inventory of
 everything Daalu watches for you, and the place you go to add or
 remove sources.

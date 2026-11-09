@@ -1,12 +1,16 @@
 # 23. Reports
 
 The *Reports* page is where the agent's view of your environment
-gets written down. It has two tabs:
+gets written down. It's under *Insights* in the sidebar, and has
+four tabs:
 
 - **Briefings** — AI-generated operational summaries (the default
   view). One per channel per period.
 - **Query** — ad-hoc and saved queries over Daalu's data model
   (events, alerts, devices, proposals, integrations).
+- **Dashboards** — grids of saved queries (see *Dashboards* below).
+- **Schedules** — saved queries delivered on a schedule. This tab
+  opens its own page.
 
 URL: `https://ops.example.com/reports`.
 
@@ -14,9 +18,11 @@ URL: `https://ops.example.com/reports`.
 
 ## The Briefings tab
 
-This is what the page opens to. The header reads *"AI-generated
-operational intelligence — interactive, not static."* and a
-**Regenerate** button sits at the top right.
+This is what the page opens to. A line at the top reads *"Daalu
+writes a briefing every day from your events. Generate one now to
+cover what changed since the last one."*, with a **Generate a new
+briefing** button beside it (**Generate today's briefing** if there
+isn't one yet).
 
 Beneath the header is a list of briefings, newest first. Each row
 shows:
@@ -49,16 +55,20 @@ draws on every event, alert, incident, and proposal in the
 window. On a quiet day it'll say so honestly; on a busy day it'll
 lead with what needs attention.
 
-Briefing channels are configured under *Settings → Briefings*.
-The default schedule is weekday 07:00 local; you can change cron
-and delivery (Slack/email) per channel.
+The briefing is written every weekday at 07:00 UTC by default.
+That schedule is set for your Daalu instance, not in the app —
+ask your operator to change it. If Slack is connected,
+the briefing is posted there too, and each person can choose to
+get it by email in *Settings → Notifications*.
 
-### Regenerate
+### Generate a new briefing
 
-The **Regenerate** button asks the agent to write a fresh
-briefing now, against current data — useful when something
+The **Generate a new briefing** button asks the agent to write a
+fresh briefing now, against current data — useful when something
 just happened and you don't want to wait for the next scheduled
-run. Regenerated briefings replace the latest entry for the day;
+run. It reads *Generating… (about a minute)* while it works; when
+it's done, a short message says *New briefing ready.* with an
+**Open** link. Regenerated briefings replace the latest entry for the day;
 older days are not touched.
 
 ---
@@ -110,6 +120,10 @@ in a list on the Query tab and can be:
 - **Scheduled** — runs on a cron and delivers to Slack or email.
   Format options: Markdown table, CSV, PNG of the chart.
 - **Exported** — CSV / JSON / PDF, respecting the current filter.
+- **Deleted** — the bin icon on a saved query asks you to confirm
+  in place and warns that dashboards and schedules using it lose
+  it. Deleting a schedule likewise confirms first and tells you it
+  stops sending.
 
 ---
 
@@ -118,28 +132,19 @@ in a list on the Query tab and can be:
 A dashboard is a grid of tiles, each backed by a saved query.
 Tile types: table, single-number stat card, line chart, bar
 chart, pie chart. Drag to resize, save the layout. Multiple
-dashboards per tenant is fine.
-
-A dashboard tile can be pinned to the Home page — useful for a
-team-wide view (e.g. *"daily netops standup"*) everyone sees on
-login.
+dashboards per tenant is fine. **Delete** on a dashboard asks you to
+confirm in place (**Delete dashboard**) and tells you the saved
+reports behind it stay.
 
 ---
 
 ## Examples to start from
 
-The Query tab ships with examples you can clone:
-
-- **Pending change proposals waiting >24h** — flags neglected
-  approvals.
-- **Top alerts by volume this week** — for tuning noisy alerts.
-- **Cloud resources without owner tags** — for cost attribution.
-- **Devices not reconciled in 24h** — for catching reconciler
-  gaps.
-- **Users who haven't logged in for 30 days** — for offboarding
-  audits.
-
-Each example has a **Clone and modify** button.
+The Query tab lists ready-made examples next to your saved
+queries: **Critical events (24h)**, **Open alerts**, **Pending
+change proposals**, **Active incidents** and **Count: failing
+integrations**. Click one to load it into the builder, then change
+it and save it under your own name.
 
 ---
 
@@ -148,13 +153,12 @@ Each example has a **Clone and modify** button.
 By default, all users can view briefings, run queries, and save
 their own. Admins can additionally:
 
-- **Pin** a saved query or dashboard to the Home page.
 - **Delete** queries authored by another user.
-- **Edit briefing schedules** under *Settings → Briefings*.
+- Briefing schedules aren't edited in the app; ask your operator.
 
 ---
 
 ## What's next
 
-Chapter 24 covers the *Settings* page — profile, tenant, and
-preferences.
+Chapter 24 covers the *Settings* page — profile, appearance, notifications,
+and API tokens.

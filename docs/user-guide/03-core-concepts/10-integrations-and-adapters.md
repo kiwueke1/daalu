@@ -23,7 +23,7 @@ your external systems. Each integration has:
 - A **scope**, optionally narrowing what Daalu can see (e.g., a
   specific AWS region or a specific Slack channel).
 
-Integrations live on the **Managed Infra** page. We'll tour that
+Integrations live on the **Managed infra** page. We'll tour that
 page in Chapter 17; for now, you should know that *every* source
 of data in Daalu is one of these rows.
 
@@ -56,10 +56,10 @@ authentication and usage model.
 
 ### Cloud accounts
 
-AWS, GCP, Azure (Chapter 28). The adapter pulls inventory and
-cost. The Assistant can answer questions about resources.
-Optionally, with write permissions, the Assistant can propose
-mutations (restart an ECS service, scale an ASG).
+AWS, GCP, Azure (Chapter 28). Read-only: the AI uses them to
+describe instances and read logs and metrics while it
+investigates, and the Assistant can answer questions about your
+resources. On AWS, firing CloudWatch alarms also arrive as alerts.
 
 ### Observability stacks
 
@@ -118,22 +118,22 @@ which one.
 
 ## Healthy integrations vs broken integrations
 
-Each integration has a health check that runs every few minutes.
-Three results:
+Each integration has a health check that runs every minute. The
+row on *Managed infra* shows the result as a status badge:
 
-- **OK** — the adapter successfully called the external system.
-  The row is green.
-- **Warning** — the adapter called the system but got an
-  unexpected response. (e.g., HTTP 200 but with a body the
-  adapter didn't recognize.) Surfaced but not paged.
-- **Error** — the adapter could not call the system. Credentials
-  may have expired, the URL is wrong, the system is down.
-  Surfaced *and* paged if the integration has been configured to
-  emit alerts on its own health.
+- **Connected** (green) — the adapter successfully called the
+  external system.
+- **Configured** (amber) — saved, but not reporting yet. Usual for
+  the first minute after you connect it.
+- **Error** (red) — the adapter could not call the system.
+  Credentials may have expired, the URL is wrong, the system is
+  down.
 
-The *Managed Infra* page shows a small badge on each row with
-the current status; clicking opens a panel with the most recent
-probe response, the error if any, and a "Retry now" button.
+To see why a row is red, click **Edit** on it and then **Test
+connection** — the result shows the system's own error message.
+For an ingest source on the **Integrations** tab, **Check now**
+pulls new alerts from it immediately instead of waiting for the
+next scheduled pass.
 
 A few common reasons an integration goes red:
 
@@ -159,12 +159,11 @@ Two design choices that often come up in customer questions:
 
 ### Why isn't an integration just a credential?
 
-Because the same external system can have multiple credentials
-attached to different scopes. You might have a read-only AWS
-integration for general inventory and a separate read-write one
-the Assistant uses only with approval. We model each
-credential-scope pair as its own integration so they can be
-audited and revoked independently.
+Because it also carries *where* and *how* Daalu reaches the
+system — a URL, a region, whether to go through your cluster
+tunnel — and its live health. Each integration is a row you can
+test, edit and disconnect on its own, and every change to it is
+audited.
 
 ### Why are observability stacks "integrations" and not "the metrics store"?
 

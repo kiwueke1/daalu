@@ -80,7 +80,10 @@ daalu login
 ```
 
 This prints a short code and opens your browser to an **Authorize this
-terminal?** page. Confirm it, return to your terminal, and you're signed in. If
+terminal?** page. Check that the code on the page matches the one in your
+terminal, click **Authorize this terminal**, return to your terminal, and
+you're signed in. (If you didn't just run `daalu login`, click **Deny — don't
+sign in** instead; no token is issued.) If
 your company runs Daalu at its own address, point at it:
 
 ```sh
@@ -89,7 +92,8 @@ daalu login --host https://ops.your-company.com
 
 ### Option B — paste a one-time command (no browser step)
 
-1. In the Daalu web app, open **Workspace** in the left sidebar.
+1. In the Daalu web app, open **Workspace** in the left sidebar (under
+   *Infrastructure*).
 2. Find the **Use Daalu from your terminal** card and click **Generate one-time
    login command**.
 3. Copy the `daalu login --code …` command it shows and paste it into your

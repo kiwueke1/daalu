@@ -101,7 +101,9 @@ version, source (`manual`, `imported` or `generated`), the alert names it
 matches, and when it was last updated.
 
 Click an entry to open it on the right; click **New runbook** (top right) to
-write one.
+write one. On a wide screen the page opens the first AI draft waiting for
+review for you. On a narrow screen the editor sits below the list, and the
+page scrolls down to it when you pick an entry.
 
 ### The editor
 
@@ -118,10 +120,15 @@ Two ways to edit, switched at the top:
 Buttons:
 
 - **Create draft** (new runbook) / **Save changes** (existing). If anything is
-  wrong you get the full list of problems.
-- **Publish** — for drafts.
-- **Delete** — asks you to confirm: "The AI stops using it for matching
-  alerts."
+  wrong you get the full list of problems. It stays greyed out until the
+  runbook has a title.
+- **Publish to triage** — for drafts. Once published, a message confirms
+  "The AI now uses it for matching alerts."
+- **Delete** — asks you to confirm in place: "The AI stops using it for
+  matching alerts.", then **Delete runbook**.
+
+While you have edits that aren't saved, **Unsaved changes** shows next to the
+buttons, and the browser asks before you close or reload the tab.
 
 ### Who can do what
 
@@ -162,7 +169,7 @@ To review a draft:
 2. Generalise anything specific to that one incident (pod names, revision
    numbers).
 3. Check the match — widen or narrow the labels as needed.
-4. **Save changes**, then an admin clicks **Publish**.
+4. **Save changes**, then an admin clicks **Publish to triage**.
 
 Only one draft is written per investigation. If the alert keeps recurring
 without a published runbook, each new verified fix can produce another draft

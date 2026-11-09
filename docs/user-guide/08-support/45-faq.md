@@ -21,8 +21,8 @@ Yes, TLS 1.3 everywhere. WireGuard for the federation tunnel.
 
 **Who can see my data?**
 Whoever operates your Daalu deployment. The platform runs no
-automated analytics on tenant data. Details in Chapter 57 of
-the engineer book.
+automated analytics on tenant data. Details in the
+*Engineering & Operations Manual*.
 
 **Can I review the platform's source code?**
 Yes. The whole platform — operator app, daalu-edge, the
@@ -30,8 +30,9 @@ Yes. The whole platform — operator app, daalu-edge, the
 Apache-2.0 at `https://github.com/kiwueke1/daalu`.
 
 **What about GDPR / CCPA?**
-Compliance is the operator's responsibility; data-export and
-right-to-be-forgotten are exposed at *Settings → Tenant → Privacy.*
+Compliance is the operator's responsibility. There's no
+self-service page for data-export or right-to-be-forgotten
+requests; ask your operator.
 
 ---
 
@@ -82,7 +83,7 @@ Several reasons:
 
 **Why does the Assistant occasionally give wrong information?**
 LLMs do. Cite the sources in their answers and double-check
-when stakes are high. Feedback via *Help → Feedback*
+when stakes are high. Feedback via *Help & Feedback*
 genuinely improves the system over time.
 
 ---
@@ -153,10 +154,11 @@ Probably yes via the webhooks integration. Talk to support
 about a specific adapter if it's a common one.
 
 **Can Daalu push to my switches without root credentials?**
-The credentials are whatever you configured Daalu with —
-either pulled from Nautobot's secrets store or set in
-*Settings → Tenant → Device credentials*. Use the
-narrowest set of perms the operations you want need.
+The credentials are whatever you configured Daalu with: one
+tenant-wide SSH credential, set in the source-of-truth guided
+setup (BYO) or the *Onboard your devices* panel on the
+environment (bundled). Use the narrowest set of perms the
+operations you want need.
 
 ---
 
@@ -199,8 +201,10 @@ check** tile on the AI Factory page to find the quiet layer.
 ## Migrations and data portability
 
 **How do I export my data out of Daalu?**
-*Settings → Tenant → Export.* You get a JSON dump of
-everything: integrations, alerts, proposals, audit logs.
+There's no export button in the app. A tenant admin emails
+your operator to request a full export. For ongoing
+exports, pull alerts, events, proposals and the audit log from
+the API with a personal access token (Chapter 37).
 
 ---
 

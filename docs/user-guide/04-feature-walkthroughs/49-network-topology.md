@@ -101,8 +101,10 @@ diffed, approved, and auditable.
 ## Enablement
 
 The topology plane is gated by the `network_topology_enabled` feature
-flag on your tenant. If it isn't on, the page says so — ask your Daalu
-contact to enable it.
+flag on your tenant. If it isn't on, the page says *"Live topology isn't
+enabled for this workspace yet"*, explains that a tenant admin can turn
+it on, and links to **See your workspace admins in Settings**. Ask an
+admin, or your Daalu contact, to enable it.
 
 ---
 

@@ -62,16 +62,18 @@ Where enabled, click **Create an account** on the sign-in page
   proposals you approve.
 - **Work email.** Use a real, deliverable address — the
   verification link goes there.
-- **Organization** (optional). Your company name, for your own
+- **Organisation** (optional). Your company name, for your own
   reference.
 - **Password** and **Confirm password.** At least 8 characters.
-  Daalu stores only a strong hash — we never see the plaintext.
+  The form tells you as you type how many more characters you need
+  and whether the two passwords match. Daalu stores only a strong
+  hash — we never see the plaintext.
 
 Click **Create account**. You'll see a **"Check your email"**
 screen; the verification email (from your deployment's sender address, e.g. `noreply@example.com`) arrives
 within a minute. Click the link in it to activate the account,
-then sign in. If it doesn't arrive, use the **Resend the link**
-button on the same screen (and check spam).
+then sign in. If it doesn't arrive, check spam, then click
+**resend the link** on the same screen.
 
 You start in **your own private workspace** — a fresh, fully
 isolated tenant containing just you.
@@ -103,22 +105,28 @@ expires, ask the person who sent it to issue a new one from
 
 ## What you'll see on first login
 
-After your first login, the home page shows a **getting-started
-checklist** that runs along the top. It walks you through:
+After your first login you land on the home page (Chapter 5). On
+a new tenant it's quiet: the briefing says there's nothing yet and
+offers to generate one or connect a source.
 
-1. **Connect a notification channel.** Slack or PagerDuty are the
-   most common.
+The guided setup lives at *Managed infra → Onboarding*. It sets up
+notifications, observability and the cluster tunnel in one
+sequence, and you can skip any step you don't need. A good first
+hour looks like this:
+
+1. **Connect a notification channel.** Slack or email, from the
+   Onboarding tab or *Managed infra → Integrations*.
 2. **Connect at least one source.** A cloud account, an
    observability stack, or a Kubernetes cluster — anything that
    gives Daalu something to look at.
-3. **Verify the AI Assistant works.** Click the assistant panel
-   and ask anything; it should respond.
-4. **Invite a teammate.** Daalu is much more useful with two
-   people in the workflow than with one.
+3. **Check the AI Assistant works.** Open **Assistant** in the
+   right rail and ask anything; it should respond.
+4. **Invite a teammate** from *Settings → Team*. Daalu is much
+   more useful with two people in the workflow than with one.
 
 Don't worry if you can't do all four right now — connecting a
 cloud account properly might require coordination with your IT
-team. The checklist is a guide, not a gate.
+team. None of these steps blocks the others.
 
 ---
 

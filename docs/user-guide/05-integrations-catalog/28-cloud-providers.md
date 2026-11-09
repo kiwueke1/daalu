@@ -2,7 +2,20 @@
 
 Chapter 7 walked through the first-time AWS setup with detailed
 hand-holding. This chapter is the reference: every cloud
-provider, every credential option, and what each gives you.
+provider, the credentials it takes, and what each gives you.
+
+All three live in the same place: *Managed infra → Clusters &
+observability → Cloud accounts*. Each provider has one row.
+Click **Connect** (or **Edit** once it's connected), fill in the
+dialog, click **Test connection** to check the credentials, then
+save with **Connect \[provider\]**. You can also set them up in
+order on the *Onboarding* tab.
+
+Credentials are stored encrypted at rest. Cloud access is
+**read-only**: the agent uses it to look at what an alert
+touches while it investigates. Changes the AI proposes go
+through the approval flow (Chapter 52), not through these
+credentials.
 
 ---
 
@@ -10,45 +23,40 @@ provider, every credential option, and what each gives you.
 
 ### Setup
 
-Pattern: cross-account IAM role with External ID. Chapter 7 has
-the step-by-step.
+The **AWS account** dialog asks for:
 
-### Capabilities
+- **Access key ID** and **Secret access key**.
+- **Default region** — for example `us-east-1`.
+- **Session token** — optional, only for short-lived STS
+  credentials.
+- **Assume-role ARN** — optional. If you set it, the access
+  keys above only need `sts:AssumeRole` on that role;
+  everything else is granted by the role's policy.
 
-- **Inventory:** EC2, RDS, S3, Lambda, ECS/EKS clusters,
-  CloudFront, Route53, ELB/ALB/NLB, Auto Scaling Groups, IAM
-  users and roles (read-only).
-- **Cost:** Pulled from Cost Explorer API; daily granularity,
-  per-service / per-region / per-tag breakdowns.
-- **Investigation tools (Assistant):** describe-instance,
-  list-functions, get-log-events (CloudWatch), get-metrics.
-- **Action tools (write only):** restart-ecs-service, scale-asg,
-  terminate-instance, update-launch-template, restart-rds-
-  instance. Each gated on a proposal.
+**Test connection** asks AWS who the credentials belong to and
+shows the caller ARN when they're accepted.
+
+### What the agent can read
+
+- EC2 instances (describe).
+- CloudWatch log events and metric statistics.
+- RDS instances (describe).
+- Lambda functions (configuration).
 
 ### Permissions
 
-- **Minimum read-only:** AWS-managed `ReadOnlyAccess`.
-- **Recommended read-only:** custom policy at
-  `https://docs.daalu.io/aws-minimum-policy.json` (smaller
-  surface area, same coverage).
-- **Read-write add-on:** separate role with the actions you
-  want the Assistant to perform.
-
-### Regions
-
-The wizard asks for a list of regions to scope to. Defaults to
-all enabled regions. Add or remove later from the integration
-detail page.
+Grant read-only access covering:
+`ec2:Describe*`, `logs:FilterLogEvents`,
+`cloudwatch:GetMetricStatistics`, `rds:Describe*`,
+`lambda:GetFunction`. The AWS-managed `ReadOnlyAccess` policy
+covers all of these if you'd rather not write your own.
 
 ### Troubleshooting
 
-- **AccessDenied on AssumeRole** — External ID missing from
-  trust policy, or Daalu account ID typoed.
-- **AccessDenied on individual APIs** — role policy doesn't
-  grant the action. Widen the policy or use ReadOnlyAccess.
-- **Throttled** — Daalu retries with backoff; if it persists,
-  AWS has per-account rate limits you may be hitting.
+- **"AWS rejected the credentials"** on test — the keys are
+  wrong, inactive, or the session token has expired.
+- **AccessDenied while investigating** — the policy doesn't
+  grant that action. Widen the policy, or use `ReadOnlyAccess`.
 
 ---
 
@@ -56,39 +64,36 @@ detail page.
 
 ### Setup
 
-Pattern: workload identity federation with a Google service
-account.
+The **Google Cloud project** dialog asks for:
 
-1. Create a service account in your GCP project.
-2. Grant it `roles/viewer` for read-only access; add other
-   roles for write capabilities.
-3. Add Daalu's service account as a member with
-   `roles/iam.workloadIdentityUser`.
-4. Paste the service-account email and project ID into Daalu.
+- **Project ID** — for example `acme-prod`.
+- **Service-account key JSON** — paste the full key file your
+  IAM admin downloaded.
 
-### Capabilities
+**Test connection** fetches the project's metadata with that
+key.
 
-- **Inventory:** Compute Engine, Cloud SQL, GCS, GKE clusters,
-  Cloud Functions, Cloud Run services, Load Balancers, DNS
-  zones.
-- **Cost:** Pulled from Cloud Billing API.
-- **Tools:** Equivalent to AWS — describe, list, scale,
-  restart.
+### What the agent can read
 
-### Per-project vs organization-wide
+- Compute Engine instances.
+- Cloud Logging entries.
+- Cloud Monitoring metrics.
+- Cloud SQL instance state.
+- Cloud Functions configuration.
 
-For multi-project orgs, two options:
+### Permissions
 
-- Add each project separately. Tidy but tedious.
-- Add one "platform" service account with org-wide viewer.
-  Less granular but easier to operate.
+Bind these roles to the service account:
+`roles/compute.viewer`, `roles/logging.viewer`,
+`roles/monitoring.viewer`, `roles/cloudsql.viewer`,
+`roles/cloudfunctions.viewer`.
 
 ### Troubleshooting
 
-- **"Project not found"** — the SA can't see the project.
-  Check IAM bindings.
-- **"Permission denied"** — same as above but for a specific
-  resource type. Add the needed role.
+- **"GCP rejected the credentials"** on test — the key is
+  malformed, deleted, or for a different project.
+- **Permission errors while investigating** — the service
+  account is missing one of the roles above.
 
 ---
 
@@ -96,46 +101,37 @@ For multi-project orgs, two options:
 
 ### Setup
 
-Pattern: app registration with federated workload identity.
+The **Azure subscription** dialog asks for a service principal
+(an Azure AD app registration with a client secret):
 
-1. Register an app in Azure AD.
-2. Add a federated credential whose issuer is Daalu's IdP and
-   whose subject is your tenant string.
-3. Assign **Reader** role at the subscription level.
-4. Paste app ID, tenant ID, and subscription ID into Daalu.
+- **Azure AD tenant ID**.
+- **Application (client) ID**.
+- **Client secret**.
+- **Subscription ID**.
 
-### Capabilities
+**Test connection** checks that Azure issues a management token
+for the service principal.
 
-- **Inventory:** Compute, Storage, SQL DB, Azure Functions,
-  AKS, App Service, Front Door.
-- **Cost:** Pulled from Cost Management API.
-- **Tools:** Equivalent surface area to AWS.
+### What the agent can read
 
-### Scope: subscription vs management group
+- Virtual machines.
+- Log Analytics (Kusto queries).
+- Azure Monitor metrics.
+- SQL databases.
+- App Service / Functions.
 
-If you have many subscriptions, grant Reader at the
-management-group level for unified visibility. Per-subscription
-is fine if you want each scoped separately.
+### Permissions
+
+Assign **Reader** at subscription scope, **Monitoring Reader**,
+and **Log Analytics Reader** on the workspace.
 
 ### Troubleshooting
 
-- **"InvalidAuthenticationToken"** — federated credential
-  misconfigured. Compare issuer and subject to what Daalu
-  showed in the wizard.
-- **"AuthorizationFailed"** — RBAC doesn't have Reader.
-
----
-
-## Adding write access
-
-The recommended pattern for all three clouds:
-
-1. Start read-only.
-2. Get comfortable with what Daalu sees and how the
-   Assistant uses it.
-3. Add a *separate* write-capable role/SP as a second
-   integration.
-4. The Assistant detects both and uses each appropriately.
+- **"Azure rejected the service principal"** on test — the
+  tenant ID, client ID or secret is wrong, or the secret has
+  expired.
+- **AuthorizationFailed while investigating** — a role
+  assignment above is missing.
 
 ---
 
@@ -143,15 +139,16 @@ The recommended pattern for all three clouds:
 
 Two-step revocation:
 
-1. *Managed Infra → Cloud Accounts → row → Disconnect.*
-   Daalu stops calling immediately.
-2. In your cloud, delete the role / SA / SP. Belt and braces.
-
-Existing inventory and cost data ages out after 30 days.
+1. *Managed infra → Clusters & observability → Cloud accounts*,
+   then the delete icon on the provider's row. It asks you to
+   confirm in place ("the agent loses read access"). Daalu
+   stops calling immediately.
+2. In your cloud, delete or disable the access key, service
+   account key, or service principal secret. Belt and braces.
 
 ---
 
 ## What's next
 
-Chapter 29 covers notification integrations — Slack, PagerDuty,
-email.
+Chapter 29 covers notification integrations — Slack and
+email — and PagerDuty as an alert source.

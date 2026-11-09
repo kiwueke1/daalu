@@ -30,7 +30,8 @@ The Daalu Coding Assistant is browser-based VS Code (code-server) with:
 * **A persistent workspace volume** at `/workspace` (5/20/50 GiB
   depending on profile) that survives pauses.
 
-It lives behind **Workspace** in the left sidebar.
+It lives behind **Workspace** in the left sidebar, under
+*Infrastructure*.
 
 ---
 
@@ -72,10 +73,14 @@ create a workspace when a model answers. That means:
   model coming online.
 
 If no coding model is serving, the **Workspace** page says exactly
-that — "No coding model is deployed yet — ask your operator to bring
-a GPU online" — instead of letting you create a workspace whose first
-prompt would fail. The sidebar entry is always visible; clicking it
-shows the current status either way.
+that — *"No coding model is running yet"* — and what to do: ask your
+operator to deploy the coding model on your GPU cluster, then come
+back. It does this instead of letting you create a workspace whose
+first prompt would fail. If Workspace isn't turned on for your
+organisation at all, the page says so in the same neutral way and
+offers a **Connect a GPU** button, which opens *AI Factory*. The
+sidebar entry is always visible; clicking it shows the current
+status either way.
 
 ---
 
@@ -109,9 +114,10 @@ shows the current status either way.
 6. Click **Open IDE**. A new tab opens with VS Code loaded into
    `/workspace`. The workspace card shows your profile and model.
 
-You can come back to the page later to delete the workspace; that
-releases the PVC and your files are gone. Push any in-flight work
-first.
+You can come back to the page later to delete the workspace. Click
+**Delete** on the workspace card; it asks you to confirm in place
+(**Delete workspace**) and warns that your `/workspace` files are
+deleted, so push any changes first.
 
 ---
 

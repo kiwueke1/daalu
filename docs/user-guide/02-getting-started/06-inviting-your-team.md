@@ -12,9 +12,10 @@ what each role can do, and how to remove someone when they leave.
 
 ## Inviting someone
 
-From the sidebar: **Settings → Team → Invite user.**
+From the bottom of the sidebar: **Settings → Team → Invite a
+teammate.**
 
-A dialog appears asking for:
+A form opens in place asking for:
 
 - **Email address.** Their work email. We send the invite there.
 - **Role.** Two choices today: **admin** or **user**. We'll
@@ -35,10 +36,14 @@ the pending row, and click **"Resend."** A resent invite generates
 a new token; the old one is invalidated, and the new link is
 shown in the banner again.
 
+To cancel an invite, click **Revoke** on its row. The button asks
+you to confirm in place — **Revoke invite** — and says what will
+happen: the link stops working, and this can't be undone.
+
 You can also see all pending invites in the *Active invites*
 section of the *Settings → Team* page so you don't double-invite
-someone. Toggle "Show all" to include accepted and revoked invites
-for audit.
+someone. Tick **Show all (including terminal)** to include accepted and
+revoked invites for audit.
 
 ---
 
@@ -51,18 +56,14 @@ small.
 
 Admins can:
 
-- Invite and remove users.
-- Change other users' roles (promote a user to admin, demote an
-  admin to user).
+- Invite users, and resend or revoke invites.
 - Add, edit, and remove integrations.
-- Manage tenant settings (name, time zone, notification defaults).
-- Mint and revoke personal access tokens for *any* user, not just
-  themselves.
 - Approve change proposals — including ones they didn't author.
-- View the *Billing* page and download invoices.
+- Switch the tenant's plan on *Usage & Pricing*.
 
-The tenant must always have **at least one admin**. The UI
-prevents you from demoting the last one.
+Removing a user and changing someone's role aren't in the app
+yet; an admin asks your operator to do it (see *Removing a user*
+below). The tenant must always have **at least one admin**.
 
 ### user
 
@@ -81,7 +82,8 @@ Users cannot:
 - Invite or remove other people.
 - Change anyone's role.
 - Add or remove integrations.
-- See the *Billing* page.
+- Switch the tenant's plan. (Everyone can *see* *Usage &
+  Pricing*.)
 
 These restrictions are enforced at the API level — calling the
 backend directly with a non-admin token will hit the same gate
@@ -120,60 +122,41 @@ proposals. A few clarifications, since the rules surprise people:
 - **Approval can be revoked** while a proposal is queued for
   execution. Once execution starts, approval is locked.
 
-If you want stricter rules (e.g., always require two approvers
-for production changes), the workflow tools in Part IV Chapter 21
-let you encode that. The team-level role system is intentionally
-simple.
+If you want stricter rules for the fixes the AI proposes during
+an alert (e.g., always require two approvers for production
+workloads), your autonomy policy can require more than one
+approver — see Chapter 52. The team-level role system is
+intentionally simple.
 
 ---
 
 ## Removing a user
 
-From *Settings → Team*, find the user's row and click the **⋯**
-menu. Choose **"Remove from tenant."**
+There's no remove button in *Settings → Team* yet. To remove
+someone — for example when they leave the company — an admin
+asks your operator, naming the
+person and the tenant. We'll confirm when it's done.
 
-What happens immediately:
+Two things you can do yourself straight away:
 
-- The user's session is invalidated. If they're logged in, their
-  next page click will dump them at the login screen with
-  "Account no longer has access."
-- All of their personal access tokens are revoked.
-- Their pending proposals remain — they're labelled "proposed by
-  <removed user>" and can still be approved or denied by others.
-- Their authored automations remain.
+- If they were invited but haven't joined, click **Revoke** on
+  their invite in *Settings → Team*. The link stops working.
+- Ask them to revoke their own API tokens in *Settings → API
+  tokens* before they go.
 
-What happens 30 days later, automatically:
-
-- A nightly job hard-deletes the user row.
-- Audit-log entries that reference them keep their email but lose
-  the foreign-key link.
-
-If you re-invite the same email within 30 days, the user is
-restored and their pre-existing artifacts re-link to them. After
-30 days, the new account is fresh.
-
-This 30-day grace period exists for the very common case of
-"oops, I removed the wrong person."
+Proposals they authored stay in the queue and can still be
+approved or rejected by others.
 
 ---
 
-## Transferring tenant ownership
+## Leaving or deleting a tenant
 
-There isn't a formal "owner" — only the admin role. If you're the
-sole admin and you want to leave the tenant:
+Changing roles, leaving a tenant, and deleting a tenant are also
+handled by your operator today. If you're the only admin and want to leave,
+invite your replacement first and say who should become admin.
 
-1. Promote at least one other person to admin first.
-2. *Settings → Team*, find your own row, click **⋯ → Leave
-   tenant.**
-
-If you're the sole admin and *also* the sole user, the tenant
-has no good landing state. You should either:
-
-- Invite a teammate and then leave, or
-- Delete the tenant entirely from *Settings → Tenant → Delete*.
-
-Tenant deletion is irreversible and immediately purges all data.
-We require typing the tenant name to confirm.
+Deleting a tenant can't be undone, so we confirm the request with
+you before we act on it.
 
 ---
 

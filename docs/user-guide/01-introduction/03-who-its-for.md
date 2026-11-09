@@ -47,7 +47,7 @@ Azure because someone else's enterprise SSO is hosted there, and
 on-prem for the bare-metal workloads. The world's worst spreadsheet
 lists which accounts exist and who pays for them.
 
-Daalu inventories all of it. *Managed Infra* shows every connected
+Daalu inventories all of it. *Managed infra* shows every connected
 account, what's healthy, what's been touched recently, and what
 it's costing. The Assistant can answer "how many EC2 instances do
 we have in us-east-1 versus eu-west-1 right now?" without you
@@ -83,7 +83,7 @@ three patterns:
 
 The admin manages the tenant. They invited everyone in, they own
 the integrations, they configure who gets paged for what. There
-is usually one or two of them per team. They read the *Billing*
+is usually one or two of them per team. They read the *Usage & Pricing*
 page on Monday and the *Settings* page when someone leaves.
 
 ### The on-call operator
@@ -97,8 +97,7 @@ approve change proposals other people open.
 
 Some people in every team eventually become the person who writes
 workflows and configures the agents. They live in the *Workflows*
-page, the *Operations* tab, and the *Settings → Personal access
-tokens* page. They turn manual processes into automatable ones.
+page, the *Operations* page, and *Settings → API tokens*. They turn manual processes into automatable ones.
 
 These aren't formal roles in the access-control system — the only
 formal distinction is admin vs. non-admin. They're just patterns

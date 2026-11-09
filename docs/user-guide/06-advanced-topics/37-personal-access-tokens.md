@@ -12,8 +12,9 @@ This chapter covers minting, using, and rotating PATs.
 
 Chapter 24 covered the UI. In short:
 
-1. *Settings → API tokens → New token.*
-2. Pick a name, expiry, optional description.
+1. *Settings → API tokens.*
+2. Fill in a **Name** and, optionally, **Expires in (days)**,
+   then click **Create token**.
 3. **Copy the token now.** It's shown exactly once.
 
 The token looks like `dpat_xxxxxxxxxxxxxxxxxxxxxxxx`. The
@@ -60,8 +61,8 @@ the same user.
 
 ## Expiry and rotation
 
-When you minted, you picked an expiry: never, 30 / 90 / 365
-days, or custom. Best practice:
+When you minted, you set **Expires in (days)**, or left it
+blank for a token that never expires. Best practice:
 
 - **365 days** for human-managed scripts. Calendar a rotation.
 - **30–90 days** for CI pipelines. Automate rotation through
@@ -69,22 +70,22 @@ days, or custom. Best practice:
 - **Never** is allowed but discouraged. Tokens you never rotate
   are tokens that eventually leak.
 
-To rotate:
+To rotate, mint a replacement and retire the old one:
 
-1. *Settings → API tokens → \[token\] → ⋯ → Rotate.*
-2. A new cleartext is shown. Update wherever the old token
-   was used.
-3. The old token continues to work for 24 hours, giving you a
-   transition window.
+1. *Settings → API tokens* — create a new token and copy it.
+2. Update wherever the old token was used.
+3. Revoke the old token (below).
 
 To revoke:
 
-1. *Settings → API tokens → \[token\] → ⋯ → Revoke.*
+1. *Settings → API tokens → \[token\] → **Revoke**.* The
+   button asks you to confirm in place ("Anything using this
+   token stops working immediately."); click **Revoke token**.
 2. Effective immediately. Any in-flight request gets 401 on
    its next call.
 
-A revoked token can be reactivated within 7 days. After that
-it's gone.
+Revoking is permanent. If you need access again, mint a new
+token.
 
 ---
 
@@ -116,7 +117,8 @@ A short tour:
 
 ### Events
 
-- `POST /api/v1/events` — webhook ingest.
+- `POST /api/v1/events` — custom event ingest. Authenticates
+  with the organisation's ingest key, not a PAT (Chapter 33).
 - `GET /api/v1/events` — query the timeline.
 
 ### SoT
@@ -175,9 +177,9 @@ for p in r.json()["items"]:
 
 ### Export every Daalu event to your warehouse
 
-A workflow with an outbound webhook (Chapter 33) is the right
-shape for this, but if you want to pull rather than push, the
-events endpoint is paginated.
+Daalu doesn't push events out, so pull them: poll
+`GET /api/v1/events` with a PAT, using `since_hours` (up to 14
+days) and `limit` (up to 500) to page through the window.
 
 ---
 
@@ -191,9 +193,10 @@ events endpoint is paginated.
   blast-radius on rotation is then per-use-case.
 - **Watch the last-used column.** If a token hasn't been used
   in 60 days, you probably don't need it. Revoke.
-- **Use admin-minted PATs for shared automation accounts.**
-  See Chapter 6 — admin can mint on behalf of a service-style
-  user.
+- **Use a dedicated account for shared automation.** A token
+  always belongs to the person who minted it, so invite a
+  service-style user (Chapter 6), sign in as it, and mint the
+  automation's tokens there.
 
 ---
 
@@ -204,7 +207,6 @@ default; refreshes silently). For scripting use, PATs are
 strictly better:
 
 - Don't expire mid-job.
-- Rotatable independently.
 - Recognizable by prefix.
 - Revocable individually.
 

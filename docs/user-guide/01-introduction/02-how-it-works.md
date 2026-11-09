@@ -68,45 +68,71 @@ piece.
 
 The operator app at `https://ops.example.com` is the surface you spend
 your time on. It is a single web application organized into pages
-along the left sidebar:
+along the left sidebar, grouped by what you came to do:
 
 - **Home** — the landing page; a daily briefing of what's changed,
   what's degraded, and what wants your attention.
-- **Operations** — devices, drift, change proposals; this is the
-  network operator's home page.
+
+**Respond**
+
+- **Alerts** — the alert inbox; each alert has a generated
+  explanation, suggested actions, and the ability to escalate.
+- **Investigations** — every alert the AI investigated, where you
+  grade whether it found the right root cause.
+- **Workflows** — multi-step automations, with run history and
+  the runs waiting for your approval.
+
+**Automate**
+
+- **Automations** — the automations you've authored, with live
+  run status.
 - **Agents** — autonomous helpers that run on schedules or on
   triggers (e.g. "every weekday at 8 AM, generate a briefing for
   the platform team").
-- **Automations / Workflows** — multi-step automations you've
-  authored, with run history.
+- **Runbooks** — your team's fixes, written down where the AI can
+  use them.
+- **Autonomy policy** — what the AI may change on its own, what
+  waits for approval, and what it may never do.
+
+**Infrastructure**
+
+- **Managed infra** — everything Daalu watches or runs for you, as
+  tabs: Kubernetes clusters & observability, the network/server
+  management environments (each with a live map of its network
+  fabric), guided onboarding, and integrations (cloud accounts,
+  monitoring stacks, notification channels, sources of truth).
+- **AI Factory** — observability and operations for the GPUs
+  serving your AI.
+- **Operations** — devices, drift, change proposals; this is the
+  network operator's home page.
+- **Workspace** — the browser coding assistant: VS Code in a tab
+  with an AI agent constrained to your own inference.
+
+**Insights**
+
+- **Dashboards** — your Grafana dashboards, rendered natively from
+  your own metric and log stores.
 - **Reports** — AI-generated operational briefings plus a query
   tab for ad-hoc and saved analyses over events, alerts, devices,
   and proposals.
-- **Alerts** — the alert inbox; each alert has a generated
-  explanation, suggested actions, and the ability to escalate.
-- **Workspace** — the browser coding assistant: VS Code in a tab
-  with an AI agent constrained to your own inference.
-- **AI Factory** — observability and operations for the GPUs
-  serving your AI.
-- **Topology** — a live map of your network fabric, links coloured
-  from what Daalu observes on the wire.
-- **Dashboards** — your Grafana dashboards, rendered natively from
-  your own metric and log stores.
-- **Managed infra** — everything Daalu watches or runs for you, as
-  tabs: Kubernetes clusters & observability, the network/server
-  management environments, guided onboarding, and integrations
-  (cloud accounts, monitoring stacks, notification channels,
-  sources of truth).
-- **Usage & Pricing** — spend across cloud, local GPU, and Daalu
-  itself.
+- **Maturity**, **Evals** and **Audit log** — how far your team has
+  climbed the AI operations maturity model, how well the AI
+  performs on test scenarios, and a tamper-evident record of every
+  action.
+
+At the bottom of the sidebar:
+
+- **Usage & Pricing** — your plan, AI usage, and how much ran on
+  your own GPU.
 - **Settings** — your profile, your team, API tokens, notification
   preferences.
 - **Help & Feedback** — version info and a way to write to the
   team that builds the product.
 
-The Assistant is *not* a separate page — it lives in a panel that
-follows you across the whole app. From any page you can open it,
-ask a question grounded in what you're looking at, and continue.
+The Assistant is *not* a separate page — it lives in the right rail
+that follows you across the whole app (on a phone, behind the
+**Assistant** button). From any page you can open it, ask a question
+grounded in what you're looking at, and continue.
 
 Part IV of this book is a chapter-per-page tour.
 
@@ -140,7 +166,7 @@ rotate credentials.
 
 An **integration** is Daalu's connection to one of your external
 systems. There are dozens of them shipped with the product; you'll
-find the full list under *Managed Infra* and a catalog in Part V.
+find the full list under *Managed infra* and a catalog in Part V.
 
 There are three categories of integration, each with a different
 authentication model:
@@ -157,7 +183,7 @@ authentication model:
 3. **Cluster integrations** (your own Kubernetes clusters). You
    deploy the **Daalu Edge** chart into your cluster, which opens an
    outbound WireGuard tunnel. Once the handshake completes, your
-   cluster appears as **connected** in *Managed Infra*. From that
+   cluster appears as **connected** in *Managed infra*. From that
    point, the Daalu cloud can call read-only and write APIs in your
    cluster, with every write logged.
 
@@ -214,8 +240,8 @@ Investigate is unrestricted. Propose is always staged through a
 human approval, except when an admin has pre-approved an automation
 for that tenant. Notify obeys your notification preferences.
 
-The Assistant lives in a panel anchored to the right side of every
-page. Asking a question on the *Alerts* page passes the current
+The Assistant lives in the right rail of most pages (behind the
+**Assistant** button on a phone). Asking a question on the *Alerts* page passes the current
 alert context automatically — you don't need to copy IDs around. On
 *Operations* it picks up the device you're viewing. This is one of
 the small things that compounds across a working day.
@@ -231,8 +257,8 @@ pattern: **outbound-only WireGuard tunnels**.
 
 Here is how it works, in plain English:
 
-1. You go to *Managed Infra → Clusters → Add* and request an
-   invite. The Daalu cloud generates a one-shot bootstrap token,
+1. You go to *Managed infra → Clusters & observability → Onboard
+   cluster* and request an invite. The Daalu cloud generates a one-shot bootstrap token,
    valid for one hour.
 2. You install the **Daalu Edge** Helm chart in your cluster with
    that token. The chart contains a WireGuard agent and a small
@@ -244,7 +270,7 @@ Here is how it works, in plain English:
    side, your cluster is now an additional endpoint on a private
    network. The cloud can reach your services; nothing outside the
    tunnel can.
-5. The cluster row in *Managed Infra* turns **connected** within
+5. The cluster row in *Managed infra* turns **connected** within
    ~30 seconds. From there, all the Daalu features that need
    cluster access (the Assistant's kube tools, the GPU router, the
    local-LLM scrape) just work.
@@ -268,7 +294,7 @@ inference happen locally. Daalu supports this directly. The flow:
    OpenAI-compatible HTTP API on a port that only Daalu can reach
    through the federation tunnel.
 2. In the operator app, the GPU appears as **online** on the
-   *Billing* page once the router has successfully called it.
+   *Usage & Pricing* page once the router has successfully called it.
 3. From then on, every chatbot turn, every classifier call, and
    every routine inference task tries the local GPU first.
 
@@ -315,5 +341,5 @@ guarantee for anyone who needs to brief a security team.
 
 That's the model. The rest of the book will keep referring back to
 these names: tenant, integration, event, alert, change proposal,
-edge, router, assistant. If you ever feel lost on a page, the side
-panel's *What is this?* link returns to this chapter.
+edge, router, assistant. If you ever feel lost on a page, come back
+to this chapter.

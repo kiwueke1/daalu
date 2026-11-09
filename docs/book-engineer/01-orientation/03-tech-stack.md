@@ -45,7 +45,8 @@ ORM, Pydantic v2 for validation, Alembic for migrations.
 ## Frontend: Next.js + React + Tailwind
 
 **What:** Next.js 14 App Router, React 18, TailwindCSS,
-Radix UI primitives, React Query for data fetching.
+React Query for data fetching, and a small set of our own UI
+primitives in `frontend/components/ui/` (no component library).
 
 **Why:**
 
@@ -53,8 +54,11 @@ Radix UI primitives, React Query for data fetching.
   initial page load and a sane client-side hydration model.
 - Tailwind keeps styling close to the component without
   inventing a new CSS-in-JS framework.
-- Radix gives us accessible UI primitives without writing
-  them ourselves.
+- The primitives (`Button`, `Dialog`, `TabBar`, `Accordion`,
+  `ConfirmButton`, `LoadState`, `useToast`) are a handful of
+  files we own. Each builds in the accessibility (labels, focus
+  trap, Escape, aria-live) once, so pages get it by using them.
+  Chapter 13 and `frontend/DESIGN.md` describe them.
 - React Query handles cache, refetch, and loading state in
   one library; we don't have to invent that wheel.
 

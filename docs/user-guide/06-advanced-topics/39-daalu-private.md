@@ -105,10 +105,11 @@ Stick with **Standard** when:
 
 Two operator actions, one on the hub side and one on yours.
 
-**On the hub:** click "Enable Daalu Private (full)" on your
-tenant's Settings → Tier page. The hub generates a one-time
-service-token cleartext and shows you the matching Helm overrides
-to paste into your cluster. Copy them; they're shown exactly once.
+**On the hub:** there's no switch for this in the app. Ask your
+operator to enable Daalu Private (full)
+for your organisation. They give you the one-time service token
+and your tenant ID that the Helm overrides below need. Store the
+token straight away; it can't be shown again.
 
 **On your cluster:** upgrade the daalu-edge chart with the
 overrides. The single-command form:
@@ -144,11 +145,9 @@ Total time on your side, on a cluster that already has
 daalu-edge installed: about 60 seconds. After the rollout, your
 next click in the operator UI lands at your edge.
 
-The Tier page on the hub shows:
-
-* "Private (full)" badge.
-* A list of the tables that live on your side.
-* A health indicator for the edge-data pod and the customer DB.
+To check it, `kubectl -n daalu-edge get pods` should show the
+edge-data pod and Postgres running, and your operator can confirm
+from the hub side that requests are reaching your edge.
 
 ---
 

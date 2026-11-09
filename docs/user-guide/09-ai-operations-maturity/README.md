@@ -86,7 +86,7 @@ runbooks.
   [docs/maturity-model.md](../../maturity-model.md)
 - The open standard text and JSON Schemas: [spec/README.md](../../../spec/README.md)
 - MCP connection reference: [docs/mcp.md](../../mcp.md)
-- How it's built (engineering manual, Part XV):
-  [book-engineer/15-ai-ops-maturity](../../book-engineer/15-ai-ops-maturity/README.md)
+- How it's built: the AI-Ops maturity section of the
+  *Engineering & Operations Manual*.
 - The alert page these features hang off:
   [Chapter 20 — Alerts and incident response](../04-feature-walkthroughs/20-alerts-and-incidents.md)

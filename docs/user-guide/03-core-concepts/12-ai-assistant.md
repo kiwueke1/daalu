@@ -15,20 +15,22 @@ deliberately won't.
 
 The Assistant has two surfaces:
 
-1. **The right panel.** Anchored to the right side of most
+1. **The right rail.** Anchored to the right side of most
    pages; on phones and smaller windows it's the **Assistant**
-   button in the bottom-right corner, which opens a sheet. On a
-   wide screen, open and close it from the strip at the edge, or hit
-   `Cmd-K` (Mac) / `Ctrl-K` (others). On the home page it's
-   tenant-wide; on every other page it inherits the page's
+   button in the bottom-right corner, which opens a sheet with an
+   **Ask** tab. On a wide screen, open and close it from the
+   **Assistant** pill on the strip at the edge. On the home page
+   it's tenant-wide; on every other page it inherits the page's
    context.
 
-2. **Direct chat at `/copilot`.** A full-page version for longer
-   conversations. Useful when you want all the screen real
-   estate or you're working off a phone.
+2. **The ask box in the top bar.** *Ask anything about
+   operations…* sits at the top of every page. Hit `Cmd-K` (Mac) /
+   `Ctrl-K` (others) to jump to it, type a question, and the answer
+   appears right under the box. Good for a one-off question without
+   opening the rail.
 
-Both surfaces back to the same conversation history. Switching
-between them doesn't lose context.
+On an alert's detail page, the rail is replaced by a chat about
+that alert (Chapter 20).
 
 ---
 
@@ -62,43 +64,32 @@ can call. They group into:
 These let it investigate. The Assistant can call any of these
 without asking; they don't change state.
 
-- `query_prometheus(query)` — run a PromQL query.
-- `query_loki(query)` — run a LogQL query.
-- `read_pod_logs(namespace, pod, container, lines)` — fetch the
-  last N lines of a pod's logs.
-- `list_resources(cloud, resource_kind, region, filters)` —
-  list cloud resources.
-- `get_deployment(namespace, name, cluster)` — read a Kubernetes
-  Deployment.
-- `rollout_history(namespace, deploy, cluster)` — recent
-  rollouts and their statuses.
-- `read_device_config(device_id)` — pull the running config
-  from a Nautobot-managed device.
-- `search_events(filters)` — query the event timeline.
-- `recent_alerts(filters)` — list recent alerts.
-- And a few more — see *Settings → Assistant → Tools* for the
-  live catalog with descriptions.
+- `query_prometheus` and `query_loki` — run PromQL and LogQL
+  against your connected stores.
+- `list_pods`, `describe_pod`, `get_pod_logs`, `get_pod_events`,
+  `get_deployment`, `rollout_history`, `recent_changes` — read
+  Kubernetes state in a connected cluster.
+- `list_devices`, `get_device`, `get_fabric_topology` — read your
+  source of truth and the live fabric.
+- Cloud lookups such as `aws_describe_instances`,
+  `aws_get_cloudwatch_logs`, `gcp_query_logging` and
+  `azure_query_metrics` — only for the clouds you've connected.
+
+The exact set depends on which integrations you've connected;
+there's no separate catalog page.
 
 ### Write tools
 
-These mutate state. The Assistant **does not** call them
-directly. Instead, when its reasoning concludes that one of
-these should be called, it writes a **change proposal** and
-hands it to you.
+These change state. The Assistant **never** runs them on its own
+say-so:
 
-- `restart_pod(...)`, `scale_deployment(...)`,
-  `apply_device_config(...)`, etc.
-
-The list of write tools available depends on which integrations
-you've granted write permissions to. By default, write tools
-are off.
-
-### Notification tools
-
-- `page_user(user, severity, message)`, `post_to_slack(channel,
-  text)` — the Assistant can send these without a proposal,
-  but they're auditable and only fire on user-explicit ask
-  ("page the on-call").
+- **Kubernetes actions** during an alert — `restart_deployment`,
+  `scale_deployment`, `rollout_undo`, `delete_pod`,
+  `patch_resource`. These become an **Approve / Reject** card in
+  the alert, governed by your autonomy policy (see *Two approval
+  paths* below).
+- **Device and server changes** — `propose_change` writes a
+  **change proposal** for a human to approve.
 
 ---
 
@@ -200,12 +191,9 @@ customer usage:
   recent traffic, and proposes either a limit increase or a
   scale-out. The proposal is queued; you decide.
 
-- *"Page the platform on-call about this alert."* — It calls
-  the notification tool and confirms.
-
-- *"What's our total monthly spend on the eu-west-1 region across
-  all accounts?"* — It runs cost queries against each connected
-  cloud and aggregates.
+- *"Which EC2 instances in eu-west-1 are stopped?"* — It
+  describes the instances in your connected AWS account and lists
+  them.
 
 - *"List all devices whose config has drifted from source-of-
   truth in the last 7 days."* — It queries Nautobot-managed
@@ -221,8 +209,9 @@ customer usage:
 
 A non-exhaustive list of intentional refusals:
 
-- **It won't execute write tools without approval.** Even if you
-  beg.
+- **It won't execute write tools without approval** — unless your
+  autonomy policy explicitly allows that action to run on its own.
+  Asking nicely doesn't change that.
 - **It won't read another tenant's data.** Even if you give it
   an ID.
 - **It won't propose changes to systems it can't reach.** If
@@ -239,19 +228,17 @@ A non-exhaustive list of intentional refusals:
 
 ## Conversations and history
 
-Each user has their own conversation history with the Assistant.
-The right-panel chat persists across sessions — logging out and
-back in resumes where you left off. The full-page `/copilot`
-view exposes a history sidebar where you can revisit earlier
-threads.
+Each user has their own conversation with the Assistant. The
+rail chat is kept while you move between pages — on a phone, also
+when you close and reopen the sheet — and starts fresh when you
+reload the page.
 
-Conversations are tenant-scoped: an admin can read another
-user's history from the audit logs (Chapter 24 covers what's
-logged and who sees it), but in normal use, your chat is your
-chat.
+Conversations aren't kept after a reload, and nobody else can see
+yours. What the AI *does* — every tool it reads with, every
+proposal and approval — is recorded in the audit log (*Insights →
+Audit log*, Chapter 56).
 
-To clear: in the Assistant panel, click **⋯ → Clear conversation.**
-This starts a new thread; older threads remain in history.
+To clear the conversation, reload the page.
 
 ---
 
@@ -269,8 +256,8 @@ It will be wrong sometimes. The main failure modes:
   Assistant even when the right answer is "it depends." Use it
   as a starting point, not as a final word.
 
-When you spot a failure, click **"Send feedback"** in the
-Assistant footer. The feedback goes to the engineering team and
+When you spot a failure, tell us from **Help & Feedback → Send
+feedback** at the bottom of the sidebar. The feedback goes to the engineering team and
 genuinely influences how the Assistant is trained over time.
 
 ---

@@ -95,32 +95,65 @@ scripts.
 
 ## Error handling
 
-`ApiError` is a typed error with status code and detail
-string:
+`lib/api.ts` throws two error types:
 
 ```ts
+export class UnauthorizedError extends Error { … }   // any 401
+
 export class ApiError extends Error {
-  constructor(public status: number, public detail: string) {
-    super(detail);
-  }
+  status: number;
+  body: string;    // the raw response text
+  detail: string;  // FastAPI's `detail` when the body is JSON, else the body
+  constructor(status: number, body: string, message: string) { … }
 }
 ```
 
-Components handle it explicitly:
+A 401 is handled inside `request()` itself: unless the browser
+is already on `/login`, `/accept-invite`, `/signup` or
+`/verify-email`, it replaces the location with
+`/login?next=<current path>` and throws `UnauthorizedError`.
+Components never redirect on 401 themselves.
+
+Every other non-2xx response throws `ApiError`. There is no global
+`onError` interceptor; each query or mutation decides what to
+show. What it shows always goes through `errorText()` from
+`lib/errors.ts`, the only way an error reaches the screen:
 
 ```tsx
-const mutation = useMutation({
-  mutationFn: () => apiClient.alerts.acknowledge(id),
-  onError: (e: ApiError) => {
-    if (e.status === 401) router.push("/login");
-    else toast.error(e.detail);
+// app/reports/schedules/page.tsx
+const toast = useToast();
+const remove = useMutation({
+  mutationFn: (id: string) => api.reports.schedules.remove(id),
+  onSuccess: () => {
+    qc.invalidateQueries({ queryKey: ["report-schedules"] });
+    toast.success("Schedule deleted. It won't send again.");
   },
+  onError: (e) => toast.error(errorText(e)),
 });
 ```
 
-A global interceptor in `app/providers.tsx` (React Query's
-queryCache/`mutationCache.onError`) catches anything that
-bubbles up.
+`errorText(error)` returns one plain sentence that says what to do
+next:
+
+- `UnauthorizedError` → "Your session has ended. Sign in again to
+  continue."
+- `ApiError` with a readable `detail` (short, not HTML, not JSON,
+  no traceback) → the `detail` itself. A 403 is prefixed with
+  "Only a tenant admin can do this."
+- `ApiError` without a readable `detail` → a sentence chosen by
+  status (400/422, 404, 409, 429, 502–504, other 5xx).
+- A `fetch` network `TypeError` → "Couldn't reach Daalu. Check
+  your connection, then retry."
+
+Never render `String(err)`, `err.message` or `ApiError.body`
+directly: those leak raw JSON, HTML error pages and stack traces
+into the product. For a query, pass the error to `LoadState`
+(`components/ui/load-state.tsx`), which renders "Couldn't load
+this." with the `errorText()` sentence underneath, plus a Retry
+button when retrying could help (a 5xx, 408, 429 or network
+error, not other 4xx). A "not set up yet" answer (for example a 409 "no
+nautobot integration") is not an error: `LoadState`'s `notSetUp`
+prop shows a neutral next step with a link instead.
 
 ---
 
@@ -195,31 +228,10 @@ most of the work.
 
 ## Server-side fetches
 
-For Next.js server components, the same client doesn't work
-directly because we need explicit cookie forwarding. We have
-a thin server-side wrapper in `lib/api.server.ts`:
-
-```ts
-import { cookies, headers } from "next/headers";
-
-async function serverRequest<T>(method: string, path: string, body?: any) {
-  const cookieHeader = cookies().toString();
-  const r = await fetch(`${process.env.API_URL}${path}`, {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      Cookie: cookieHeader,
-    },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-    cache: "no-store",
-  });
-  if (!r.ok) throw new ApiError(r.status, await r.text());
-  return r.json();
-}
-```
-
-Used in `getServerSideProps`-like patterns inside App Router
-server components.
+There are none. Every page is a client component and calls the
+browser client above, which relies on the browser sending the
+HttpOnly `daalu_session` cookie (`credentials: "include"`). There
+is no `lib/api.server.ts`.
 
 ---
 

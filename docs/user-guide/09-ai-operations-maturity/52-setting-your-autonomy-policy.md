@@ -143,33 +143,44 @@ while the rule was still earning trust count too — that is how an
 The card at the top. When it's off it reads "Kill switch is off" with a red
 **Pause all automation** button. When it's on the card turns red and reads
 "Kill switch is ON — all automatic actions are paused", with who turned it on
-and when, and a **Turn off** button that asks you to confirm with **Resume
-automation**. See [The kill switch](#the-kill-switch) below.
+and when, and a **Resume automation** button. Clicking it asks in place,
+"Auto actions start running again under the policy.", and you confirm with
+**Resume now**. A short message confirms each change ("Automation paused.
+Every write now waits for approval." or "Automation resumed under the
+policy."). While it's on, the header shows **Automation paused** on every
+page. See [The kill switch](#the-kill-switch) below.
 
 ### Breaker banner
 
 If an automatic action that used the policy *defaults* (rather than a named
 rule) failed verification, a red **breaker tripped** banner appears here:
 "Auto actions under the defaults are demoted to approve until …". Admins see
-a **Reset breaker** button. Breakers on named rules show in the trust table
-instead.
+a **Reset breaker** button, which asks you to confirm with **Reset now**
+("Auto actions under the defaults resume immediately."). Breakers on named
+rules show in the trust table instead.
 
 ### The editor
 
-The header says **Built-in default (not saved yet)** until someone saves a
-policy, then **Version** *N* with when it was saved and the note that went
-with it.
+The header says **No saved policy — the built-in default below is active**
+until someone saves a policy, then **Version** *N* with when it was saved and
+the note that went with it.
 
 - **Starter policies…** — loads one of the three starters below into the
   editor (it doesn't save anything) and pre-fills the note.
 - The YAML editor itself.
-- A note field: "What changed and why (saved with the version)".
-- **Discard** — throw away your edits and reload the saved version.
+- **Version note** — "What changed and why"; it's saved with the version.
+- **Discard changes** — throw away your edits and reload the saved version.
+  It's greyed out ("Nothing to discard") until you've edited something.
 - **Save new version** — validates the YAML and saves it as the next version.
   Only tenant admins can save; everyone else can still edit a draft and test
   it. If the YAML is invalid you get "The policy doesn't validate:" followed
   by every problem, with its location (for example
   `rules.0.mode: Input should be 'deny', 'approve', 'auto' or 'auto_after_trust'`).
+  A successful save confirms with "Policy saved as v*N*".
+
+While the editor holds edits you haven't saved, "Unsaved changes in the
+editor." shows under the buttons, and the browser asks before you close or
+reload the tab.
 
 Every save is a new version. Nothing is ever overwritten.
 
@@ -209,12 +220,12 @@ One row per rule in the saved policy:
 | **Successes** / **Failures** | Verified outcomes in the rule's trust window. |
 | **Failure rate** | Failures as a share of outcomes; "—" when there are none. For `auto_after_trust` rules the limit is shown too. |
 | **Earned** | For `auto` and `auto_after_trust` rules: "earned" or "not yet". "n/a" for `deny` and `approve` rules. |
-| **Breaker** | "closed", or a red chip with the time it's tripped until. Admins get a **Reset** button. |
+| **Breaker** | "closed", or a red chip with the time it's tripped until. Admins get a **Reset breaker** button, confirmed with **Reset now**. |
 
 ### Version history
 
 Every saved version, newest first, with who saved it and when; the active
-one is marked **active**. **View** / **Hide** shows the YAML. **Restore into
+one is marked **active**. **View YAML** / **Hide YAML** shows the YAML. **Restore into
 editor** loads an old version into the editor (with the note "Restore v*N*")
 — saving it creates a new version, so history is never rewritten.
 
@@ -362,9 +373,13 @@ stay denied; writes that need approval still need approval. Read tools keep
 running, so the AI keeps investigating. Fixes that are already running are
 not interrupted.
 
-**Who can use it.** Anyone on your team can turn it **on** — stopping
-automation should never wait for an admin. Only a tenant admin can turn it
-back **off**.
+**Who can use it.** Anyone on your team can turn it **on** with **Pause all
+automation** — stopping automation should never wait for an admin. Only a
+tenant admin can turn it back **off**, with **Resume automation**.
+
+**Everyone sees it.** While it's on, the header shows an **Automation paused**
+pill on every page, and **Autonomy policy** in the sidebar carries a
+**Paused** badge. Either one opens this page.
 
 **When to use it.**
 
@@ -388,6 +403,8 @@ propose its next step, which will now wait for approval under that rule.
 
 **Where you see it.**
 
+- The header shows "*n* breaker(s) tripped" on every page, and
+  **Autonomy policy** in the sidebar carries a "*n* tripped" badge.
 - **Trust by rule → Breaker** shows a red chip with the time it's tripped
   until (or, for the policy defaults, the banner at the top of the page).
 - The **Test a write** simulator reports "circuit breaker for rule … is
@@ -404,8 +421,9 @@ propose its next step, which will now wait for approval under that rule.
    clusters, or add `severities`), switch it from `auto` to
    `auto_after_trust` so it has to re-earn trust, or set it to `approve`.
 3. Save the new policy version with a note saying why.
-4. Either wait out the cooldown, or have an admin click **Reset** in the trust
-   table (or **Reset breaker** on the defaults banner) once you're happy.
+4. Either wait out the cooldown, or have an admin click **Reset breaker** in
+   the trust table (or on the defaults banner) and confirm with **Reset now**
+   once you're happy.
 
 If your policy has no `circuit_breaker`, nothing trips: a failed automatic fix
 is still recorded and still counts against the rule's failure rate, but the

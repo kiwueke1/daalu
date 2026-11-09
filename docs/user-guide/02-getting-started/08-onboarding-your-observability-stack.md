@@ -53,7 +53,7 @@ recommended approach.
 ### What gets queried, and how often
 
 - **Prometheus / Alertmanager** — Daalu pulls firing alerts
-  every ~15 minutes by default; the Assistant runs ad-hoc
+  every couple of minutes; the Assistant runs ad-hoc
   PromQL when investigating an incident. Rate limit: ~30
   queries/minute per target.
 - **Loki** — Only on-demand from the Assistant
@@ -64,8 +64,8 @@ recommended approach.
 - **OpenSearch** — On-demand DSL queries from the Assistant.
   ~30 queries/minute.
 
-If you want to raise those, see *Settings → Observability →
-Rate limits* after this chapter is done.
+These budgets are set for your Daalu instance, not in the app. If
+you need them raised, ask your operator.
 
 ---
 
@@ -88,12 +88,12 @@ tab → **Onboard cluster.**
 
 You'll be asked for:
 
-- **Cluster slug** — a DNS-style name you pick (e.g.
+- **Slug** — a DNS-style name you pick (e.g.
   `prod`, `eu-prod`, `lab-1`). It shows up in URLs and the
   pickers later.
-- **Friendly name** — anything (e.g. "EU production").
+- **Display name** — anything (e.g. "EU production").
 
-Click **Create.**
+Click **Create cluster & get install snippet.**
 
 ### 2. Daalu mints a one-shot install snippet
 
@@ -161,11 +161,12 @@ and field labels.
 
 ### 1. Open the integration form
 
-Sidebar → **Managed infra**, on the **Integrations** tab →
-**Prometheus → Configure.**
+Sidebar → **Managed infra**, on the **Clusters & observability**
+tab. Under **Observability**, find the **Prometheus /
+Alertmanager** row and click **Connect.**
 
 (Or: *Managed infra → Onboarding → Prometheus*. They're the same
-form. The old standalone `/integrations` page redirects here.)
+form.)
 
 ### 2. Tick "Reachable via federation tunnel"
 
@@ -218,7 +219,7 @@ isn't behind auth (kube-prometheus-stack defaults to
 unauthenticated inside the cluster, which is the common
 case).
 
-### 4. Click "Test"
+### 4. Click "Test connection"
 
 What happens behind the scenes:
 
@@ -244,9 +245,11 @@ Common test failures:
 | *"host not allowed"* | The proxy's allowed-hosts regex rejected the upstream. Likely the URL is a public hostname — switch to a `*.svc.cluster.local` form, or widen `edgeProxy.allowedHosts` in your helm install. |
 | *"server error: HTTP 5xx"* | Prometheus itself is unhealthy. Daalu reached it; Prometheus didn't. |
 
-### 5. Click "Save"
+### 5. Click "Connect Prometheus / Alertmanager"
 
-The integration row turns green; you can move on. From this
+The button at the bottom of the form saves it (on a row you're
+editing it reads **Save changes**). The integration row turns
+green; you can move on. From this
 point on, every PromQL query the Assistant runs for your
 tenant is routed through this cluster's edge proxy.
 
@@ -254,7 +257,8 @@ tenant is routed through this cluster's edge proxy.
 
 ## Step 2 — Add Loki
 
-Same shape. *Managed infra → Integrations → Loki → Configure.*
+Same shape. *Managed infra → Clusters & observability →
+Observability → Loki (logs) → Connect.*
 
 - **Reachable via federation tunnel** — same cluster as
   Prometheus (or a different cluster, if your logs live
@@ -266,7 +270,7 @@ Same shape. *Managed infra → Integrations → Loki → Configure.*
 - **Username / Password** — only if your Loki is auth-gated.
   Most in-cluster installs aren't.
 
-Test → Save. Done.
+**Test connection** → **Connect Loki (logs)**. Done.
 
 ---
 
@@ -299,7 +303,7 @@ instead of Loki), wire it the same way.
   the right thing to use is a **dedicated read-only user**
   scoped to your `k8s-logs-*` indices.
 
-Click **Test.** OpenSearch's TLS cert won't have the
+Click **Test connection.** OpenSearch's TLS cert won't have the
 in-cluster DNS name in its SAN list, so the proxy may report
 a TLS warning even on success — that's fine, the probe is
 designed to accept it.
@@ -346,7 +350,8 @@ Beyond the Assistant's ad-hoc queries:
 
 ## Step 5 — Verify the Assistant can see your data
 
-Go to the **AI Assistant** panel (Home, or any page) and ask:
+Open the **Assistant** in the right rail (or the **Assistant**
+button on a phone), on Home or any page, and ask:
 
 > "Show me the top 5 services with the highest error rate in
 > the last hour."
@@ -396,14 +401,12 @@ with their security team.
 - **Connecting more clusters?** Repeat Step 0 for each.
   Every integration is then independently scoped to its own
   cluster.
-- **Bringing in alert rules from your Prometheus?** Daalu
-  auto-imports them on a 15-minute schedule from any
-  Prometheus integration row — chapter 20 (alerts and
-  incidents) covers how mirroring works and how to forward
-  changes back.
-- **Dashboards and reports?** Chapter 23 walks through
-  embedding panels from your observability stack into
-  Daalu's Reports dashboards.
+- **Where do alert rules live?** In your Prometheus. Daalu
+  pulls the alerts they fire every couple of minutes and closes
+  them when they stop firing — chapter 20 (alerts and
+  incidents) covers what you see.
+- **Dashboards?** Chapter 48 shows your Grafana boards drawn
+  natively inside Daalu; chapter 23 covers Reports.
 - **Want a single deeper-dive on the catalog of observability
   integrations** (PagerDuty, Datadog adapters, etc.)?
   Chapter 31 in the integrations catalog is the reference.

@@ -15,19 +15,20 @@ URL: `https://ops.example.com/managed-infra`.
 The page is organised as four tabs along the top (deep-linkable
 via `?tab=…`, so a shared link lands on the right one):
 
-- **Clusters & observability** — your federated Kubernetes
-  clusters, each clickable through to a detail page with a
-  health overview and a read-only kubectl runner. Covered in
-  this chapter.
+- **Clusters & observability** — your cloud accounts (AWS, GCP,
+  Azure), your observability stacks (Prometheus, Loki, Thanos,
+  OpenSearch, Grafana), and your federated Kubernetes clusters,
+  each cluster clickable through to a detail page with a health
+  overview and a read-only kubectl runner. Covered in this
+  chapter.
 - **Network & servers** — the managed network/server management
   environments Daalu provisions into your clusters. Chapter 27
   is the full walkthrough.
 - **Onboarding** — the guided integration wizard, for
   first-time setup of any source.
-- **Integrations** — every external system connection: cloud
-  accounts, Prometheus / Loki / Thanos / OpenSearch / Grafana,
-  Slack and PagerDuty, webhooks, and a bring-your-own source of
-  truth.
+- **Integrations** — the guided Source of Truth (Nautobot)
+  setup, notification channels (Slack, email), and the ingest
+  sources that bring alerts and events into Daalu.
 
 > **Where did the Integrations sidebar entry go?** It's this
 > last tab. Wiring external systems is managed-infra work, so
@@ -38,48 +39,37 @@ via `?tab=…`, so a shared link lands on the right one):
 
 ## A row, in detail
 
-Every row across every section has the same shape:
+The cloud-account and observability rows on *Clusters &
+observability* share one shape:
 
-- **Status badge** (green / amber / red / gray). Gray means
-  "configured but never tested" — usually the first 30 seconds
-  after creation.
-- **Name** — the friendly name you gave at setup.
-- **Type** — the underlying integration type (`aws`, `nautobot`,
-  `slack-channel`, etc.).
-- **Last check** — when Daalu last probed the integration.
-- **Scope** — a short string describing what's in scope ("3
-  regions," "all subscriptions," "channel #netops").
-- **Actions** (⋯) — opens a menu: Edit, Test now, Disable,
-  Delete.
-
-Click anywhere on the row to open its detail panel.
+- **Provider** — what it is (*AWS account*, *Prometheus /
+  Alertmanager*, *Loki (logs)*, …) and a short summary of how it's
+  configured.
+- **Status** — not configured (grey), configured but not yet reporting (amber), connected (green), or error (red).
+- **Detail** — the key setting, such as the region or URL.
+- **Actions** on the right:
+  - **Connect** (or **Edit** once it's set up) opens the
+    connection form.
+  - **Open ›** (connected observability stacks only) opens its
+    console.
+  - The **bin icon** disconnects it. It asks you to confirm in
+    place and says what happens — the agent loses read access —
+    before anything is removed.
 
 ---
 
-## Cloud Accounts section
+## Cloud accounts (on the Clusters & observability tab)
 
-Each row shows the cloud, account ID, and a count of inventory
-detected:
+One row each for **AWS account**, **Google Cloud project** and
+**Azure subscription** — one connection per provider. A connected
+row shows its key setting (such as the default region) under
+**Detail**. Click **Connect** to set one up (Chapter 7 walks
+through each), **Edit** to change the credential, or the bin icon
+to disconnect.
 
-```
-[green]  Acme prod AWS     account: 123…012      EC2: 41, S3: 28, RDS: 5
-[green]  Acme prod GCP     project: acme-prod    GCE: 12, GCS: 8
-[red]    Acme staging      account: 234…123      credentials expired
-```
-
-Clicking opens a detail page with:
-
-- **Inventory** tab — every resource Daalu has crawled, filterable
-  and sortable. Includes ARN/URI, region, tags, last-seen.
-- **Cost** tab — cost over time pulled from the cloud's billing
-  API. Aggregations by service, region, tag.
-- **Health** tab — recent probe history with timestamps and
-  responses.
-- **Settings** tab — friendly name, role ARN, scope, "Verify
-  now" button.
-
-The **Add cloud account** button at the top of the section
-opens the wizard from Chapter 7.
+Cloud connections are read-only. The AI uses them to look things
+up while it investigates an alert; on AWS, firing CloudWatch
+alarms also come in as alerts.
 
 ---
 
@@ -97,10 +87,16 @@ the row) to open its detail page at
 `https://ops.example.com/clusters/<slug>`. The **Onboard cluster**
 button generates a one-shot bootstrap invite (Chapter 34).
 
+**Tear down** on a row removes the cluster's tunnel. It asks you
+to confirm in place (**Tear down <slug>**) and says what happens:
+Daalu stops reaching this cluster.
+
 ### The cluster detail page
 
 The page header shows the cluster's name, connection status,
-tunnel IP, and when the tunnel last handshook. Below that:
+tunnel IP, and when the tunnel last handshook. Below that are
+three tabs: **Overview**, **Run kubectl** and **Dashboards**. The
+Overview tab shows:
 
 - **Overview cards** — the Kubernetes server version, the number
   of nodes, and the number of namespaces.
@@ -110,8 +106,10 @@ tunnel IP, and when the tunnel last handshook. Below that:
 
 If the cluster isn't reachable yet — the tunnel is still coming
 up, or no Kubernetes credentials have been linked — the page
-says so instead of showing stale numbers, and the command runner
-below is disabled until it's back.
+says so in a plain sentence, with what to do next, instead of
+showing stale numbers. The raw reason is under **Show details**.
+The command runner is disabled until the cluster is back, and its
+button says why.
 
 ### The health overview
 
@@ -131,10 +129,10 @@ otherwise assemble from half a dozen kubectl commands:
 - **A symptomatic-pods table** — the actual offending pods, with
   namespace, phase, reason, and restart count, so your next
   click is diagnosis rather than discovery.
-- **Related consoles and dashboards** — jump-offs to the metric
-  console, the logs console, the GPU & AI Factory view, and (if
-  Grafana is connected — Chapter 48) the dashboards relevant to
-  this cluster.
+- **Related consoles and dashboards** — on the **Dashboards**
+  tab: jump-offs to the metric console, the logs console, the GPU
+  & AI Factory view, and (if Grafana is connected — Chapter 48)
+  the dashboards relevant to this cluster.
 
 Each health collector degrades independently: if one read is
 forbidden or times out, that metric is marked partial instead of
@@ -142,8 +140,7 @@ blanking the whole overview.
 
 ### Running kubectl commands on a cluster
 
-Underneath the overview is the **kubectl commands** panel. This
-lets you run a curated set of *read-only* commands against the
+The **Run kubectl** tab lets you run a curated set of *read-only* commands against the
 cluster, straight through the tunnel, without leaving the
 browser or holding a kubeconfig yourself.
 
@@ -161,7 +158,7 @@ How it works:
    namespaces), and/or a **label selector** like `app=checkout`.
 3. **Pick an output format** — *CLI table* (the familiar
    columns `kubectl get` prints), *JSON*, or *YAML*.
-4. **Click Run.** Daalu executes each command on the cluster and
+4. **Click Run N read-only commands.** Daalu executes each command on the cluster and
    shows the output in its own panel, with a **Copy** button.
 
 Everything in this panel is read-only — there is no way to
@@ -178,23 +175,16 @@ in Daalu's audit log with who ran what.
 
 ---
 
-## Observability Stacks section
+## Observability (on the Clusters & observability tab)
 
-One row per Prometheus / Loki / Thanos / OpenSearch instance:
+One row each for **Prometheus / Alertmanager**, **Loki (logs)**,
+**Thanos (long-history metrics)**, **OpenSearch (logs)** and
+**Grafana (dashboards)**:
 
-```
-[green]  prom-eu-prod        URL: http://prom.eu-prod.svc:9090   active series: 1.4M
-[green]  loki-main           URL: through-tunnel.svc:3100         ingest: 240 GiB/d
-```
-
-Clicking opens:
-
-- **Connection** — how Daalu reaches this stack (direct URL, or
-  through a federation tunnel).
-- **Probe history** — recent query latencies, errors.
-- **Routes** — what classes of query Daalu sends to this stack.
-  Useful when you have multiple Prometheuses and want to know
-  which one the Assistant is hitting.
+A connected row shows its URL under **Detail**. **Edit** opens the
+same form you connected it with — that's where you see and change
+how Daalu reaches the stack (a direct URL, or through your
+cluster tunnel) and re-run **Test connection**.
 
 Observability integrations are how the Assistant gets data for
 "why did alert X fire" questions. Without at least one
@@ -225,86 +215,44 @@ For Grafana-defined dashboards rendered natively, see the
 
 ---
 
-## Source of Truth section
+## The Integrations tab
 
-For now, this is Nautobot rows (Netbox deferred):
+The fourth tab holds three groups:
 
-```
-[green]  Acme Nautobot       URL: nautobot.acme.io      sites: 8, devices: 412
-```
+- **Guided setup** — **Source of Truth (Nautobot)**, a three-step
+  guide: pick hosted or bring-your-own Nautobot, wire the
+  connection, set up SSH credentials, then add your first device.
+  Chapter 30 covers it.
+- **Notification channels** — **Slack notifications** (where
+  Daalu posts daily briefings and incident updates) and **Email
+  (SMTP)** (on-call escalations, optional daily-briefing emails,
+  and the invites you send). Each card says whether it's
+  configured, with **Set up …** or **Edit …**. Which messages
+  reach *you* is your choice, in *Settings → Notifications*.
+- **Ingest sources** — where Daalu's alerts and events come from:
+  Prometheus / Alertmanager, PagerDuty, AWS (CloudWatch alarms),
+  Loki, Thanos and OpenSearch. Each card shows whether it's set
+  up, and **Check now** pulls new alerts from it immediately
+  instead of waiting for the next scheduled pass. **Demo
+  sources** (folded away at the bottom) feed sample data for
+  trying Daalu out.
 
-Clicking opens:
-
-- **Inventory summary** — sites, device kinds, vendors.
-- **Reconciliation** — schedule, last run, current drift count.
-- **Credentials** — token age, "Rotate" button.
-
-The **Add Source of Truth** button walks through the Nautobot
-setup (Chapter 30).
-
----
-
-## Notifications section
-
-Configured outbound channels:
-
-```
-[green]  Slack workspace acme.slack.com   channels: #ops-alerts, #netops
-[green]  PagerDuty               service: platform-prod (PXX1234)
-[gray]   Email                   transactional only
-```
-
-Clicking opens:
-
-- **Channels** — which Slack channels / PD services / email
-  addresses Daalu may send to.
-- **Test** — fires a test notification.
-- **History** — last 100 notifications sent, with status.
-
-The configuration here is *availability*; *routing* (which alert
-goes where) lives in *Settings → Notifications*.
-
----
-
-## Webhooks section
-
-Two flavors:
-
-- **Inbound** — Daalu hosts a URL per integration; you POST
-  events to it. Useful for CI pipelines, custom alerters, or
-  anything that wants to write to Daalu's timeline.
-- **Outbound** — Daalu POSTs to your URL on configured triggers.
-  Useful for piping Daalu events to your own warehouse.
-
-Each row shows: URL, last delivery, success rate over 24 hours,
-secret rotation status.
+Anything else that can make an HTTP request can post events to
+Daalu directly — see Chapter 33.
 
 ---
 
 ## Adding an integration
 
-Every section has a green **+ Add** button. The flow is the
-same:
+Every provider row has a **Connect** button (on the Integrations
+tab, **Set up …**). The flow is the same:
 
-1. Pick a type from a tile grid.
-2. Fill the type-specific wizard (Chapter 28–33 cover each).
-3. Daalu does a synchronous test call. Pass → row appears
-   green. Fail → see the error inline; nothing is saved.
-
----
-
-## Bulk operations
-
-For tenants with many integrations:
-
-- **Test all** — runs the health check across every row in the
-  page. Useful after a credentials rotation.
-- **Export** — downloads a CSV/JSON of every integration's
-  status. Handy for compliance reviews.
-- **Bulk disable / re-enable** — turns probes off for selected
-  rows without deleting them. Their data freezes in place.
-
-These are in the top-right kebab menu of the page.
+1. Click **Connect** on the provider you want.
+2. Fill the type-specific form (Chapter 28–33 cover each).
+3. Click **Test connection**. Daalu does a synchronous test call
+   and shows the result inline.
+4. Click **Connect <provider>** to save it (**Save changes** when
+   editing).
 
 ---
 

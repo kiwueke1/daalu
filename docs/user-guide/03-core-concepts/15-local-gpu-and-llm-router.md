@@ -47,16 +47,16 @@ The minimum local-inference setup:
   inside one of your clusters; the router reaches it through
   the federation tunnel.
 - **A GPU node** in that cluster. NVIDIA A-series, RTX 4090 or
-  later, RTX 2000 Ada, or H100. We have a tested matrix at
-  *Help → Hardware compatibility*. AMD GPUs work too via
-  ROCm; the matrix lists which ones.
+  later, RTX 2000 Ada, or H100. Chapter 35 lists the cards and
+  models we've tested; if yours isn't there, ask
+  your operator before you buy.
 - **The NVIDIA GPU Operator** on that cluster — the standard
   way to expose NVIDIA GPUs to Kubernetes. Most GPU clusters
   run it already.
 
 That's the whole list. You do *not* deploy the serving stack
-yourself: from **Usage & Pricing → Local GPU → Connect your
-GPU**, Daalu discovers the card, deploys an open vLLM serving
+yourself: from **AI Factory → Add GPU** (or **Connect your GPU**
+on *Usage & Pricing*), Daalu discovers the card, deploys an open vLLM serving
 stack with open model weights (Llama 3.1 and Qwen families are
 the tested defaults), and wires the routing — showing you the
 deploy live as it happens. Chapter 35 walks through it
@@ -84,9 +84,10 @@ The decision logic is roughly:
    To prevent one user's heavy batch from blocking another, the
    router will spill to cloud if local has too many in-flight
    requests.
-4. **Is there a per-tenant override?** Admins can pin specific
-   routes via *Settings → LLM router*: "always use cloud for
-   classifier calls," for instance.
+4. **Is there a per-tenant override?** Overrides such as "always
+   use cloud for classifier calls" are set by your operator, not
+   in the app — ask your operator. *Usage & Pricing →
+   Where tokens were made* shows where your calls actually went.
 
 The result is that 80–95 % of inference goes local in a healthy
 tenant, with the remainder spilling to commercial. The exact
@@ -94,22 +95,19 @@ ratio depends on what your team does with the Assistant.
 
 ---
 
-## What you see on the Billing page
+## What you see on the Usage & Pricing page
 
-The *Billing* page has a "Local GPU" panel (Chapter 22). It
-shows:
+The *Usage & Pricing* page (Chapter 22) shows:
 
-- **Pill: online / offline / not configured.** The current
-  state of the GPU node.
-- **Inference last 7 days** — a stacked bar chart of local vs.
-  cloud calls, broken down by classifier / chat / agent.
-- **Spend** — your cloud-LLM spend, with a comparison to
-  "what this would have cost without local inference." Most
-  customers see 70–90 % savings.
-
-The "SKU picker" lets you see what each commercially-equivalent
-SKU would have cost. Useful when you're sizing how much GPU
-hardware to buy.
+- **Local GPU pill: Online / Deploying… / Offline**, or a note
+  that no GPU is connected. The current state of your GPU.
+- **Where tokens were made** — your usage split between *Local
+  GPU* and the external tiers, so you can see how much ran on your
+  own hardware.
+- **Current period** and **30-day spend** — what you've paid.
+- **Plans** — each plan's routing policy and its price per million
+  tokens per tier. Useful when you're weighing a GPU against
+  external usage.
 
 ---
 
@@ -178,8 +176,7 @@ the workspace create form (for the coding assistant). The router
 auto-detects what model is being served and routes accordingly.
 
 Newer models land in the chart on a rolling basis as we validate
-them. The current tested set is at *Help → Hardware
-compatibility*.
+them. Chapter 35 lists the current tested set.
 
 ---
 

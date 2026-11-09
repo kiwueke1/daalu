@@ -68,7 +68,7 @@ clicks.
 **Why it is off.** A full concurrency sweep *is* load. Against a single shared
 card it spikes latency for live tenants. The code comments
 (`config.py:219-227`, `models/aiperf_run.py:17-18`) and the panel's hazard banner
-(`aiperf-panel.tsx:81-92`) all make the same point: run it off-peak or against a
+(`aiperf-panel.tsx:91-102`) all make the same point: run it off-peak or against a
 candidate node before traffic moves to it. The Job also bounds itself
 (§93.4) so a click can't hammer a card for hours.
 

@@ -28,9 +28,6 @@ Once a cluster is federated, the following things start working:
 - **The Assistant can query your cluster.** "List pods in
   default that are not Running." "Show me the last 20 lines of
   logs from deployment X." "What's the rollout status of Y?"
-- **Drift between manifests and live cluster state** is
-  detected. For now this is opt-in; see *Settings → Clusters →
-  Reconciliation* to turn on.
 - **Your Prometheus / Grafana / Loki running inside the cluster
   becomes a queryable target.** If you connect them as
   observability integrations (Chapter 31), Daalu reaches them
@@ -116,7 +113,7 @@ minutes:
 - **From the Daalu side:** the WireGuard peer might never have
   been configured with the cluster's public key. Refresh the
   page; if still awaiting, click the row and copy the diagnostic
-  blob — support can read it.
+  blob — your operator can read it.
 - **From the cluster side:** the daalu-edge pod might not be
   running, or might be running but unable to send packets out
   (egress firewall). `kubectl -n daalu-edge get pods` and
@@ -135,9 +132,11 @@ Common causes:
 - The cluster's API server isn't bound to the IP the edge pod
   is trying to reach.
 
-The cluster detail page shows the exact error from the last
-attempt. The support team uses these messages directly in
-diagnostics.
+The cluster detail page says in a plain sentence what went wrong
+(for example, *"The tunnel is up, but the cluster rejected Daalu's
+credentials."*) and what to do next. The exact error from the last
+attempt is under **Show details** — include it when you contact
+support.
 
 ### Disconnected after working
 
@@ -148,12 +147,12 @@ If a healthy tunnel goes red:
 - **Egress from the cluster broke.** A firewall rule changed,
   a NAT gateway went down, your ISP had a moment. Verify
   external connectivity from the cluster itself.
-- **The Daalu hub went down.** Very rare; if it ever happens
-  it'll be on our status page.
+- **The Daalu hub went down.** Very rare. If every check on your
+  side passes, ask your operator.
 
-A tunnel that's been down for more than 15 minutes also fires a
-critical alert into your tenant — you'll find out before you
-notice the symptoms.
+The cluster's row on *Managed infra → Clusters & observability*
+shows the age of the last handshake, so a stale tunnel is visible
+at a glance.
 
 ---
 

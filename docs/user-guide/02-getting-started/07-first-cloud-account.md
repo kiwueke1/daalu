@@ -2,55 +2,41 @@
 
 This chapter walks through connecting AWS, GCP, or Azure for the
 first time. By the end of it, your tenant will have a working
-cloud integration and the rest of the UI will start showing real
-data instead of empty states.
+cloud integration: the AI can look at your cloud when it
+investigates an alert, and (for AWS) firing CloudWatch alarms
+arrive in Daalu as alerts.
 
-We'll use AWS as the running example. GCP and Azure are very
-similar — the screens look the same, only the credential format
-changes. The three Cloud-specific sections at the end of the
-chapter detail the differences.
+We'll use AWS as the running example. GCP and Azure use the same
+form — only the credential fields change. The cloud-specific
+sections later in the chapter detail the differences.
 
 ---
 
 ## Before you start
 
-A few decisions to make. You don't need to commit to all of them
-now; you can change any of these later. But thinking about them
-once saves you from churning through the connection flow three
-times.
+### Read-only, always
 
-### Read-only or read-write?
-
-Daalu can be granted **read-only** or **read-write** access to
-your cloud. Read-only is enough for almost all features:
-inventory, alerting, the Assistant's investigation, billing
-queries. Read-write enables the Assistant to apply changes (e.g.,
-restart an ECS service, scale an ASG, terminate an EC2 instance)
-after a human approves.
-
-Recommendation for first connection: **read-only.** Get the
-inventory flowing. Once your team is comfortable with what Daalu
-sees and how it behaves, you can add a separate read-write role
-later. Two-step rollouts of this kind are how most teams adopt the
-platform without spooking their security review.
+Daalu's cloud connections are **read-only**. The AI uses them to
+look things up while it investigates — describe instances, read
+logs and metrics, check a database or a function — and never to
+change anything in your cloud. Give Daalu a credential that can
+only read; the permissions each provider needs are listed below
+and in the connection form itself.
 
 ### Which account?
 
-If your organization has many AWS accounts (production, staging,
-dev, per-team), pick the one you'd most like Daalu to manage
-*first*. That's usually production, but if your security review
-takes a while, it's also fine to start with staging and add
-production once you're satisfied.
-
-You can connect many accounts; there's no limit. The UI groups
-them under your tenant, and the Assistant can correlate across
-them.
+You connect **one account per provider** (one AWS account, one GCP
+project, one Azure subscription) per tenant. If your organization
+has many, pick the one you'd most like Daalu to look at first —
+usually production, though starting with staging is fine while
+your security review runs. To point Daalu at a different account
+later, click **Edit** on the row and change the credential.
 
 ### Which user is doing this?
 
-This is a one-time setup that requires AWS permissions to create
-an IAM role. The Daalu user doing the connecting only needs admin
-on the tenant. The two identities are independent.
+You need someone who can create a read-only credential in the
+cloud account. The Daalu user doing the connecting only needs
+admin on the tenant. The two identities are independent.
 
 ---
 
@@ -58,20 +44,14 @@ on the tenant. The two identities are independent.
 
 For every cloud provider, the pattern is the same:
 
-1. You go to *Managed Infra → Cloud Accounts → Add* and pick the
-   provider.
-2. Daalu shows you a "wizard" that displays an **External ID** and
-   a **trust policy** specific to your tenant.
-3. You go to your cloud provider's console and create a role that
-   trusts Daalu's account, scoped by the External ID.
-4. You paste the ARN of that role (or equivalent identifier for
-   non-AWS providers) back into Daalu.
-5. Daalu validates the credential by making a harmless API call.
-   If it succeeds, the row turns **connected**.
-
-This is the standard AWS-cross-account-role pattern, applied
-identically to GCP (workload identity federation) and Azure
-(service principal). No long-lived API key changes hands.
+1. You go to *Managed infra → Clusters & observability*, find the
+   provider under **Cloud accounts**, and click **Connect**.
+2. In your cloud, you create a read-only credential with the
+   permissions the form lists.
+3. You paste it into the form and click **Test connection**.
+   Daalu makes one harmless call to prove the credential works.
+4. You click **Connect …** to save it. Credentials are encrypted
+   the moment they're saved and are never shown back to you.
 
 ---
 
@@ -79,205 +59,131 @@ identically to GCP (workload identity federation) and Azure
 
 We'll do this in two browser windows: one for Daalu, one for AWS.
 
-### 1. Start the wizard in Daalu
+### 1. Open the form in Daalu
 
-Sidebar → **Managed Infra → Cloud Accounts → Add cloud account.**
+Sidebar → **Managed infra**, on the **Clusters & observability**
+tab. Under **Cloud accounts**, find the **AWS account** row and
+click **Connect.** A dialog opens with these fields:
 
-A modal opens. Choose **AWS**. Click **Continue.**
-
-The wizard now shows you:
-
-- A **Daalu AWS account ID** — the AWS account number that Daalu
-  itself runs in. You'll use this in your trust policy.
-- An **External ID** — a long random string unique to your
-  tenant. This is the thing that prevents the "confused deputy"
-  attack: anyone who somehow knows Daalu's account ID still
-  can't assume your role without your specific External ID.
-- A pre-rendered **trust policy** JSON blob you can copy.
+- **Access key ID** and **Secret access key**.
+- **Default region** (e.g. `us-east-1`).
+- **Session token** (optional) — only for short-lived STS
+  credentials.
+- **Assume-role ARN** (optional) — if set, the access key only
+  needs `sts:AssumeRole` on that role, and everything else is
+  granted by the role's policy.
 
 Keep this tab open.
 
-### 2. Create the IAM role in AWS
+### 2. Create a read-only credential in AWS
 
-Open the AWS console, switch to the account you're connecting,
-and go to **IAM → Roles → Create role.**
+In the AWS console, for the account you're connecting, create an
+IAM user (or a role, if you'll use **Assume-role ARN**) whose
+policy allows only what Daalu reads:
 
-- **Trusted entity type:** AWS account.
-- **An AWS account:** Another AWS account, then paste the
-  Daalu AWS account ID from the wizard.
-- Tick **Require external ID** and paste the External ID from the
-  wizard.
-- Leave MFA unticked.
+- `ec2:Describe*`
+- `logs:FilterLogEvents`
+- `cloudwatch:GetMetricStatistics`
+- `rds:Describe*`
+- `lambda:GetFunction`
 
-Click **Next.**
+For CloudWatch alarms to show up as Daalu alerts, also allow the
+CloudWatch call that lists alarms (`cloudwatch:DescribeAlarms`).
+The AWS-managed `ReadOnlyAccess` policy covers all of these if you
+prefer a managed policy.
 
-On the **permissions** page, attach the policy that matches what
-you want Daalu to see:
+Create an access key for the user, and copy the **Access key ID**
+and **Secret access key**.
 
-- For read-only: attach the AWS-managed `ReadOnlyAccess` policy.
-- For read-write: read-only plus the
-  `AmazonEC2ContainerRegistryPowerUser`, `AmazonEC2FullAccess`,
-  and similar service-specific policies that match the operations
-  you want the Assistant to perform.
+### 3. Test and connect in Daalu
 
-A custom policy with only the actions your team uses is fine; we
-publish a recommended minimum-scope policy at
-`https://docs.daalu.io/aws-minimum-policy.json`. Many customers
-attach that to their read-write role.
+Back in the dialog, paste the keys, set the default region, and
+fill in the role ARN if you're using one. Click **Test
+connection.** Daalu calls AWS STS *GetCallerIdentity* — the
+cheapest "do these credentials work" check there is; it touches
+no billable service.
 
-Click **Next**, give the role a clear name (e.g.,
-`daalu-readonly-prod`), and **Create role.**
-
-Copy the **Role ARN** from the new role's summary page —
-it looks like `arn:aws:iam::123456789012:role/daalu-readonly-prod`.
-
-### 3. Finish the wizard in Daalu
-
-Back in the wizard, paste the Role ARN into the **Role ARN**
-field. Pick a friendly name (e.g., "Acme production AWS"). Click
-**Connect.**
-
-Daalu calls AWS STS to assume the role. The wizard waits
-synchronously for the response — usually 1–2 seconds.
-
-Three outcomes are possible:
-
-- **Success.** The row appears in *Cloud Accounts* with status
-  **connected**, and you're done.
-- **AccessDenied.** Almost always either (a) the External ID
-  doesn't match, (b) the trust policy is missing the Daalu
-  account number, or (c) the role doesn't have the
-  `sts:AssumeRole` permission for the Daalu principal. The error
-  message includes the exact AWS reason code; click "Show
-  details."
-- **Permission denied (post-assume).** You assumed the role, but
-  the role's policy doesn't grant the actions Daalu tried.
-  Re-attach a broader policy or use `ReadOnlyAccess`.
-
-The most common failure is forgetting to paste the External ID
-into the trust condition. AWS will let the role be created without
-it, but the assume will fail.
+- **Success** shows *"AWS accepted"* with the identity the keys
+  belong to. Click **Connect AWS account** to save.
+- **AWS rejected the credentials** shows AWS's own reason. Usually
+  a mistyped key, a deactivated key, or a role the key isn't
+  allowed to assume.
 
 ---
 
 ## Step-by-step: GCP
 
-The GCP flow uses **workload identity federation** with Google's
-service-account impersonation. From your side:
+1. In the GCP console, create a service account in your project
+   and grant it these roles: `roles/compute.viewer`,
+   `roles/logging.viewer`, `roles/monitoring.viewer`,
+   `roles/cloudsql.viewer`, `roles/cloudfunctions.viewer`.
+2. Create a JSON key for the service account and download it.
+3. In Daalu, click **Connect** on the **Google Cloud project** row.
+   Enter the **Project ID** and paste the whole key file into
+   **Service-account key JSON**.
+4. Click **Test connection.** Daalu reads the project's metadata
+   from Compute Engine — a call with no side effects that proves
+   both the key and the project ID are valid. Then click
+   **Connect Google Cloud project**.
 
-1. In *Managed Infra → Cloud Accounts → Add → GCP*, Daalu shows
-   the **Daalu service-account email** that your project will
-   trust, plus a unique **audience** string.
-2. In the GCP console, create a service account in your project
-   (e.g., `daalu-readonly@acme-prod.iam.gserviceaccount.com`)
-   and grant it the roles you want Daalu to use. A starting
-   point is the `roles/viewer` role.
-3. Add the Daalu service account as a member with the
-   `roles/iam.workloadIdentityUser` role on the service account
-   you just created, restricted by the audience string.
-4. Paste the service-account email and the project ID into the
-   Daalu wizard and **Connect.**
-
-The wizard tests the integration with `gcloud compute instances
-list` (or its API equivalent) — a benign call that requires
-viewer-level access.
-
-For organizations with many projects, repeat the flow per
-project, or use a single "platform" service account that has
-cross-project access via folder-level IAM.
+To cover several projects, give one service account viewer access
+to the others through folder-level IAM.
 
 ---
 
 ## Step-by-step: Azure
 
-Azure uses **federated workload identity** plus a service
-principal. The high-level flow is:
-
-1. In *Managed Infra → Cloud Accounts → Add → Azure*, Daalu shows
-   the **tenant ID** and **issuer URL** that will identify it.
-2. In the Azure portal, register an app registration in your
-   tenant; under **Federated credentials**, add a credential whose
-   issuer is the URL Daalu provided and whose subject is the
-   string Daalu provided.
-3. Assign the **Reader** role on the subscription (or wider
-   scope) to the service principal.
-4. Paste the **Application (client) ID**, **Directory (tenant)
-   ID**, and **Subscription ID** into the Daalu wizard and
-   **Connect.**
-
-The "wider scope" choice matters: if you want Daalu to see all
-your subscriptions, grant Reader at the management-group level.
-If you want a per-subscription split, grant it on the
-subscription.
+1. In the Azure portal, create an app registration (service
+   principal) and a client secret for it.
+2. Assign it **Reader** at subscription scope, **Monitoring
+   Reader**, and **Log Analytics Reader** on your workspace.
+3. In Daalu, click **Connect** on the **Azure subscription** row
+   and fill in **Azure AD tenant ID**, **Application (client)
+   ID**, **Client secret** and **Subscription ID**.
+4. Click **Test connection.** Daalu asks Azure for a management
+   token with the service principal — no resources are touched.
+   Then click **Connect Azure subscription**.
 
 ---
 
-## What populates after connection
+## What happens after connection
 
-Once the row turns **connected**, several things happen
-asynchronously over the next 5–15 minutes:
-
-- An inventory crawler walks your cloud and records every
-  significant resource (EC2/Compute instance, ASG/MIG/VMSS,
-  S3/GCS/Blob bucket, RDS/CloudSQL/SQL DB instance, etc.).
-  Counts and aggregations show up on *Managed Infra → Cloud
-  Accounts → row → Details*.
-- The Assistant gains the ability to answer questions about that
-  account ("how many EC2 instances do we have in us-east-1?").
-- Cost data starts pulling from the provider's billing API and
-  shows up on the *Billing* page (Chapter 22). The first 24 hours
-  of cost data tends to be sparse — billing APIs are eventually
-  consistent.
-- If you enabled the Daalu Assistant's auto-recommendations,
-  the agent will start surfacing things like unused EBS volumes
-  and orphaned snapshots within a day or two.
-
-If the row is **connected** but inventory doesn't show up within
-30 minutes, check *Managed Infra → Cloud Accounts → row →
-Health* — the page shows the last successful crawl and any
-crawler errors.
-
----
-
-## Granting write access later
-
-The recommended path is to start read-only and add write later.
-To do that:
-
-1. Create a *separate* role in your cloud with the
-   write-capable policy attached. Don't widen the existing
-   read-only one — keeping them separate makes incident
-   forensics much easier.
-2. Add it as a *second* connection in the Daalu wizard, named
-   e.g., "Acme production AWS (write)."
-3. The Assistant detects both connections; it'll use the
-   read-only one for queries and the write one when proposing
-   mutations.
-
-Both connections share the same External ID and the same
-underlying Daalu identity — only the role and its policy differ.
+- **The AI can look at your cloud.** When an alert touches cloud
+  infrastructure, the AI can describe instances, read logs and
+  metrics, and inspect databases and functions (EC2, CloudWatch,
+  RDS and Lambda on AWS; Compute Engine, Cloud Logging, Cloud
+  Monitoring, Cloud SQL and Cloud Functions on GCP; VMs, Log
+  Analytics, Azure Monitor, SQL databases and Functions on Azure).
+  You can ask the Assistant about them too ("which EC2 instances
+  are running in us-east-1?").
+- **CloudWatch alarms become alerts (AWS).** Every minute, Daalu
+  checks for CloudWatch alarms in the *ALARM* state and brings them
+  in as alerts on the *Alerts* page.
+- **The row shows its status.** Daalu probes each integration
+  regularly; if the credential stops working, the row's status
+  turns red.
 
 ---
 
 ## Disconnecting
 
-To disconnect a cloud account at any time:
+On the account's row under *Managed infra → Clusters &
+observability → Cloud accounts*, click the bin icon. It asks you
+to confirm in place (**Disconnect AWS account**, for example) and
+says what happens: the agent loses read access.
 
-*Managed Infra → Cloud Accounts → row → **⋯** → Disconnect.*
-
-Daalu stops calling your cloud immediately. Existing inventory
-and cost history remain in your tenant for 30 days, then ages
-out. To revoke from the cloud side as well — recommended — go
-into your IAM and delete the role/service principal.
+Daalu stops calling your cloud immediately. To revoke from the
+cloud side as well — recommended — delete or deactivate the key,
+service account or app registration you created.
 
 ---
 
 ## What's next
 
-You now have at least one cloud account connected. The home
-page's briefing tomorrow morning will mention it; the *Managed
-Infra → Cloud Accounts* page will show its inventory; and the
-Assistant can answer real questions about your environment.
+You now have at least one cloud account connected. *Managed
+infra → Clusters & observability* shows it under **Cloud
+accounts**, and the Assistant can answer real questions about
+your environment.
 
 Part III starts the core-concepts chapters. Chapter 9 covers
 tenants, users, and access control in more depth — relevant

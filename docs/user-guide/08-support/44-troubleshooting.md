@@ -5,8 +5,8 @@ look. It's organized by symptom rather than by root cause —
 how things present to you, in the order you'd encounter them.
 
 For each symptom you'll find the most likely cause, the quick
-check, and the fix. For deeper issues, the engineer book's
-Part IX has full runbooks.
+check, and the fix. For deeper issues, the *Engineering &
+Operations Manual* has full runbooks.
 
 ---
 
@@ -39,13 +39,16 @@ to re-invite you.
 
 ---
 
-## "An integration row is red"
+## "An integration won't connect"
 
-Symptoms: a Cloud Account / Source of Truth / Notification
-row shows status `error`.
+Symptoms: a cloud account, observability source, source of
+truth or notification channel fails to connect, or stops
+working.
 
-Quick check: click the row → **Health** tab. The most recent
-probe response is shown verbatim.
+Quick check: open it (**Edit** on its row under *Managed infra →
+Clusters & observability*, or on its card under *Managed infra →
+Integrations*) and click **Test connection**. The provider's
+answer is shown verbatim.
 
 Common errors and fixes:
 
@@ -66,21 +69,19 @@ Common errors and fixes:
 
 Quick checks, in order:
 
-1. **Did the alert fire?** *Alerts* page — confirm there's a
-   matching firing alert.
-2. **Are notifications enabled for you?** *Settings →
-   Preferences → Per-channel toggles.*
-3. **Is Slack the destination for this alert?** Click the
-   alert → "Routing decision."
-4. **Is the Slack channel allowed?** *Managed infra →
-   Integrations → Slack* — verify the channel is in the
-   allow list and Daalu has been invited (`/invite @daalu`).
-5. **Has the alert been snoozed?** Look at the alert's pill
-   bar.
-
-If all those pass and you still don't get Slack, fire a test
-notification from *Settings → Alerts → Send test alert* to
-isolate which step is broken.
+1. **What did you expect to get?** Daalu posts incident
+   updates and scheduled reports to Slack (Chapter 29). It
+   doesn't post every alert.
+2. **Is Slack set up?** *Managed infra → Integrations →
+   Notification channels* — the Slack card should read
+   **Configured**.
+3. **Is the webhook still valid?** Click **Edit Slack
+   notifications**, then **Test connection**. Daalu posts a
+   test message; if Slack rejects it, the webhook was revoked
+   or deleted. Create a new one and paste it in.
+4. **Is it going to a different channel?** Slack can deliver
+   to the channel the webhook was created for rather than the
+   one Daalu names. Check that channel.
 
 ---
 
@@ -88,9 +89,9 @@ isolate which step is broken.
 
 Quick checks:
 
-1. **Is the LLM router stuck on fallback?** *Usage & Pricing →
-   Local GPU* — if the pill is offline, calls fall through to
-   the next tier (typically slower).
+1. **Is the LLM router stuck on fallback?** *Usage & Pricing*
+   — if the Local GPU pill at the top is offline, calls fall
+   through to the next tier (typically slower).
 2. **Is your prompt too long?** If you're pasting megabytes
    of logs, truncate.
 3. **Is the Daalu deployment itself degraded?** Ask your
@@ -157,12 +158,15 @@ uses a console-local login is the **break-glass admin**
 
 ## "The Topology page is empty or disabled"
 
+Topology isn't in the sidebar. Open it from *Managed infra → Network &
+servers → your environment → Consoles → Topology*.
+
 1. **"Live topology isn't enabled for this workspace yet"** —
    the `network_topology_enabled` feature flag is off for your
    tenant. Ask your Daalu contact.
 2. **"No devices in the source of truth yet"** — onboard your
    fabric first: *Managed infra → Network & servers → your
-   environment → Onboard your devices*.
+   environment → Devices → Onboard your devices*.
 3. **All links grey ("unknown")** — the LLDP probe can't reach
    your devices. Check that the tenant-wide **SSH credential**
    is saved in the onboarding panel and that the devices'
@@ -237,25 +241,32 @@ From the Daalu side:
 
 1. **Did you generate the invite recently?** Tokens expire
    after 1 hour.
-2. **Is the cluster row's WireGuard public key set?**
-   *Managed infra → Clusters & observability → \[cluster\] →
-   Tunnel diagnostics.*
+2. **What does the cluster row say?** *Managed infra →
+   Clusters & observability → Kubernetes clusters* shows each
+   cluster's status and last handshake. **Open** it for the
+   detail page.
 
 ---
 
 ## "Devices aren't showing on the Operations page"
 
-Quick checks:
+If the page says **Source of Truth isn't connected yet**, no
+Nautobot is wired to your tenant. Click **Set up Nautobot** to
+connect a hosted one or your own.
+
+Otherwise, quick checks:
 
 1. **Is the source of truth healthy?** Bundled: the *Onboard
    your devices* panel should read **Nautobot connected**.
-   BYO: the row under *Managed infra → Integrations → Source
-   of Truth* should be green.
+   BYO: the Nautobot connection set up through *Managed infra →
+   Integrations → Guided setup* should be passing its
+   connection test.
 2. **Has the initial sync completed?** Detail page shows
    "Last sync."
-3. **Did the devices match Daalu's filters?** *Settings →
-   Reconciliation → Device filters* — Daalu may be
-   intentionally excluding sites/roles.
+3. **Are the devices in the right environment?** Operations
+   reads the primary environment's source of truth. If the
+   devices are in another environment's Nautobot, they won't
+   show here.
 
 ---
 
@@ -269,8 +280,9 @@ Likely causes:
 
 1. **Normalization mismatch.** The intended config and live
    config differ in a way Daalu thinks is significant but
-   shouldn't. Check the diff details; tune *Settings →
-   Reconciliation → Normalization rules.*
+   shouldn't. Check the diff details; if it's only cosmetic,
+   bring the intended config in Nautobot into line with how
+   the device renders it.
 2. **The change didn't actually apply.** Check the
    proposal's audit log — did the executor's API call
    actually return success?
@@ -286,13 +298,10 @@ Likely causes:
 Most common when a script or workflow is calling the API at
 high volume.
 
-Quick checks:
-
-1. **Per-PAT rate limit:** 60 requests/minute by default.
-2. **Per-IP rate limit:** 600 requests/minute by default.
-
-Raise via *Settings → API → Rate limits* (admin only). Or
-batch your requests.
+Slow down or batch your requests, and retry with backoff.
+There's no rate-limit setting in the app; if your use case
+genuinely needs a higher limit, write to support with the
+endpoint and the volume you need.
 
 ---
 
@@ -302,8 +311,8 @@ If you've connected sources and the home page is still
 showing empty states:
 
 1. Hard-refresh the browser (Cmd-Shift-R / Ctrl-Shift-R).
-2. Check the briefing-time setting; if you're looking before
-   today's briefing has generated, it'll be yesterday's.
+2. The briefing runs once a day. If you're looking before
+   today's has been written, you'll see yesterday's.
 3. Click "Regenerate" on the briefing card.
 
 ---
