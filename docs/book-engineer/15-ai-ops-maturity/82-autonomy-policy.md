@@ -93,16 +93,50 @@ writes a `tool.read` audit event (`api/routers/alert_chat.py:1103`).
 
 ## `decide()`
 
+Two functions share the work: one gathers the facts, the other makes the
+call.
+
+- **`decide_for_tenant`** (`core/aiops/policy.py:482`) is the one the rest
+  of the code calls: the alert chat (`api/routers/alert_chat.py:974`) and
+  the MCP server (`core/aiops/mcp.py:453`). It reads from the database
+  everything the decision depends on, then passes it to `decide`.
+- **`decide`** (`:295`) makes the decision. It reads nothing else: no
+  database, no clock, no globals. It looks only at its three arguments, so
+  the same arguments always give the same `Decision`.
+
 ```python
 decision = decide(policy, WriteRequest(tool, cluster, namespace, severity, external), ctx)
 # -> Decision(mode, rule_id, reason, approvers, configured_mode)
 ```
 
-`decide` (`core/aiops/policy.py:295`) is a pure function of the policy, the
-write and a `PolicyContext` (`:234`: current time, kill switch, breaker map,
-auto actions in the last hour, trust stats per rule). That purity is why
-`tests/test_aiops_policy.py` covers the whole decision table without a
-database. `decide_for_tenant` (`:482`) loads the inputs.
+| Argument | What it is |
+|---|---|
+| `policy` | The tenant's parsed `PolicyDoc` (`load_policy`, `:374`). |
+| `WriteRequest` (`:211`) | The write being asked for: tool, cluster, namespace, the alert's severity, and `external` (proposed by an outside agent over MCP). |
+| `PolicyContext` (`:234`) | What's true for the tenant right now, built by `build_context` (`:464`). Its fields are below. |
+
+| `PolicyContext` field | Used for | Where `decide_for_tenant` gets it |
+|---|---|---|
+| `now` | Freeze windows | The current UTC time. |
+| `kill_switch` | Pausing all automatic writes | The tenant's `aiops_tenant_state` row (`get_state`, `:407`). |
+| `breaker` | Circuit breakers: rule id → when its cooldown ends | The same row. |
+| `auto_actions_last_hour` | The hourly cap | A count of the tenant's actions run automatically in the last hour (`auto_actions_since`, `:446`), plus `pending_auto`: writes already decided `auto` earlier in the same model turn but not saved yet. |
+| `trust` | `auto_after_trust`: rule id → verified successes and failures | `trust_stats` (`:418`), loaded only when the matched rule's mode is `auto_after_trust`. |
+
+The point of the split is testing. A test can build the context by hand
+and check the answer, with no database to set up:
+
+```python
+# tests/test_aiops_policy.py
+req = pol.WriteRequest(tool="restart_deployment", cluster="dev-a", namespace="app")
+assert pol.decide(doc, req, ctx(kill_switch=True)).mode == "approve"
+assert pol.decide(doc, req, ctx(now=SATURDAY)).mode == "approve"  # freeze window
+```
+
+That is how `tests/test_aiops_policy.py` checks every step of the order
+below. It also tells you where to look for a bug: a wrong decision for the
+given facts is in `decide`; wrong facts (a miscounted cap, stale trust
+numbers) are in `build_context` and the helpers it calls.
 
 The order, exactly as coded:
 
