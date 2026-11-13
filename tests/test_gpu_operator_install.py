@@ -107,6 +107,17 @@ def test_missing_nvidia_runtime_on_k3s_gives_the_host_commands():
     assert "systemctl restart k3s" in s["host_commands"]
 
 
+def test_missing_runtime_right_after_install_is_still_installing():
+    """Before the toolkit signals containerd (and k3s restarts) the runtime is
+    missing by design; don't flash a "You:" warning at the user for that."""
+    s = _summary(
+        problem_messages=['no runtime for "nvidia" is configured'],
+        installed_for_seconds=20,
+    )
+    assert s["phase"] == "installing"
+    assert s["host_commands"] is None
+
+
 def test_missing_runtime_elsewhere_explains_without_k3s_commands():
     s = _summary(k3s=False, problem_messages=["unknown runtime handler nvidia"])
     assert s["phase"] == "blocked"

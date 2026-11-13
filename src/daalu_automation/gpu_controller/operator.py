@@ -22,6 +22,7 @@ own it.
 from __future__ import annotations
 
 import os
+from datetime import datetime, timezone
 from typing import Any
 
 from kubernetes_asyncio import client as k8s_client
@@ -44,6 +45,11 @@ SERVICEMONITOR_CRD = "servicemonitors.monitoring.coreos.com"
 # what takes a k3s node NotReady).
 K3S_TOOLKIT_SCRATCH_CONFIG = "/etc/daalu/nvidia-toolkit-unused/config.toml"
 K3S_CONTAINERD_SOCKET = "/run/k3s/containerd/containerd.sock"
+
+# Until the toolkit has signalled containerd (and, on k3s, k3s has come back),
+# "no runtime for nvidia" is the expected state, not a problem. Only call it
+# blocked once the operator has been there this long.
+BLOCKED_AFTER_SECONDS = 180
 
 # Pod-sandbox errors containerd returns when a pod asks for the ``nvidia``
 # runtime class and the node has no NVIDIA runtime configured.
@@ -137,6 +143,7 @@ def summarise(
     pods_total: int,
     pods_ready: int,
     problem_messages: list[str],
+    installed_for_seconds: float = BLOCKED_AFTER_SECONDS,
 ) -> dict[str, Any]:
     """Phase + the one hint the form should show."""
     hint: str | None = None
@@ -145,7 +152,7 @@ def summarise(
         phase = "ready"
     elif not installed:
         phase = "absent"
-    elif runtime_missing(problem_messages):
+    elif runtime_missing(problem_messages) and installed_for_seconds >= BLOCKED_AFTER_SECONDS:
         phase = "blocked"
         if k3s:
             hint = (
@@ -213,9 +220,15 @@ async def cluster_facts(api: k8s_client.ApiClient) -> dict[str, Any]:
 async def operator_status(api: k8s_client.ApiClient) -> dict[str, Any]:
     """Where the operator install is, read from the cluster itself."""
     facts = await cluster_facts(api)
+    installed_for = 0.0
     try:
-        await k8s_client.AppsV1Api(api).read_namespaced_deployment("gpu-operator", NAMESPACE)
+        dep = await k8s_client.AppsV1Api(api).read_namespaced_deployment(
+            "gpu-operator", NAMESPACE
+        )
         installed = True
+        created = dep.metadata.creation_timestamp if dep.metadata else None
+        if created is not None:
+            installed_for = (datetime.now(tz=timezone.utc) - created).total_seconds()
     except ApiException as e:
         if e.status != 404:
             raise
@@ -247,6 +260,7 @@ async def operator_status(api: k8s_client.ApiClient) -> dict[str, Any]:
         pods_total=pods_total,
         pods_ready=pods_ready,
         problem_messages=messages,
+        installed_for_seconds=installed_for,
     )
 
 
