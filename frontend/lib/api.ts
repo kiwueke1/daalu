@@ -258,6 +258,36 @@ export interface GpuOperatorStatus {
   host_commands?: string | null;
 }
 
+/** One `kubectl get pods` row for what Add GPU installs (GET /onboarding/gpu/pods). */
+export interface GpuPodRow {
+  name: string;
+  ready: string;
+  status: string;
+  restarts: number;
+  age_seconds?: number | null;
+  node?: string | null;
+  /** ready | done | starting | failing */
+  health: "ready" | "done" | "starting" | "failing";
+  containers: string[];
+  /** The container whose logs say the most right now. */
+  log_container?: string | null;
+}
+
+export interface GpuPods {
+  namespace: string;
+  pods: GpuPodRow[];
+}
+
+export interface GpuPodLogs {
+  namespace: string;
+  pod: string;
+  container?: string | null;
+  logs: string;
+}
+
+/** Which install the pod view shows: the GPU Operator, or the served model. */
+export type GpuPodsTarget = "operator" | "model";
+
 export interface GpuNode {
   name: string;
   gpu_class?: string | null;
@@ -710,6 +740,22 @@ export const api = {
           method: "POST",
           body: JSON.stringify({ cluster_tunnel_id: clusterTunnelId }),
         }),
+      // `kubectl get pods` for the GPU Operator or the model, live.
+      pods: (target: GpuPodsTarget, clusterTunnelId?: string | null) =>
+        request<GpuPods>(
+          `/onboarding/gpu/pods?target=${target}${clusterTunnelId ? `&cluster_tunnel_id=${clusterTunnelId}` : ""}`,
+        ),
+      podLogs: (
+        target: GpuPodsTarget,
+        pod: string,
+        container: string | null,
+        clusterTunnelId?: string | null,
+      ) =>
+        request<GpuPodLogs>(
+          `/onboarding/gpu/pods/logs?target=${target}&pod=${encodeURIComponent(pod)}` +
+            (container ? `&container=${encodeURIComponent(container)}` : "") +
+            (clusterTunnelId ? `&cluster_tunnel_id=${clusterTunnelId}` : ""),
+        ),
       // Pod phase + kubelet events + vLLM logs for an in-flight deploy.
       progress: () => request<GpuProgress>("/onboarding/gpu/progress"),
       // What is deployed on the card, as the controller renders it.

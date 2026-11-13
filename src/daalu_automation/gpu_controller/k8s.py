@@ -267,3 +267,153 @@ async def vllm_deployment_ready(
     if status is None:
         return False
     return int(getattr(status, "ready_replicas", 0) or 0) >= 1
+
+
+# ── Live pod view (Add GPU: "kubectl get pods" + logs) ─────────────────
+
+# Container states that mean "this won't come up by itself".
+_FAILING_REASONS = {
+    "CrashLoopBackOff",
+    "ImagePullBackOff",
+    "ErrImagePull",
+    "InvalidImageName",
+    "CreateContainerConfigError",
+    "CreateContainerError",
+    "RunContainerError",
+    "Error",
+    "OOMKilled",
+}
+
+
+def _container_reason(cs) -> tuple[str | None, str | None]:
+    st = getattr(cs, "state", None)
+    for kind in ("waiting", "terminated"):
+        sub = getattr(st, kind, None) if st else None
+        if sub is not None:
+            return getattr(sub, "reason", None), getattr(sub, "message", None)
+    return None, None
+
+
+def pod_row(p, *, now=None) -> dict:
+    """One ``kubectl get pods`` row, plus a health word the UI colours by.
+
+    STATUS follows kubectl: ``Init:1/4`` while init containers run,
+    ``Init:CrashLoopBackOff`` when one is stuck, a container's waiting or
+    terminated reason (``ContainerCreating``, ``CrashLoopBackOff``,
+    ``Completed``) when it has one, else the pod phase. ``health`` is
+    ``ready`` (all containers ready), ``done`` (Succeeded), ``failing``
+    (a reason that won't fix itself) or ``starting``.
+    """
+    from datetime import datetime, timezone
+
+    status = getattr(p, "status", None)
+    spec = getattr(p, "spec", None)
+    phase = getattr(status, "phase", None) if status else None
+    inits = (getattr(status, "init_container_statuses", None) or []) if status else []
+    mains = (getattr(status, "container_statuses", None) or []) if status else []
+    n_main = len(getattr(spec, "containers", None) or []) or len(mains)
+    ready = sum(1 for c in mains if c.ready)
+    restarts = sum(int(c.restart_count or 0) for c in [*inits, *mains])
+
+    shown = phase or "Pending"
+    failing = False
+    if getattr(p.metadata, "deletion_timestamp", None):
+        shown = "Terminating"
+    else:
+        done_inits = 0
+        init_note = None
+        for c in inits:
+            reason, _ = _container_reason(c)
+            st = getattr(c, "state", None)
+            term = getattr(st, "terminated", None) if st else None
+            if term is not None and (term.exit_code or 0) == 0:
+                done_inits += 1
+                continue
+            if reason and reason not in ("PodInitializing",):
+                init_note = f"Init:{reason}"
+                failing = failing or reason in _FAILING_REASONS
+            break
+        if inits and done_inits < len(inits):
+            shown = init_note or f"Init:{done_inits}/{len(inits)}"
+        else:
+            for c in mains:
+                reason, _ = _container_reason(c)
+                if reason and not c.ready:
+                    shown = reason
+                    failing = failing or reason in _FAILING_REASONS
+                    break
+            else:
+                if phase == "Succeeded":
+                    shown = "Completed"
+
+    if phase == "Succeeded":
+        health = "done"
+    elif failing or phase == "Failed":
+        health = "failing"
+    elif phase == "Running" and mains and ready == len(mains):
+        health = "ready"
+    else:
+        health = "starting"
+
+    created = getattr(p.metadata, "creation_timestamp", None)
+    now = now or datetime.now(tz=timezone.utc)
+    containers = [c.name for c in (getattr(spec, "init_containers", None) or [])] + [
+        c.name for c in (getattr(spec, "containers", None) or [])
+    ]
+    return {
+        "name": p.metadata.name,
+        "ready": f"{ready}/{n_main}",
+        "status": shown,
+        "restarts": restarts,
+        "age_seconds": int((now - created).total_seconds()) if created else None,
+        "node": getattr(spec, "node_name", None) if spec else None,
+        "health": health,
+        "containers": containers,
+        # The container whose logs say the most right now: a running main
+        # container, else the init container currently in progress.
+        "log_container": _log_container(inits, mains, spec),
+    }
+
+
+def _log_container(inits, mains, spec) -> str | None:
+    for c in mains:
+        st = getattr(c, "state", None)
+        if st and (getattr(st, "running", None) or getattr(st, "terminated", None)):
+            return c.name
+    for c in inits:
+        st = getattr(c, "state", None)
+        if st and getattr(st, "running", None):
+            return c.name
+        term = getattr(st, "terminated", None) if st else None
+        if term is not None and (term.exit_code or 0) != 0:
+            return c.name
+    names = [c.name for c in (getattr(spec, "containers", None) or [])]
+    return names[0] if names else None
+
+
+async def list_pod_rows(api: k8s_client.ApiClient, namespace: str) -> list[dict]:
+    """``kubectl get pods -n <namespace>``, as rows (sorted by name)."""
+    core = k8s_client.CoreV1Api(api)
+    pods = await core.list_namespaced_pod(namespace=namespace)
+    return sorted((pod_row(p) for p in pods.items), key=lambda r: r["name"])
+
+
+async def read_pod_logs(
+    api: k8s_client.ApiClient,
+    namespace: str,
+    pod: str,
+    container: str | None,
+    *,
+    tail_lines: int = 200,
+) -> str:
+    """Last lines of one container's log; a not-started container says so."""
+    core = k8s_client.CoreV1Api(api)
+    try:
+        return await core.read_namespaced_pod_log(
+            name=pod, namespace=namespace, container=container, tail_lines=tail_lines
+        )
+    except k8s_client.exceptions.ApiException as e:
+        if e.status in (400, 404):
+            # ContainerCreating / PodInitializing / gone: not an error worth a 500.
+            return ""
+        raise

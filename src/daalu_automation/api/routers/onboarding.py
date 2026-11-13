@@ -34,7 +34,7 @@ import smtplib
 import time
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 import structlog
@@ -1905,6 +1905,87 @@ async def install_gpu_operator(
     try:
         return await install_gpu_operator_via_controller(
             tenant_id=user.tenant_id, target_cluster_tunnel_id=body.cluster_tunnel_id
+        )
+    except GpuProvisioningError as e:
+        raise HTTPException(502, str(e)) from e
+
+
+class GpuPodRowOut(BaseModel):
+    name: str
+    ready: str
+    status: str
+    restarts: int = 0
+    age_seconds: int | None = None
+    node: str | None = None
+    # ready | done | starting | failing — what the UI colours the row by.
+    health: str
+    containers: list[str] = []
+    log_container: str | None = None
+
+
+class GpuPodsOut(BaseModel):
+    namespace: str
+    pods: list[GpuPodRowOut]
+
+
+class GpuPodLogsOut(BaseModel):
+    namespace: str
+    pod: str
+    container: str | None = None
+    logs: str = ""
+
+
+@router.get("/gpu/pods", response_model=GpuPodsOut)
+async def gpu_pods(
+    target: Literal["operator", "model"],
+    cluster_tunnel_id: uuid.UUID | None = None,
+    user: User = Depends(current_admin),
+):
+    """``kubectl get pods`` for what Add GPU installs, live over the tunnel.
+
+    ``operator``: the GPU Operator's namespace on ``cluster_tunnel_id``.
+    ``model``: the tenant's vLLM stack. The namespace is fixed server-side.
+    """
+    from daalu_automation.core.gpu.provision import (
+        GpuProvisioningError,
+        pods_via_controller,
+    )
+
+    try:
+        return GpuPodsOut(
+            **await pods_via_controller(
+                tenant_id=user.tenant_id,
+                target=target,
+                target_cluster_tunnel_id=cluster_tunnel_id,
+            )
+        )
+    except GpuProvisioningError as e:
+        raise HTTPException(502, str(e)) from e
+
+
+@router.get("/gpu/pods/logs", response_model=GpuPodLogsOut)
+async def gpu_pod_logs(
+    target: Literal["operator", "model"],
+    pod: str,
+    container: str | None = None,
+    cluster_tunnel_id: uuid.UUID | None = None,
+    user: User = Depends(current_admin),
+):
+    """The last 200 log lines of one of those pods' containers."""
+    from daalu_automation.core.gpu.provision import (
+        GpuProvisioningError,
+        pods_via_controller,
+    )
+
+    try:
+        return GpuPodLogsOut(
+            **await pods_via_controller(
+                tenant_id=user.tenant_id,
+                target=target,
+                target_cluster_tunnel_id=cluster_tunnel_id,
+                pod=pod,
+                container=container,
+            )
         )
     except GpuProvisioningError as e:
         raise HTTPException(502, str(e)) from e

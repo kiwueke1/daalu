@@ -31,6 +31,7 @@ import { ConfirmButton } from "@/components/ui/confirm-button";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { errorText } from "@/lib/errors";
+import { LivePods } from "@/components/gpu/live-pods";
 
 /** SRE-agent models Daalu knows how to serve (core/model_catalog.py). */
 export const SERVE_MODELS = [
@@ -325,7 +326,7 @@ export function GpuOnboardingCard({
             )}
           </label>
 
-          {noGpu && clusterId ? (
+          {clusterId ? (
             <GpuOperatorStep
               clusterId={clusterId}
               clusterName={
@@ -469,7 +470,6 @@ export function GpuProgressPanel() {
   const p = progress.data;
   const pod = p?.pods?.[0];
   const events = p?.events ?? [];
-  const logs = pod?.logs?.trim();
   // The reason a container isn't up yet (ImagePullBackOff, CrashLoopBackOff…)
   // is the single most useful line here, so promote it out of the pod blob.
   const blocked = pod?.containers?.find((c) => !c.ready && c.reason);
@@ -502,6 +502,7 @@ export function GpuProgressPanel() {
 
       {open && (
         <div className="space-y-3 border-t border-line px-3 py-3">
+          <LivePods target="model" title="Model pods" defaultOpen />
           {progress.isLoading && (
             <div className="flex items-center gap-2 text-[11px] text-muted">
               <Loader2 className="h-3 w-3 animate-spin" /> Reading cluster state…
@@ -509,22 +510,9 @@ export function GpuProgressPanel() {
           )}
 
           {!progress.isLoading && !pod && events.length === 0 && (
-            <div className="text-[11px] text-muted">
+            <div className="text-xs text-muted">
               No pod yet — the controller applies the stack on its next
               reconcile tick (~30 s).
-            </div>
-          )}
-
-          {pod && (
-            <div className="text-[11px] text-muted">
-              <span className="font-mono">{pod.name}</span>
-              {pod.node ? ` on ${pod.node}` : ""}
-              {pod.containers?.map((c) => (
-                <span key={c.name} className="ml-2">
-                  · {c.name} {c.ready ? "ready" : (c.reason ?? "starting")}
-                  {c.restarts > 0 ? ` (${c.restarts} restarts)` : ""}
-                </span>
-              ))}
             </div>
           )}
 
@@ -565,16 +553,6 @@ export function GpuProgressPanel() {
             </div>
           )}
 
-          {logs && (
-            <div>
-              <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted">
-                vLLM logs
-              </div>
-              <pre className="max-h-64 overflow-auto rounded border border-line bg-bg-elevated/40 px-2 py-1.5 font-mono text-[11px] leading-relaxed text-[color:var(--text)]">
-                {logs}
-              </pre>
-            </div>
-          )}
         </div>
       )}
     </div>
@@ -786,12 +764,15 @@ function GpuOperatorStep({
   }
   if (status.isError && started) {
     return (
-      <div role="status" className="flex items-start gap-1.5 text-xs">
-        <Loader2 className="h-3.5 w-3.5 mt-0.5 shrink-0 animate-spin" aria-hidden />
-        <span>
-          Waiting for {clusterName}&apos;s Kubernetes API. On k3s it restarts once while the
-          NVIDIA runtime is set up (about a minute); running workloads keep running.
-        </span>
+      <div className="space-y-2 text-xs">
+        <div role="status" className="flex items-start gap-1.5">
+          <Loader2 className="h-3.5 w-3.5 mt-0.5 shrink-0 animate-spin" aria-hidden />
+          <span>
+            Waiting for {clusterName}&apos;s Kubernetes API. On k3s it restarts once while the
+            NVIDIA runtime is set up (about a minute); running workloads keep running.
+          </span>
+        </div>
+        <LivePods target="operator" clusterId={clusterId} title="GPU Operator pods" defaultOpen />
       </div>
     );
   }
@@ -804,8 +785,26 @@ function GpuOperatorStep({
     );
   }
   const s = status.data;
-  if (!s || phase === "ready") return null;
+  if (!s) return null;
+  // A GPU was already advertised and Daalu didn't install the operator here
+  // (the platform team runs it elsewhere): nothing to show.
+  if (phase === "ready" && !s.installed) return null;
   const k3s = s.distribution === "k3s";
+
+  if (phase === "ready") {
+    return (
+      <div className="space-y-2 text-xs">
+        <p className="flex items-center gap-1.5">
+          <Check className="h-3.5 w-3.5 text-[color:var(--accent)]" aria-hidden />
+          <span>
+            NVIDIA GPU Operator running on {clusterName}
+            {s.pods_total > 0 ? ` (${s.pods_ready} of ${s.pods_total} pods ready)` : ""}.
+          </span>
+        </p>
+        <LivePods target="operator" clusterId={clusterId} title="GPU Operator pods" />
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-md border border-line bg-bg-elevated/40 p-3 space-y-2 text-xs motion-enter">
@@ -869,6 +868,15 @@ function GpuOperatorStep({
             Daalu keeps checking; this form carries on once the GPU appears.
           </p>
         </>
+      )}
+
+      {(phase === "installing" || phase === "blocked" || (phase === "error" && s.installed)) && (
+        <LivePods
+          target="operator"
+          clusterId={clusterId}
+          title="GPU Operator pods"
+          defaultOpen={phase !== "installing" || started}
+        />
       )}
     </div>
   );

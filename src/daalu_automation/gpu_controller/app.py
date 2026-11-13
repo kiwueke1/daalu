@@ -320,6 +320,67 @@ def create_app() -> FastAPI:
         asyncio.create_task(_run())
         return {"state": "running", **facts}
 
+    async def _pods_target(
+        db: AsyncSession,
+        tenant_id: uuid.UUID,
+        target: str,
+        target_cluster_tunnel_id: uuid.UUID | None,
+    ) -> tuple[Any, str]:
+        """(API client context, namespace) for what Add GPU installed.
+
+        The namespace is never taken from the caller: ``operator`` is the
+        GPU Operator's namespace on a cluster the tenant owns, ``model`` is
+        the tenant's own vLLM stack. That keeps this a view of Daalu's
+        installs, not a general pod browser.
+        """
+        if target == "operator":
+            if target_cluster_tunnel_id is None:
+                raise HTTPException(400, "target_cluster_tunnel_id is required")
+            await _owned_connected_tunnel(db, tenant_id, target_cluster_tunnel_id)
+            return _ApiClientForTunnel(db, target_cluster_tunnel_id), gpu_operator.NAMESPACE
+        if target == "model":
+            row = await _find_row(db, tenant_id)
+            if row is None:
+                raise HTTPException(404, "no gpu tenant")
+            return _api_client_for(db, row), row.namespace
+        raise HTTPException(400, "target must be 'operator' or 'model'")
+
+    @app.get("/tenants/{tenant_id}/pods")
+    async def list_pods(
+        tenant_id: uuid.UUID,
+        target: str,
+        target_cluster_tunnel_id: uuid.UUID | None = None,
+        authorization: str | None = Header(default=None),
+        db: AsyncSession = Depends(get_db),
+    ) -> dict[str, Any]:
+        """``kubectl get pods`` for the GPU Operator or the model, as rows."""
+        claims = _authenticate(authorization)
+        if claims.tenant_id != str(tenant_id):
+            raise HTTPException(status_code=403, detail="tenant_id mismatch")
+        ctx, namespace = await _pods_target(db, tenant_id, target, target_cluster_tunnel_id)
+        async with ctx as api:
+            pods = await k8s_helpers.list_pod_rows(api, namespace)
+        return {"namespace": namespace, "pods": pods}
+
+    @app.get("/tenants/{tenant_id}/pod-logs")
+    async def pod_logs(
+        tenant_id: uuid.UUID,
+        target: str,
+        pod: str,
+        container: str | None = None,
+        target_cluster_tunnel_id: uuid.UUID | None = None,
+        authorization: str | None = Header(default=None),
+        db: AsyncSession = Depends(get_db),
+    ) -> dict[str, Any]:
+        """Last 200 lines of one container in that namespace."""
+        claims = _authenticate(authorization)
+        if claims.tenant_id != str(tenant_id):
+            raise HTTPException(status_code=403, detail="tenant_id mismatch")
+        ctx, namespace = await _pods_target(db, tenant_id, target, target_cluster_tunnel_id)
+        async with ctx as api:
+            logs = await k8s_helpers.read_pod_logs(api, namespace, pod, container)
+        return {"namespace": namespace, "pod": pod, "container": container, "logs": logs}
+
     @app.get("/tenants/{tenant_id}/progress")
     async def vllm_progress(
         tenant_id: uuid.UUID,

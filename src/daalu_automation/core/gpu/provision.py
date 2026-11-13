@@ -160,6 +160,37 @@ async def install_gpu_operator_via_controller(
     return r.json()
 
 
+async def pods_via_controller(
+    *,
+    tenant_id: uuid.UUID,
+    target: str,
+    target_cluster_tunnel_id: uuid.UUID | None,
+    pod: str | None = None,
+    container: str | None = None,
+) -> dict[str, Any]:
+    """Pods (``pod`` unset) or one pod's logs for the GPU Operator / model."""
+    s = get_settings()
+    if not s.gpu_controller_url:
+        raise GpuProvisioningError("gpu_controller_url is not configured on this deploy")
+    base = s.gpu_controller_url.rstrip("/")
+    params: dict[str, str] = {"target": target}
+    if target_cluster_tunnel_id is not None:
+        params["target_cluster_tunnel_id"] = str(target_cluster_tunnel_id)
+    path = "pods"
+    if pod is not None:
+        path = "pod-logs"
+        params["pod"] = pod
+        if container:
+            params["container"] = container
+    async with httpx.AsyncClient(
+        timeout=20.0, headers=_controller_headers(tenant_id, ttl_seconds=120)
+    ) as client:
+        r = await client.get(f"{base}/tenants/{tenant_id}/{path}", params=params)
+    if r.status_code != 200:
+        raise GpuProvisioningError(_controller_detail(r))
+    return r.json()
+
+
 def _controller_detail(r: httpx.Response) -> str:
     try:
         detail = r.json().get("detail")
