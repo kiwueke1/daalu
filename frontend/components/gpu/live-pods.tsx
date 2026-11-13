@@ -60,6 +60,7 @@ export function LivePods({
   const namespace = pods.data?.namespace ?? (target === "operator" ? "gpu-operator" : "daalu");
   const ready = rows.filter((r) => r.health === "ready" || r.health === "done").length;
   const failing = rows.filter((r) => r.health === "failing").length;
+  const selectedRow = rows.find((r) => r.name === selected) ?? null;
 
   return (
     <div className="rounded-lg border border-line bg-bg-base/40">
@@ -131,17 +132,22 @@ export function LivePods({
                       row={r}
                       open={selected === r.name}
                       onToggle={() => setSelected((s) => (s === r.name ? null : r.name))}
-                      target={target}
-                      clusterId={clusterId}
-                      namespace={namespace}
                     />
                   ))}
                 </tbody>
               </table>
             </div>
           )}
-          {rows.length > 0 && (
-            <p className="text-xs text-muted">Click a pod to see its logs.</p>
+          {selectedRow ? (
+            <PodLogs
+              key={selectedRow.name}
+              row={selectedRow}
+              target={target}
+              clusterId={clusterId}
+              namespace={namespace}
+            />
+          ) : (
+            rows.length > 0 && <p className="text-xs text-muted">Click a pod to see its logs.</p>
           )}
         </div>
       )}
@@ -153,32 +159,25 @@ function PodRowView({
   row,
   open,
   onToggle,
-  target,
-  clusterId,
-  namespace,
 }: {
   row: GpuPodRow;
   open: boolean;
   onToggle: () => void;
-  target: GpuPodsTarget;
-  clusterId?: string | null;
-  namespace: string;
 }) {
   const tone = HEALTH_TEXT[row.health];
   return (
-    <>
-      <tr className="border-t border-line/50">
+    <tr className={cn("border-t border-line/50", open && "bg-bg-elevated")}>
         <td className="px-2 py-1">
           <button
             type="button"
             onClick={onToggle}
             aria-expanded={open}
-            className={cn("inline-flex items-center gap-1 text-left hover:underline", tone)}
+            className={cn("inline-flex items-center gap-1 whitespace-nowrap text-left hover:underline", tone)}
           >
             {row.health === "failing" && (
               <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden />
             )}
-            <span className="break-all">{row.name}</span>
+            {row.name}
           </button>
         </td>
         <td className={cn("px-2 py-1", tone)}>{row.ready}</td>
@@ -187,16 +186,8 @@ function PodRowView({
           {row.restarts}
         </td>
         <td className="px-2 py-1 text-muted">{kubeAge(row.age_seconds)}</td>
-        <td className="px-2 py-1 text-muted">{row.node ?? "—"}</td>
-      </tr>
-      {open && (
-        <tr>
-          <td colSpan={6} className="px-2 pb-2">
-            <PodLogs row={row} target={target} clusterId={clusterId} namespace={namespace} />
-          </td>
-        </tr>
-      )}
-    </>
+        <td className="px-2 py-1 whitespace-nowrap text-muted">{row.node ?? "—"}</td>
+    </tr>
   );
 }
 
@@ -227,9 +218,9 @@ function PodLogs({
   }, [text]);
 
   return (
-    <div className="mt-1 space-y-1">
+    <div className="space-y-1">
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
-        <span className="font-mono">
+        <span className="font-mono break-all">
           kubectl logs -n {namespace} {row.name}
           {container ? ` -c ${container}` : ""}
         </span>
