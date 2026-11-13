@@ -745,17 +745,25 @@ function GpuOperatorStep({
 }) {
   const qc = useQueryClient();
   const toast = useToast();
+  // Set once an install starts: from then on keep polling through errors,
+  // because on k3s the cluster's API is down for about a minute while k3s
+  // restarts to pick up the NVIDIA runtime.
+  const [started, setStarted] = useState(false);
   const status = useQuery({
     queryKey: ["gpu", "operator", clusterId],
     queryFn: () => api.onboarding.gpu.operator(clusterId),
+    retry: started ? false : 3,
     refetchInterval: (q) => {
       const phase = (q.state.data as GpuOperatorStatus | undefined)?.phase;
+      if (phase === "ready") return false;
+      if (started) return 5_000;
       return phase === "installing" ? 5_000 : phase === "blocked" ? 10_000 : false;
     },
   });
   const install = useMutation({
     mutationFn: () => api.onboarding.gpu.installOperator(clusterId),
     onSuccess: () => {
+      setStarted(true);
       toast.success("Installing the NVIDIA GPU Operator. The GPU appears here when it's ready.");
       qc.invalidateQueries({ queryKey: ["gpu", "operator", clusterId] });
     },
@@ -773,6 +781,17 @@ function GpuOperatorStep({
       <div role="status" className="flex items-center gap-1.5 text-xs text-muted">
         <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
         Checking {clusterName} for the NVIDIA GPU Operator…
+      </div>
+    );
+  }
+  if (status.isError && started) {
+    return (
+      <div role="status" className="flex items-start gap-1.5 text-xs">
+        <Loader2 className="h-3.5 w-3.5 mt-0.5 shrink-0 animate-spin" aria-hidden />
+        <span>
+          Waiting for {clusterName}&apos;s Kubernetes API. On k3s it restarts once while the
+          NVIDIA runtime is set up (about a minute); running workloads keep running.
+        </span>
       </div>
     );
   }
@@ -796,8 +815,10 @@ function GpuOperatorStep({
             <span className="font-semibold">No GPU on {clusterName} yet.</span> Kubernetes
             only sees a GPU once the NVIDIA GPU Operator runs. Daalu can install it for you
             (chart v25.10.1, namespace <span className="font-mono">gpu-operator</span>), using
-            the NVIDIA driver already on the node
-            {k3s ? "; on k3s it also needs the NVIDIA Container Toolkit on the node" : ""}.
+            the NVIDIA driver already on the node.
+            {k3s
+              ? " On k3s, k3s restarts once while the NVIDIA runtime is set up (about a minute without the cluster API; running workloads keep running)."
+              : ""}
           </p>
           {phase === "error" && s.hint && (
             <p role="alert" className="text-[color:var(--critical)] break-words">
@@ -807,7 +828,7 @@ function GpuOperatorStep({
           <ConfirmButton
             label={phase === "error" ? "Try the install again" : "Install GPU Operator"}
             confirmLabel="Install GPU Operator"
-            consequence={`Installs the NVIDIA GPU Operator on ${clusterName}. Takes 2–5 minutes; the GPU appears in this form when it's ready.`}
+            consequence={`Installs the NVIDIA GPU Operator on ${clusterName}${k3s ? " and restarts k3s once" : ""}. Takes 2–5 minutes; the GPU appears in this form when it's ready.`}
             onConfirm={() => install.mutate()}
             pending={install.isPending}
             icon={<Cpu className="h-3.5 w-3.5" aria-hidden />}

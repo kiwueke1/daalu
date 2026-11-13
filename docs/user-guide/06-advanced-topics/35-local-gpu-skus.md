@@ -54,49 +54,26 @@ Things that must be true before the form will succeed. All are one-time:
 1. **The NVIDIA driver on the GPU node.** `nvidia-smi` on the node lists
    the card. Daalu doesn't install drivers: that stays with whoever owns the
    node's OS image.
-2. **On k3s only: the NVIDIA Container Toolkit on the GPU node**, then a
-   k3s restart, so k3s registers the NVIDIA runtime (commands below). On
-   other Kubernetes distributions the GPU Operator installs the toolkit
-   itself.
-3. **The cluster is connected to Daalu** via `daalu-edge` (chapter 34).
+2. **The cluster is connected to Daalu** via `daalu-edge` (chapter 34).
    The install snippet the cluster-onboarding wizard generates already
    includes everything the GPU path needs — the inference and telemetry
    proxies are pre-wired, and the edge registers the cluster credential
    with Daalu by itself. There is no extra manifest and no kubeconfig to
    paste.
-4. **A Hugging Face token, if your model is gated.** The default Llama
+3. **A Hugging Face token, if your model is gated.** The default Llama
    weights require accepting Meta's licence on Hugging Face and supplying
    a read token once. Ungated models (e.g. Qwen) need none.
 
 That's it. In particular, you do **not** need to:
 
-- install the **NVIDIA GPU Operator** — if the cluster doesn't have it,
-  **Add GPU** installs it for you (next section);
+- install the **NVIDIA GPU Operator** or the **NVIDIA Container Toolkit** —
+  if the cluster doesn't have them, **Add GPU** installs the operator, and
+  the operator installs the toolkit (next section);
 - hand-label the GPU node — Daalu derives the GPU class automatically
   from what GPU discovery reports about the card;
 - mint credentials or assemble a kubeconfig — the edge self-registers,
   and a rebuilt cluster replaces its own stale credential automatically;
 - run any follow-up `helm upgrade` — the initial install is complete.
-
-**The toolkit on a k3s GPU node** (prerequisite 2):
-
-```bash
-curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
-  | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
-curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
-  | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' \
-  | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
-sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit
-sudo systemctl restart k3s          # running pods keep running
-sudo grep -A3 "runtimes.'nvidia'" /var/lib/rancher/k3s/agent/etc/containerd/config.toml
-#   BinaryName = "/usr/bin/nvidia-container-runtime"
-```
-
-The toolkit's `nvidia-cdi-refresh` service also writes the GPU's CDI spec
-(`/var/run/cdi/nvidia.yaml`) on every boot, which is how containerd hands
-the GPU to a pod. Forget this step and Add GPU tells you: the operator
-install stops with "The GPU node has no NVIDIA runtime yet" and shows these
-commands.
 
 > **Running Daalu yourself?** The deploy is done by Daalu's **GPU
 > controller** service. Both install methods in
@@ -116,34 +93,38 @@ namespace over the tunnel, with the settings that cluster needs:
 | Setting | Why |
 |---|---|
 | driver off | The driver is the node's prerequisite. |
-| toolkit off **on k3s** | On k3s the toolkit lives on the host (prerequisite 2). The operator's own toolkit rewrites containerd's config with standard CNI paths that k3s doesn't use, and the node goes `NotReady`. |
+| toolkit on; **on k3s** its containerd snippet goes to a file k3s never reads | Left to its defaults, the toolkit writes containerd's config with standard CNI paths that k3s doesn't use, and the node goes `NotReady`. Redirected, it only installs the NVIDIA runtime under `/usr/local/nvidia/toolkit`. **k3s then restarts once** (about a minute without the cluster API; running pods keep running) and registers that runtime itself. |
 | CDI on | GPUs reach pods through the CDI spec, so Daalu's vLLM pod needs only `nvidia.com/gpu: 1`, no runtime class. |
 | DCGM ServiceMonitor on, if the cluster runs the Prometheus Operator | The operator ships it off, so Prometheus never scrapes GPU metrics and AI Factory stays empty. |
 | `tenant` label on the DCGM series | AI Factory only shows series labelled with your tenant; Daalu fills in your tenant's ID. |
 
-The form shows how far along it is ("3 of 8 pods ready") and moves on to
-the detected GPU by itself, usually 2–5 minutes later. A cluster that
-already runs the operator skips all of this.
+The form shows how far along it is ("3 of 8 pods ready"), waits through
+the k3s restart, and moves on to the detected GPU by itself, usually 2–5
+minutes later. A cluster that already runs the operator skips all of this.
+If the GPU node still has no NVIDIA runtime afterwards (for example k3s
+isn't run by systemd, so nothing restarted it), the form says so and shows
+the commands to run on the node.
 
 ### Installing it yourself instead
 
 If your platform team manages the operator, install it with the same
 settings and Add GPU finds the GPU straight away. Replace the tenant ID
-with yours (the default tenant of a new Daalu install is the one shown):
+with yours (the default tenant of a new Daalu install is the one shown).
+On k3s:
 
 ```bash
 helm repo add nvidia https://helm.ngc.nvidia.com/nvidia && helm repo update
 helm upgrade --install gpu-operator nvidia/gpu-operator --version v25.10.1 \
   -n gpu-operator --create-namespace \
   --set driver.enabled=false \
-  --set toolkit.enabled=false \
   --set cdi.enabled=true \
+  --set-json 'toolkit.env=[{"name":"CONTAINERD_CONFIG","value":"/etc/daalu/nvidia-toolkit-unused/config.toml"},{"name":"CONTAINERD_SOCKET","value":"/run/k3s/containerd/containerd.sock"},{"name":"RUNTIME_CONFIG_SOURCE","value":"file"}]' \
   --set dcgmExporter.serviceMonitor.enabled=true \
   --set dcgmExporter.serviceMonitor.interval=15s \
   --set-json 'dcgmExporter.serviceMonitor.relabelings=[{"action":"replace","targetLabel":"tenant","replacement":"00000000-0000-0000-0000-000000000010"}]'
 ```
 
-(`toolkit.enabled=false` is for k3s; drop it elsewhere.) Check it:
+The `toolkit.env` line is for k3s only; drop it elsewhere. Check it:
 
 ```bash
 kubectl -n gpu-operator get pods      # all Running; nvidia-cuda-validator Completed
@@ -259,10 +240,11 @@ access.
 advertising the GPU — the GPU Operator on the cluster isn't healthy on
 that node. Check `kubectl -n gpu-operator get pods`.
 
-**"The GPU node has no NVIDIA runtime yet."** The operator install can't
-start its pods because the node has no NVIDIA runtime: on k3s, install the
-Container Toolkit on the node and restart k3s (prerequisite 2). The form
-keeps checking and carries on once the GPU appears.
+**"The GPU node still has no NVIDIA runtime."** The operator's pods can't
+start because containerd has no `nvidia` runtime. On k3s, k3s registers it
+when it restarts: `sudo systemctl restart k3s` on the node. Elsewhere,
+check the `nvidia-container-toolkit-daemonset` pod's logs. The form keeps
+checking and carries on once the GPU appears.
 
 **The operator's pods crash with `nvidia-smi` or driver errors.** The node
 has no working NVIDIA driver (prerequisite 1); `nvidia-smi` on the node

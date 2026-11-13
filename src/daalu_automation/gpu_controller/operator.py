@@ -6,14 +6,13 @@ GPU node found" and send you to a page of helm commands. This module does
 those commands for you, over the tunnel, with the cluster-admin credential
 the edge registered:
 
-* works out the settings the cluster needs (k3s must keep the operator's own
-  container toolkit off, or the node goes NotReady),
+* works out the settings the cluster needs (on k3s the operator's container
+  toolkit must not edit containerd's config, or the node goes NotReady),
 * stamps the DCGM metrics with the signed-in tenant's id so AI Factory shows
   them, and only asks for a ServiceMonitor when the Prometheus Operator is
   there to read it,
-* reports progress, and recognises the one prerequisite it can't install
-  from Kubernetes — the NVIDIA runtime on the node itself — so the form can
-  show the exact host commands instead of a stuck pod.
+* reports progress, and recognises a node that still has no NVIDIA runtime
+  so the form can show the exact host commands instead of a stuck pod.
 
 The NVIDIA driver on the node stays a prerequisite: the operator's prebuilt
 driver images don't cover every distro/kernel, and platform teams expect to
@@ -38,6 +37,13 @@ CHART_VERSION = "v25.10.1"
 NAMESPACE = "gpu-operator"
 RELEASE = "gpu-operator"
 SERVICEMONITOR_CRD = "servicemonitors.monitoring.coreos.com"
+
+# k3s: where the operator's toolkit may write its containerd snippet. k3s
+# generates its own containerd config and never reads this file; pointing the
+# toolkit here keeps it off k3s's config (writing that with stock CNI paths is
+# what takes a k3s node NotReady).
+K3S_TOOLKIT_SCRATCH_CONFIG = "/etc/daalu/nvidia-toolkit-unused/config.toml"
+K3S_CONTAINERD_SOCKET = "/run/k3s/containerd/containerd.sock"
 
 # Pod-sandbox errors containerd returns when a pod asks for the ``nvidia``
 # runtime class and the node has no NVIDIA runtime configured.
@@ -77,10 +83,14 @@ def build_values(*, tenant_id: str, k3s: bool, servicemonitor: bool) -> dict[str
     * ``driver.enabled=false`` — the driver is the node's prerequisite.
     * ``cdi.enabled=true`` — GPUs reach pods through the CDI spec, so Daalu's
       vLLM pod needs only ``nvidia.com/gpu: 1``, no runtime class.
-    * k3s: ``toolkit.enabled=false``. The operator's toolkit rewrites
-      containerd's config with the stock CNI paths, which k3s doesn't use,
-      and the node goes NotReady. The toolkit is installed on the host
-      instead (k3s then registers the ``nvidia`` runtime by itself).
+    * k3s: the toolkit installs its binaries under /usr/local/nvidia/toolkit
+      but writes its containerd snippet to a file k3s never reads. Left to
+      its defaults it writes containerd's config with stock CNI paths, which
+      k3s doesn't use, and the node goes NotReady. It then signals
+      containerd; k3s's embedded containerd exits on that, systemd restarts
+      k3s once (about a minute without the API; running pods keep running),
+      and k3s finds the toolkit's runtime and registers ``nvidia`` itself.
+      Verified on k3s v1.35 / containerd 2.2 with no toolkit on the host.
     * DCGM's ServiceMonitor ships off; AI Factory needs it on, with every
       series labelled ``tenant=<id>`` (its queries are tenant-scoped).
     """
@@ -89,7 +99,14 @@ def build_values(*, tenant_id: str, k3s: bool, servicemonitor: bool) -> dict[str
         "cdi": {"enabled": True},
     }
     if k3s:
-        values["toolkit"] = {"enabled": False}
+        values["toolkit"] = {
+            "enabled": True,
+            "env": [
+                {"name": "CONTAINERD_CONFIG", "value": K3S_TOOLKIT_SCRATCH_CONFIG},
+                {"name": "CONTAINERD_SOCKET", "value": K3S_CONTAINERD_SOCKET},
+                {"name": "RUNTIME_CONFIG_SOURCE", "value": "file"},
+            ],
+        }
     if servicemonitor:
         values["dcgmExporter"] = {
             "serviceMonitor": {
@@ -132,9 +149,10 @@ def summarise(
         phase = "blocked"
         if k3s:
             hint = (
-                "The GPU node has no NVIDIA runtime yet. Install the NVIDIA "
-                "Container Toolkit on the node and restart k3s; the operator "
-                "picks it up by itself."
+                "The GPU node still has no NVIDIA runtime. k3s registers it "
+                "when it restarts; if it wasn't restarted (k3s not run by "
+                "systemd), install the NVIDIA Container Toolkit on the node "
+                "and restart k3s."
             )
             commands = K3S_HOST_TOOLKIT_COMMANDS
         else:

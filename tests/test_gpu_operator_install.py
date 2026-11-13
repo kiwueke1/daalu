@@ -36,10 +36,20 @@ def test_plain_kubeadm_is_not_k3s():
 # ── helm values ────────────────────────────────────────────────────────
 
 
-def test_k3s_keeps_the_operator_toolkit_off():
-    """On k3s the operator's toolkit rewrites containerd's CNI paths → NotReady."""
+def test_k3s_toolkit_never_writes_k3s_containerd_config():
+    """Writing k3s's containerd config with stock CNI paths → node NotReady.
+
+    The toolkit still installs (no host toolkit needed): its snippet goes to a
+    file k3s never reads, and it talks to k3s's containerd socket.
+    """
     v = op.build_values(tenant_id=TENANT, k3s=True, servicemonitor=True)
-    assert v["toolkit"] == {"enabled": False}
+    tk = v["toolkit"]
+    assert tk["enabled"] is True
+    env = {e["name"]: e["value"] for e in tk["env"]}
+    assert env["CONTAINERD_CONFIG"] == op.K3S_TOOLKIT_SCRATCH_CONFIG
+    assert "/var/lib/rancher/k3s" not in env["CONTAINERD_CONFIG"]
+    assert not env["CONTAINERD_CONFIG"].startswith("/etc/containerd/")
+    assert env["CONTAINERD_SOCKET"] == "/run/k3s/containerd/containerd.sock"
     assert v["driver"] == {"enabled": False}
     assert v["cdi"] == {"enabled": True}
 
@@ -93,6 +103,7 @@ def test_missing_nvidia_runtime_on_k3s_gives_the_host_commands():
     )
     assert s["phase"] == "blocked"
     assert "nvidia-container-toolkit" in s["host_commands"]
+    assert "restarts" in s["hint"]
     assert "systemctl restart k3s" in s["host_commands"]
 
 
@@ -130,7 +141,7 @@ async def test_install_runs_helm_against_the_tunnel_kubeconfig():
     assert argv[argv.index("--version") + 1] == "v25.10.1"
     assert argv[argv.index("-n") + 1] == "gpu-operator"
     assert "--wait" not in argv  # the form polls; helm must not hold the request
-    assert seen["values"]["toolkit"] == {"enabled": False}
+    assert seen["values"]["toolkit"]["enabled"] is True
     assert seen["kubeconfig"]["clusters"][0]["cluster"]["server"] == "https://10.200.0.2:6443"
 
 
