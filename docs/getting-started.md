@@ -55,10 +55,13 @@ the same way a cluster in another data center or behind NAT would.
 - **Free ports:** 3000, 8000 (Method 1) or 8080 (Method 2), and UDP 51820 for
   the hub. The demo cluster also publishes 3001, 9090, 9093 and 3100.
 - **A model (optional, recommended).** The AI parts need an LLM. Any of these works:
-  - your own OpenAI-compatible server (vLLM, llama.cpp, Ollama):
+  - a GPU in a cluster you connect: Daalu deploys the model onto it for you and
+    routes to it ([section 4](#4-run-daalus-ai-on-your-own-gpu-optional)). Nothing to
+    set in `.env`, before or after.
+  - a model server you already run yourself (vLLM, llama.cpp, Ollama):
     `LLM_LOCAL_BASE_URL=http://<host>:<port>/v1` and `LLM_LOCAL_MODEL_CLASSIFIER=<model name>`
-  - a GPU in a cluster you connect: Daalu deploys the model onto it for you
-    ([section 4](#4-run-daalus-ai-on-your-own-gpu-optional)), with nothing to set here
+    (the name its `GET /v1/models` reports). Use the host's IP, not `localhost`:
+    Daalu's containers have their own network.
   - a hosted OpenAI-compatible API: `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL`
   - Anthropic: `ANTHROPIC_API_KEY`
 
@@ -106,7 +109,9 @@ when you add a GPU); `docker compose up` refuses to start without it.
 `.test` and `.localhost`. No mail is sent to it.
 
 Add your model settings (see [Prerequisites](#0-prerequisites)) in the LLM
-sections of the same file. Leave everything else at its default: Compose points
+sections of the same file, or leave them empty if you'll add a GPU from the UI
+([section 4](#4-run-daalus-ai-on-your-own-gpu-optional)). To change them later, edit
+`.env` and run `docker compose up -d`: it recreates the containers that read it. Leave everything else at its default: Compose points
 the containers at its own Postgres and Redis, whatever the `localhost` URLs in
 `.env` say.
 
