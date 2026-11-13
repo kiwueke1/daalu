@@ -100,7 +100,10 @@ namespace over the tunnel, with the settings that cluster needs:
 
 The form shows how far along it is ("3 of 8 pods ready"), waits through
 the k3s restart, and moves on to the detected GPU by itself, usually 2–5
-minutes later. A cluster that already runs the operator skips all of this.
+minutes later. Expand **GPU Operator pods** to watch the install live: the
+same rows `kubectl get pods -n gpu-operator` prints on the cluster, red
+while a pod is coming up or stuck and green once it's ready, with each
+pod's logs one click away. A cluster that already runs the operator skips all of this.
 If the GPU node still has no NVIDIA runtime afterwards (for example k3s
 isn't run by systemd, so nothing restarted it), the form says so and shows
 the commands to run on the node.
@@ -171,11 +174,12 @@ Qwen3.6-35B-A3B), then compiling GPU kernels. The weights land in
 `/var/lib/daalu/hf-cache` on the GPU node, so a redeploy skips the download. The **Deploy progress**
 panel on the Local GPU card makes each visible. Expand it to see:
 
-- the pod, its phase, and each container's state — including the *reason*
-  when something is blocked (`ImagePullBackOff`, `CrashLoopBackOff`, …),
+- **Model pods**: the model's namespace as `kubectl get pods` shows it, red
+  until ready and green after, including the *reason* when something is
+  blocked (`ImagePullBackOff`, `CrashLoopBackOff`, …); click the pod for the
+  vLLM logs, which follow the tail,
 - the cluster events that explain a stall (the only signal that exists
   before a container has started),
-- the vLLM logs, streamed in once the server process is up.
 
 The panel polls only while it's open (each poll reaches through the
 tunnel into your cluster). When the stack answers its health check, the
