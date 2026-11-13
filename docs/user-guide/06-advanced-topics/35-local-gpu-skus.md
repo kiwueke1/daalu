@@ -90,13 +90,13 @@ GPU** that advertises no GPU, the form offers **Install GPU Operator**.
 Confirm, and Daalu installs chart v25.10.1 into the `gpu-operator`
 namespace over the tunnel, with the settings that cluster needs:
 
-| Setting | Why |
+| Part | What Daalu sets up |
 |---|---|
-| driver off | The driver is the node's prerequisite. |
-| toolkit on; **on k3s** its containerd snippet goes to a file k3s never reads | Left to its defaults, the toolkit writes containerd's config with standard CNI paths that k3s doesn't use, and the node goes `NotReady`. Redirected, it only installs the NVIDIA runtime under `/usr/local/nvidia/toolkit`. **k3s then restarts once** (about a minute without the cluster API; running pods keep running) and registers that runtime itself. |
-| CDI on | GPUs reach pods through the CDI spec, so Daalu's vLLM pod needs only `nvidia.com/gpu: 1`, no runtime class. |
-| DCGM ServiceMonitor on, if the cluster runs the Prometheus Operator | The operator ships it off, so Prometheus never scrapes GPU metrics and AI Factory stays empty. |
-| `tenant` label on the DCGM series | AI Factory only shows series labelled with your tenant; Daalu fills in your tenant's ID. |
+| **Driver** | Uses the one already on the node. The operator can build and install drivers itself, but only for the distributions and kernels NVIDIA publishes driver images for, so Daalu leaves the driver to whoever owns the node's OS. That's why the driver is the one prerequisite. |
+| **Container Toolkit** | Installed by the operator, as a pod on each GPU node. It puts the NVIDIA runtime under `/usr/local/nvidia/toolkit` and writes the GPU's CDI spec (below). **On k3s** its containerd settings go to a file k3s never reads: left to its defaults it writes containerd's config with standard CNI paths that k3s doesn't use, and the node goes `NotReady`. Instead k3s restarts once (about a minute without the cluster API; running pods keep running) and registers the NVIDIA runtime itself. |
+| **CDI** | The [Container Device Interface](https://github.com/cncf-tags/container-device-interface): a small file on the node (e.g. `/var/run/cdi/nvidia.yaml`) that tells the container runtime which device files and driver libraries make up "GPU 0". containerd 2.x reads it directly, so a pod gets a GPU by asking for `nvidia.com/gpu: 1`, with no special runtime class. Daalu's vLLM pod relies on this. |
+| **GPU metrics** | DCGM's ServiceMonitor is turned on when the cluster runs the Prometheus Operator (the operator ships it off, so Prometheus would never scrape GPU metrics and AI Factory would stay empty). |
+| **Tenant label** | Every GPU metric is labelled with your tenant's ID; AI Factory only shows series carrying it. Daalu fills it in. |
 
 The form shows how far along it is ("3 of 8 pods ready"), waits through
 the k3s restart, and moves on to the detected GPU by itself, usually 2–5
