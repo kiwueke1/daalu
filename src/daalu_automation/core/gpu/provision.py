@@ -116,6 +116,58 @@ def _spec_body(
     }
 
 
+async def gpu_operator_status_via_controller(
+    *, tenant_id: uuid.UUID, target_cluster_tunnel_id: uuid.UUID
+) -> dict[str, Any]:
+    """Is the NVIDIA GPU Operator on this cluster, and how far along?
+
+    Raises :class:`GpuProvisioningError` with the controller's reason, so the
+    form can say why (cluster not connected, controller not configured).
+    """
+    s = get_settings()
+    if not s.gpu_controller_url:
+        raise GpuProvisioningError("gpu_controller_url is not configured on this deploy")
+    base = s.gpu_controller_url.rstrip("/")
+    async with httpx.AsyncClient(
+        timeout=30.0, headers=_controller_headers(tenant_id, ttl_seconds=120)
+    ) as client:
+        r = await client.get(
+            f"{base}/tenants/{tenant_id}/gpu-operator",
+            params={"target_cluster_tunnel_id": str(target_cluster_tunnel_id)},
+        )
+    if r.status_code != 200:
+        raise GpuProvisioningError(_controller_detail(r))
+    return r.json()
+
+
+async def install_gpu_operator_via_controller(
+    *, tenant_id: uuid.UUID, target_cluster_tunnel_id: uuid.UUID
+) -> dict[str, Any]:
+    """Start the operator install on the cluster (returns before it's done)."""
+    s = get_settings()
+    if not s.gpu_controller_url:
+        raise GpuProvisioningError("gpu_controller_url is not configured on this deploy")
+    base = s.gpu_controller_url.rstrip("/")
+    async with httpx.AsyncClient(
+        timeout=60.0, headers=_controller_headers(tenant_id, ttl_seconds=120)
+    ) as client:
+        r = await client.post(
+            f"{base}/tenants/{tenant_id}/gpu-operator",
+            json={"target_cluster_tunnel_id": str(target_cluster_tunnel_id)},
+        )
+    if r.status_code not in (200, 202):
+        raise GpuProvisioningError(_controller_detail(r))
+    return r.json()
+
+
+def _controller_detail(r: httpx.Response) -> str:
+    try:
+        detail = r.json().get("detail")
+    except Exception:  # noqa: BLE001
+        detail = None
+    return str(detail or f"gpu-controller returned HTTP {r.status_code}")
+
+
 async def gpu_progress_via_controller(
     *, tenant_id: uuid.UUID
 ) -> dict[str, Any]:

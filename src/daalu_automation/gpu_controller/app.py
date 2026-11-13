@@ -44,6 +44,7 @@ from daalu_automation.gpu_controller import aiperf as aiperf_build
 from daalu_automation.gpu_controller import diagnostics as diag
 from daalu_automation.gpu_controller import k8s as k8s_helpers
 from daalu_automation.gpu_controller import manifests
+from daalu_automation.gpu_controller import operator as gpu_operator
 from daalu_automation.models.aiperf_run import AiperfRun, AiperfRunState
 from daalu_automation.models.cluster_tunnel import (
     ClusterTunnel,
@@ -92,6 +93,30 @@ class GpuView(BaseModel):
     shared: bool
     last_error: str | None
     last_ready_at: str | None = None
+
+
+class GpuOperatorInstall(BaseModel):
+    target_cluster_tunnel_id: uuid.UUID
+
+
+# Background operator installs, keyed by cluster. In memory on purpose: the
+# cluster itself is the record of what's installed; this only carries a
+# helm error to the form until the next attempt.
+_operator_jobs: dict[uuid.UUID, dict[str, Any]] = {}
+
+
+async def _owned_connected_tunnel(
+    db: AsyncSession, tenant_id: uuid.UUID, tunnel_id: uuid.UUID
+) -> ClusterTunnel:
+    ct = await db.get(ClusterTunnel, tunnel_id)
+    if ct is None or ct.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="cluster not found")
+    if ct.status != ClusterTunnelStatus.connected:
+        raise HTTPException(
+            status_code=409,
+            detail=f"cluster is {ct.status.value}; it must be connected",
+        )
+    return ct
 
 
 def _authenticate(authorization: str | None) -> ServiceTokenClaims:
@@ -223,6 +248,77 @@ def create_app() -> FastAPI:
         async with _ApiClientForTunnel(db, target_cluster_tunnel_id) as api:
             nodes = await k8s_helpers.list_gpu_nodes(api)
         return {"nodes": nodes}
+
+    @app.get("/tenants/{tenant_id}/gpu-operator")
+    async def gpu_operator_status(
+        tenant_id: uuid.UUID,
+        target_cluster_tunnel_id: uuid.UUID,
+        authorization: str | None = Header(default=None),
+        db: AsyncSession = Depends(get_db),
+    ) -> dict[str, Any]:
+        """Is the NVIDIA GPU Operator on this cluster, and how far along?"""
+        claims = _authenticate(authorization)
+        if claims.tenant_id != str(tenant_id):
+            raise HTTPException(status_code=403, detail="tenant_id mismatch")
+        await _owned_connected_tunnel(db, tenant_id, target_cluster_tunnel_id)
+        async with _ApiClientForTunnel(db, target_cluster_tunnel_id) as api:
+            status = await gpu_operator.operator_status(api)
+        job = _operator_jobs.get(target_cluster_tunnel_id)
+        if job and status["phase"] in ("absent", "installing"):
+            if job["state"] == "running":
+                status["phase"] = "installing"
+            elif job["state"] == "error":
+                status["phase"] = "error"
+                status["hint"] = job["error"]
+        return status
+
+    @app.post("/tenants/{tenant_id}/gpu-operator", status_code=202)
+    async def gpu_operator_install(
+        tenant_id: uuid.UUID,
+        body: GpuOperatorInstall,
+        authorization: str | None = Header(default=None),
+        db: AsyncSession = Depends(get_db),
+    ) -> dict[str, Any]:
+        """Install the operator in the background; poll the GET for progress."""
+        claims = _authenticate(authorization)
+        if claims.tenant_id != str(tenant_id):
+            raise HTTPException(status_code=403, detail="tenant_id mismatch")
+        tunnel_id = body.target_cluster_tunnel_id
+        await _owned_connected_tunnel(db, tenant_id, tunnel_id)
+        job = _operator_jobs.get(tunnel_id)
+        if job and job["state"] == "running":
+            return {"state": "running"}
+        async with _ApiClientForTunnel(db, tunnel_id) as api:
+            facts = await gpu_operator.cluster_facts(api)
+        kubeconfig = await _load_customer_kubeconfig(db, tunnel_id)
+        _operator_jobs[tunnel_id] = {"state": "running", "error": None}
+
+        async def _run() -> None:
+            try:
+                ok, err = await gpu_operator.install(
+                    kubeconfig=kubeconfig,
+                    tenant_id=str(tenant_id),
+                    k3s=facts["k3s"],
+                    servicemonitor=facts["servicemonitor"],
+                )
+            except Exception as e:  # noqa: BLE001 — surface, don't crash
+                ok, err = False, str(e)[:1000]
+            _operator_jobs[tunnel_id] = {
+                "state": "done" if ok else "error",
+                "error": None if ok else f"GPU Operator install failed: {err}",
+            }
+            logger.info(
+                "gpu_controller.gpu_operator_install",
+                tenant_id=str(tenant_id),
+                cluster_tunnel_id=str(tunnel_id),
+                ok=ok,
+                k3s=facts["k3s"],
+                servicemonitor=facts["servicemonitor"],
+                error=err[:300] if err else None,
+            )
+
+        asyncio.create_task(_run())
+        return {"state": "running", **facts}
 
     @app.get("/tenants/{tenant_id}/progress")
     async def vllm_progress(

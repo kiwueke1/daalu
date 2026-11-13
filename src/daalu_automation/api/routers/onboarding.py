@@ -1845,6 +1845,71 @@ async def gpu_progress(user: User = Depends(current_admin)):
     return GpuProgressOut(**await gpu_progress_via_controller(tenant_id=user.tenant_id))
 
 
+class GpuOperatorStatusOut(BaseModel):
+    # absent | installing | blocked | error | ready
+    phase: str
+    installed: bool = False
+    gpu_nodes: int = 0
+    distribution: str | None = None
+    pods_total: int = 0
+    pods_ready: int = 0
+    # What's in the way, in a sentence, and (k3s) the host commands that fix it.
+    hint: str | None = None
+    host_commands: str | None = None
+
+
+class GpuOperatorInstallIn(BaseModel):
+    cluster_tunnel_id: uuid.UUID
+
+
+@router.get("/gpu/operator", response_model=GpuOperatorStatusOut)
+async def gpu_operator_status(
+    cluster_tunnel_id: uuid.UUID,
+    user: User = Depends(current_admin),
+):
+    """The NVIDIA GPU Operator on a connected cluster: there, coming up, or stuck.
+
+    Backs the Add GPU form when a cluster advertises no GPU yet.
+    """
+    from daalu_automation.core.gpu.provision import (
+        GpuProvisioningError,
+        gpu_operator_status_via_controller,
+    )
+
+    try:
+        return GpuOperatorStatusOut(
+            **await gpu_operator_status_via_controller(
+                tenant_id=user.tenant_id, target_cluster_tunnel_id=cluster_tunnel_id
+            )
+        )
+    except GpuProvisioningError as e:
+        raise HTTPException(502, str(e)) from e
+
+
+@router.post("/gpu/operator", status_code=202)
+async def install_gpu_operator(
+    body: GpuOperatorInstallIn,
+    user: User = Depends(current_admin),
+):
+    """Install the NVIDIA GPU Operator on a connected cluster. **Async (202).**
+
+    The controller works out the settings (k3s keeps the operator's toolkit
+    off; DCGM metrics carry this tenant's label) and runs the helm install
+    over the tunnel. Poll ``GET /onboarding/gpu/operator`` for progress.
+    """
+    from daalu_automation.core.gpu.provision import (
+        GpuProvisioningError,
+        install_gpu_operator_via_controller,
+    )
+
+    try:
+        return await install_gpu_operator_via_controller(
+            tenant_id=user.tenant_id, target_cluster_tunnel_id=body.cluster_tunnel_id
+        )
+    except GpuProvisioningError as e:
+        raise HTTPException(502, str(e)) from e
+
+
 @router.post("/gpu/provision", response_model=GpuStatusOut, status_code=202)
 async def provision_gpu(
     body: GpuOnboardIn,

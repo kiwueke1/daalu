@@ -25,7 +25,7 @@ import {
   ChevronUp,
   ChevronDown,
 } from "lucide-react";
-import { api, type GpuCluster, type GpuServing } from "@/lib/api";
+import { api, type GpuCluster, type GpuOperatorStatus, type GpuServing } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { ConfirmButton } from "@/components/ui/confirm-button";
 import { Button } from "@/components/ui/button";
@@ -325,13 +325,21 @@ export function GpuOnboardingCard({
             )}
           </label>
 
-          {noGpu && (
-            <div className="flex items-start gap-1.5 text-[11px] text-accent-amber">
-              <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
+          {noGpu && clusterId ? (
+            <GpuOperatorStep
+              clusterId={clusterId}
+              clusterName={
+                clusters.data?.find((c) => c.cluster_tunnel_id === clusterId)?.name ??
+                "this cluster"
+              }
+            />
+          ) : noGpu ? (
+            <div className="flex items-start gap-1.5 text-xs text-[color:var(--warning)]">
+              <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" aria-hidden />
               No GPU node found on this cluster, so there is nowhere to run the
-              model. Pick the cluster your GPU node is in.
+              model. Pick the connected cluster your GPU node is in.
             </div>
-          )}
+          ) : null}
 
           {/* Detected GPU nodes on the selected cluster. */}
           {detected.length > 0 && (
@@ -716,5 +724,131 @@ export function GpuServingPanel({
         ))}
       </dl>
     </section>
+  );
+}
+
+// ── GPU Operator step ──────────────────────────────────────────────────
+
+/**
+ * Shown in the Add GPU form when the picked cluster advertises no GPU.
+ * Kubernetes only sees a GPU once the NVIDIA GPU Operator runs, so Daalu
+ * offers to install it, shows how far along it is, and — when the node has
+ * no NVIDIA runtime, the one thing it can't install from Kubernetes — the
+ * exact commands to run there. When the GPU appears the form carries on.
+ */
+function GpuOperatorStep({
+  clusterId,
+  clusterName,
+}: {
+  clusterId: string;
+  clusterName: string;
+}) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const status = useQuery({
+    queryKey: ["gpu", "operator", clusterId],
+    queryFn: () => api.onboarding.gpu.operator(clusterId),
+    refetchInterval: (q) => {
+      const phase = (q.state.data as GpuOperatorStatus | undefined)?.phase;
+      return phase === "installing" ? 5_000 : phase === "blocked" ? 10_000 : false;
+    },
+  });
+  const install = useMutation({
+    mutationFn: () => api.onboarding.gpu.installOperator(clusterId),
+    onSuccess: () => {
+      toast.success("Installing the NVIDIA GPU Operator. The GPU appears here when it's ready.");
+      qc.invalidateQueries({ queryKey: ["gpu", "operator", clusterId] });
+    },
+    onError: (e: unknown) => toast.error(errorText(e)),
+  });
+
+  const phase = status.data?.phase;
+  // The GPU is advertised: refresh discovery so the form moves on.
+  useEffect(() => {
+    if (phase === "ready") qc.invalidateQueries({ queryKey: ["gpu", "nodes", clusterId] });
+  }, [phase, clusterId, qc]);
+
+  if (status.isLoading) {
+    return (
+      <div role="status" className="flex items-center gap-1.5 text-xs text-muted">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+        Checking {clusterName} for the NVIDIA GPU Operator…
+      </div>
+    );
+  }
+  if (status.isError) {
+    return (
+      <div role="alert" className="flex items-start gap-1.5 text-xs text-[color:var(--critical)]">
+        <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" aria-hidden />
+        {errorText(status.error)}
+      </div>
+    );
+  }
+  const s = status.data;
+  if (!s || phase === "ready") return null;
+  const k3s = s.distribution === "k3s";
+
+  return (
+    <div className="rounded-md border border-line bg-bg-elevated/40 p-3 space-y-2 text-xs motion-enter">
+      {(phase === "absent" || phase === "error") && (
+        <>
+          <p>
+            <span className="font-semibold">No GPU on {clusterName} yet.</span> Kubernetes
+            only sees a GPU once the NVIDIA GPU Operator runs. Daalu can install it for you
+            (chart v25.10.1, namespace <span className="font-mono">gpu-operator</span>), using
+            the NVIDIA driver already on the node
+            {k3s ? "; on k3s it also needs the NVIDIA Container Toolkit on the node" : ""}.
+          </p>
+          {phase === "error" && s.hint && (
+            <p role="alert" className="text-[color:var(--critical)] break-words">
+              {s.hint}
+            </p>
+          )}
+          <ConfirmButton
+            label={phase === "error" ? "Try the install again" : "Install GPU Operator"}
+            confirmLabel="Install GPU Operator"
+            consequence={`Installs the NVIDIA GPU Operator on ${clusterName}. Takes 2–5 minutes; the GPU appears in this form when it's ready.`}
+            onConfirm={() => install.mutate()}
+            pending={install.isPending}
+            icon={<Cpu className="h-3.5 w-3.5" aria-hidden />}
+          />
+        </>
+      )}
+
+      {phase === "installing" && (
+        <div role="status" className="flex items-start gap-1.5">
+          <Loader2 className="h-3.5 w-3.5 mt-0.5 shrink-0 animate-spin" aria-hidden />
+          <span>
+            Installing the NVIDIA GPU Operator on {clusterName}
+            {s.pods_total > 0 ? ` (${s.pods_ready} of ${s.pods_total} pods ready)` : ""}. The
+            GPU appears here when Kubernetes advertises it, usually in 2–5 minutes.
+          </span>
+        </div>
+      )}
+
+      {phase === "blocked" && (
+        <>
+          <p className="flex items-start gap-1.5 text-[color:var(--warning)]">
+            <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" aria-hidden />
+            <span>
+              <span className="font-semibold">You:</span> {s.hint}
+            </span>
+          </p>
+          {s.host_commands && (
+            <details>
+              <summary className="cursor-pointer text-muted">
+                Show the commands to run on the GPU node
+              </summary>
+              <pre className="mt-2 overflow-x-auto rounded border border-line bg-bg-base p-2 font-mono text-xs">
+                {s.host_commands}
+              </pre>
+            </details>
+          )}
+          <p className="text-muted">
+            Daalu keeps checking; this form carries on once the GPU appears.
+          </p>
+        </>
+      )}
+    </div>
   );
 }

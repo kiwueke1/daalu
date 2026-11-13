@@ -243,6 +243,21 @@ export interface GpuServing {
   online_since?: string | null;
 }
 
+/** The NVIDIA GPU Operator on a connected cluster (GET /onboarding/gpu/operator). */
+export interface GpuOperatorStatus {
+  /** absent | installing | blocked | error | ready */
+  phase: "absent" | "installing" | "blocked" | "error" | "ready";
+  installed: boolean;
+  gpu_nodes: number;
+  distribution?: string | null;
+  pods_total: number;
+  pods_ready: number;
+  /** What's in the way, in a sentence. */
+  hint?: string | null;
+  /** k3s: the commands that put the NVIDIA runtime on the node. */
+  host_commands?: string | null;
+}
+
 export interface GpuNode {
   name: string;
   gpu_class?: string | null;
@@ -684,6 +699,17 @@ export const api = {
         request<GpuNode[]>(
           `/onboarding/gpu/nodes${clusterTunnelId ? `?cluster_tunnel_id=${clusterTunnelId}` : ""}`,
         ),
+      // The NVIDIA GPU Operator on a cluster that advertises no GPU yet.
+      operator: (clusterTunnelId: string) =>
+        request<GpuOperatorStatus>(
+          `/onboarding/gpu/operator?cluster_tunnel_id=${clusterTunnelId}`,
+        ),
+      // 202: the install runs in the background; poll operator().
+      installOperator: (clusterTunnelId: string) =>
+        request<{ state: string }>("/onboarding/gpu/operator", {
+          method: "POST",
+          body: JSON.stringify({ cluster_tunnel_id: clusterTunnelId }),
+        }),
       // Pod phase + kubelet events + vLLM logs for an in-flight deploy.
       progress: () => request<GpuProgress>("/onboarding/gpu/progress"),
       // What is deployed on the card, as the controller renders it.

@@ -411,15 +411,14 @@ of on a hosted model: it deploys an open model (Qwen3.6-35B-A3B on a 48 GB card,
 Llama 3.1 8B on a 16 GB one) with vLLM, downloads the weights, and routes its own
 requests to it over the tunnel. Prompts and logs stay on your hardware.
 
-1. **The cluster needs the NVIDIA GPU Operator.** If
-   `kubectl get nodes -o jsonpath='{.items[*].status.allocatable.nvidia\.com/gpu}'`
-   prints nothing, install it with
-   [Installing the NVIDIA GPU Operator](user-guide/06-advanced-topics/35-local-gpu-skus.md#installing-the-nvidia-gpu-operator)
-   (it covers k3s's extra settings and the GPU metrics AI Factory shows).
-2. **AI Factory → Add GPU**: pick the cluster, click the detected GPU node, keep the
-   suggested model, **Deploy & connect**. Expand **Deploy progress** to watch the image
-   pull, the weight download and the first start; the card turns **Online** when the
-   model answers.
+1. **The GPU node needs the NVIDIA driver** (`nvidia-smi` lists the card), and on k3s
+   also the NVIDIA Container Toolkit plus a k3s restart:
+   [prerequisites in chapter 35](user-guide/06-advanced-topics/35-local-gpu-skus.md#prerequisites).
+2. **AI Factory → Add GPU**: pick the cluster. If it has no NVIDIA GPU Operator yet, the
+   form offers **Install GPU Operator** and installs it for you (2–5 minutes). Then click
+   the detected GPU node, keep the suggested model, **Deploy & connect**. Expand
+   **Deploy progress** to watch the image pull, the weight download and the first start;
+   the card turns **Online** when the model answers.
 
 The full walkthrough, with what to expect at each step and troubleshooting, is
 [chapter 35](user-guide/06-advanced-topics/35-local-gpu-skus.md) of the User Guide.

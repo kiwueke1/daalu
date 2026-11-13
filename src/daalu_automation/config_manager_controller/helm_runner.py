@@ -59,11 +59,14 @@ class HelmRunner:
         runner: CommandRunner | None = None,
         helm_bin: str = "helm",
         timeout: str = "15m",
+        extra_args: list[str] | None = None,
     ) -> None:
         self._chart_path = chart_path
         self._runner = runner or _default_runner
         self._helm = helm_bin
         self._timeout = timeout
+        # e.g. ["--repo", URL, "--version", V] for a chart fetched by name.
+        self._extra_args = list(extra_args or [])
 
     async def upgrade_install(
         self,
@@ -80,6 +83,7 @@ class HelmRunner:
                 self._helm, "upgrade", "--install", release, self._chart_path,
                 "-n", namespace, "--create-namespace",
                 "-f", values_path, "--timeout", self._timeout,
+                *self._extra_args,
             ]
             if wait:
                 argv.append("--wait")
