@@ -167,6 +167,18 @@ executor:
     requests: { cpu: 100m, memory: 256Mi }
     limits:   { cpu: 1, memory: 768Mi }
 
+# ── GPU controller (AI Factory → Add GPU) ─────────────────────────────────
+# Deploys vLLM onto a connected cluster's GPU over the tunnel. Needs
+# SERVICE_TOKEN_SECRET_KEY in the app Secret. Always one replica.
+# nodeSelector: it dials 10.200.0.0/16 through the hub node's wg0, so on a
+# multi-node cluster pin it next to the hub like the other backend pods.
+gpuController:
+  enabled: true
+  nodeSelector: {}
+  resources:
+    requests: { cpu: 50m, memory: 192Mi }
+    limits:   { cpu: 500m, memory: 512Mi }
+
 # ── Frontend ──────────────────────────────────────────────────────────────
 frontend:
   replicas: 2

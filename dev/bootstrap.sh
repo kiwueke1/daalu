@@ -87,6 +87,8 @@ fi
 # Keep an existing SECRET_KEY across re-runs: it encrypts stored credentials.
 EXISTING_SECRET_KEY="$(kubectl -n "$NAMESPACE" get secret daalu-automation-secrets \
   -o jsonpath='{.data.SECRET_KEY}' 2>/dev/null | base64 -d 2>/dev/null || true)"
+EXISTING_SVC_KEY="$(kubectl -n "$NAMESPACE" get secret daalu-automation-secrets \
+  -o jsonpath='{.data.SERVICE_TOKEN_SECRET_KEY}' 2>/dev/null | base64 -d 2>/dev/null || true)"
 grep -q '^DATABASE_URL=' "$TMP_ENV" || cat >> "$TMP_ENV" <<'EOF'
 DATABASE_URL=postgresql+asyncpg://daalu:daalu_password@daalu-postgres:5432/daalu_automation
 DATABASE_SYNC_URL=postgresql://daalu:daalu_password@daalu-postgres:5432/daalu_automation
@@ -94,9 +96,11 @@ REDIS_URL=redis://daalu-redis:6379/0
 CELERY_BROKER_URL=redis://daalu-redis:6379/0
 CELERY_RESULT_BACKEND=redis://daalu-redis:6379/1
 EOF
-sed -i '/^SECRET_KEY=/d' "$TMP_ENV"
+SVC_KEY="$(sed -n 's/^SERVICE_TOKEN_SECRET_KEY=//p' "$TMP_ENV" | tail -1)"
+sed -i '/^SECRET_KEY=/d; /^SERVICE_TOKEN_SECRET_KEY=/d' "$TMP_ENV"
 cat >> "$TMP_ENV" <<EOF
 SECRET_KEY=${EXISTING_SECRET_KEY:-$(openssl rand -hex 32)}
+SERVICE_TOKEN_SECRET_KEY=${SVC_KEY:-${EXISTING_SVC_KEY:-$(openssl rand -hex 32)}}
 AUTH_COOKIE_SECURE=false
 WIREGUARD_PUBLIC_ENDPOINT=${DAALU_HOST_IP}
 OPERATOR_API_PUBLIC_URL=http://${DAALU_HOST_IP}:${HTTP_PORT}

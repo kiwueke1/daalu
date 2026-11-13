@@ -55,6 +55,9 @@ app.kubernetes.io/part-of: daalu-automation
 # disables the /api/v1/ide/* routes.
 - name: WORKSPACE_CONTROLLER_URL
   value: {{ .Values.config.workspaceControllerUrl | default "" | quote }}
+# GPU controller (AI Factory → Add GPU). Empty disables the deploy path.
+- name: GPU_CONTROLLER_URL
+  value: {{ if .Values.gpuController.enabled }}{{ printf "http://daalu-gpu-controller.%s.svc.cluster.local:8084" .Release.Namespace | quote }}{{ else }}""{{ end }}
 # Coding models offered in the Create-Workspace UI (JSON list of catalog
 # ids) + the default. Govern which vLLM-backed models are selectable.
 - name: CODING_MODELS_ENABLED

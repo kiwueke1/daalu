@@ -56,7 +56,9 @@ cluster-level setup:
    **NVIDIA GPU Operator** (the standard way to expose NVIDIA GPUs to
    Kubernetes — it installs the device plugin, GPU discovery, and the
    DCGM telemetry exporter). Your platform team likely has this already
-   if the cluster runs any GPU workload.
+   if the cluster runs any GPU workload; if not,
+   [Installing the NVIDIA GPU Operator](#installing-the-nvidia-gpu-operator)
+   below has the commands, including the settings k3s needs.
 2. **The cluster is connected to Daalu** via `daalu-edge` (chapter 34).
    The install snippet the cluster-onboarding wizard generates already
    includes everything the GPU path needs — the inference and telemetry
@@ -74,6 +76,80 @@ That's it. In particular, you do **not** need to:
 - mint credentials or assemble a kubeconfig — the edge self-registers,
   and a rebuilt cluster replaces its own stale credential automatically;
 - run any follow-up `helm upgrade` — the initial install is complete.
+
+> **Running Daalu yourself?** The deploy is done by Daalu's **GPU
+> controller** service. Both install methods in
+> [Getting started](../../getting-started.md) include it; it needs
+> `SERVICE_TOKEN_SECRET_KEY` set in your `.env` (the guide's first step).
+
+---
+
+## Installing the NVIDIA GPU Operator
+
+Skip this if `kubectl get nodes -o jsonpath='{.items[*].status.allocatable.nvidia\.com/gpu}'`
+already prints a GPU count. Otherwise, on a cluster whose GPU node has the
+NVIDIA driver installed on the host (`nvidia-smi` lists the card there):
+
+### 1. On the GPU node: the NVIDIA Container Toolkit
+
+```bash
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
+  | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
+  | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' \
+  | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit
+ls /var/run/cdi/nvidia.yaml        # the GPU's CDI spec, regenerated on every boot
+```
+
+The toolkit's `nvidia-cdi-refresh` service writes that CDI spec, which is
+how containerd hands the GPU to a pod.
+
+**On k3s, restart k3s now** so it finds the NVIDIA runtime the toolkit
+installed, and check it did:
+
+```bash
+sudo systemctl restart k3s          # running pods keep running
+sudo grep -A3 "runtimes.'nvidia'" /var/lib/rancher/k3s/agent/etc/containerd/config.toml
+#   BinaryName = "/usr/bin/nvidia-container-runtime"
+```
+
+### 2. The operator
+
+```bash
+helm repo add nvidia https://helm.ngc.nvidia.com/nvidia && helm repo update
+helm upgrade --install gpu-operator nvidia/gpu-operator --version v25.10.1 \
+  -n gpu-operator --create-namespace \
+  --set driver.enabled=false \
+  --set toolkit.enabled=false \
+  --set cdi.enabled=true \
+  --set dcgmExporter.serviceMonitor.enabled=true \
+  --set dcgmExporter.serviceMonitor.interval=15s \
+  --set-json 'dcgmExporter.serviceMonitor.relabelings=[{"action":"replace","targetLabel":"tenant","replacement":"00000000-0000-0000-0000-000000000010"}]'
+```
+
+What each setting is for:
+
+| Setting | Why |
+|---|---|
+| `driver.enabled=false` | The driver is already on the host. |
+| `toolkit.enabled=false` | You installed the toolkit on the host in step 1. **On k3s this is required:** the operator's own toolkit rewrites containerd's config with standard CNI paths that k3s doesn't use, and the node goes `NotReady`. |
+| `cdi.enabled=true` | GPUs are handed to pods through the CDI spec, so a pod only needs `nvidia.com/gpu: 1`, not a runtime class. Daalu's vLLM pod relies on this. |
+| `dcgmExporter.serviceMonitor.*` | The operator ships DCGM's ServiceMonitor **off**, so Prometheus never scrapes GPU metrics and AI Factory stays empty. Needs a Prometheus Operator in the cluster (kube-prometheus-stack). |
+| `relabelings` → `tenant` | AI Factory only shows series labelled with your tenant. `00000000-…-000000000010` is the default tenant every new Daalu install creates; use your tenant's ID if you sign in to a different one. |
+
+### 3. Check it
+
+```bash
+kubectl -n gpu-operator get pods      # all Running; nvidia-cuda-validator Completed
+kubectl get node <gpu-node> --show-labels | tr ',' '\n' | grep -E 'nvidia.com/gpu\.(memory|product)'
+#   nvidia.com/gpu.memory=49140      ← Daalu derives the GPU class from this (1–2 min after install)
+kubectl run gputest --rm -i --restart=Never --image=nvidia/cuda:12.6.3-base-ubuntu24.04 \
+  --overrides='{"spec":{"containers":[{"name":"gputest","image":"nvidia/cuda:12.6.3-base-ubuntu24.04","command":["nvidia-smi","-L"],"resources":{"limits":{"nvidia.com/gpu":"1"}}}]}}'
+#   GPU 0: NVIDIA RTX 6000 Ada Generation (UUID: …)
+```
+
+If the test pod prints the card, the cluster is ready for **Add GPU**.
 
 ---
 
@@ -106,8 +182,10 @@ leave the page; the status keeps updating.
 ### Watching it come up — the Deploy progress panel
 
 A first vLLM boot is three sequential multi-minute waits that look
-identical from the outside: pulling a ~10 GB serving image, pulling ~5 GB
-of model weights, then compiling GPU kernels. The **Deploy progress**
+identical from the outside: pulling a ~10 GB serving image, downloading the
+model weights from Hugging Face (~5 GB for Llama 3.1 8B, ~35 GB for
+Qwen3.6-35B-A3B), then compiling GPU kernels. The weights land in
+`/var/lib/daalu/hf-cache` on the GPU node, so a redeploy skips the download. The **Deploy progress**
 panel on the Local GPU card makes each visible. Expand it to see:
 
 - the pod, its phase, and each container's state — including the *reason*

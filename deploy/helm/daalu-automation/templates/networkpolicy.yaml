@@ -84,6 +84,7 @@ spec:
         # Lifecycle controllers reconcile *_tenants from the same DB.
         - podSelector: { matchLabels: { app: nautobot-controller } }
         - podSelector: { matchLabels: { app: config-manager-controller } }
+        - podSelector: { matchLabels: { app: daalu-gpu-controller } }
       ports:
         - protocol: TCP
           port: 5432

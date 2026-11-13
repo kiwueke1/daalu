@@ -1,0 +1,87 @@
+{{- if .Values.gpuController.enabled }}
+# ── GPU controller ───────────────────────────────────────────────────
+# AI Factory → Add GPU: daalu-api records the request and calls this
+# service (GPU_CONTROLLER_URL), which deploys the vLLM serving stack onto
+# the connected cluster's GPU over the WireGuard tunnel and reconciles it
+# every 30 s. It uses the cluster credential the edge registered, so it
+# needs no Kubernetes RBAC of its own here.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: daalu-gpu-controller
+  labels:
+    {{- include "daalu.labels" . | nindent 4 }}
+    app: daalu-gpu-controller
+spec:
+  # One reconciler: two would race on the same gpu_tenants rows.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: daalu-gpu-controller
+  template:
+    metadata:
+      labels:
+        app: daalu-gpu-controller
+        {{- include "daalu.labels" . | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecret }}
+      securityContext:
+        {{- include "daalu.podSecurityContext" . | nindent 8 }}
+      {{- with .Values.gpuController.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: controller
+          image: {{ include "daalu.backendImage" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["daalu", "gpu-controller", "--port", "8084"]
+          ports:
+            - name: http
+              containerPort: 8084
+          envFrom:
+            {{- include "daalu.envFrom" . | nindent 12 }}
+          env:
+            {{- include "daalu.commonEnv" . | nindent 12 }}
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.gpuController.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: daalu-gpu-controller
+  labels:
+    {{- include "daalu.labels" . | nindent 4 }}
+    app: daalu-gpu-controller
+spec:
+  selector:
+    app: daalu-gpu-controller
+  ports:
+    - name: http
+      port: 8084
+      targetPort: http
+{{- if .Values.networkPolicies.enabled }}
+---
+# Only daalu-api calls the controller.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: daalu-gpu-controller-ingress
+  labels: {{- include "daalu.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: { app: daalu-gpu-controller }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: daalu-api } }
+      ports:
+        - protocol: TCP
+          port: 8084
+{{- end }}
+{{- end }}

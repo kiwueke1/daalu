@@ -47,6 +47,11 @@ x-backend-env: &backend-env
   # cluster onboarding disabled (the UI explains what to set).
   WIREGUARD_PUBLIC_ENDPOINT: ${DAALU_HOST_IP:-}
   OPERATOR_API_PUBLIC_URL: ${DAALU_HOST_IP:+http://${DAALU_HOST_IP}:8000}
+  # AI Factory → Add GPU: the API hands the deploy to the gpu-controller
+  # service, which shares its network namespace (so localhost) and signs
+  # the hand-off with this key.
+  GPU_CONTROLLER_URL: http://127.0.0.1:8084
+  SERVICE_TOKEN_SECRET_KEY: ${SERVICE_TOKEN_SECRET_KEY:?set SERVICE_TOKEN_SECRET_KEY in .env (openssl rand -hex 32)}
 
 services:
   postgres:
@@ -190,6 +195,19 @@ services:
     environment:
       <<: *backend-env
       EXECUTOR_JWT_SCOPE: executor
+    depends_on:
+      <<: *backend-deps
+      net:
+        condition: service_started
+
+  # Deploys and runs the vLLM serving stack on a connected cluster's GPU
+  # (AI Factory → Add GPU). It reaches that cluster's Kubernetes API over
+  # the tunnel, so it joins the shared network namespace.
+  gpu-controller:
+    <<: *backend
+    command: ["daalu", "gpu-controller", "--host", "127.0.0.1", "--port", "8084"]
+    network_mode: service:net
+    environment: *backend-env
     depends_on:
       <<: *backend-deps
       net:

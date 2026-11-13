@@ -57,6 +57,8 @@ the same way a cluster in another data center or behind NAT would.
 - **A model (optional, recommended).** The AI parts need an LLM. Any of these works:
   - your own OpenAI-compatible server (vLLM, llama.cpp, Ollama):
     `LLM_LOCAL_BASE_URL=http://<host>:<port>/v1` and `LLM_LOCAL_MODEL_CLASSIFIER=<model name>`
+  - a GPU in a cluster you connect: Daalu deploys the model onto it for you
+    ([section 4](#4-run-daalus-ai-on-your-own-gpu-optional)), with nothing to set here
   - a hosted OpenAI-compatible API: `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL`
   - Anthropic: `ANTHROPIC_API_KEY`
 
@@ -78,6 +80,9 @@ You'll need it in both methods:
 hostname -I | awk '{print $1}'      # e.g. 192.168.0.77
 ```
 
+On a machine with several addresses, the first one isn't always right: use the one
+the managed cluster's nodes reach this machine on (`ping` it from a node).
+
 ---
 
 ## 1. Method 1: Docker Compose (quick start)
@@ -91,7 +96,14 @@ ADMIN_EMAIL=you@example.com
 ADMIN_PASSWORD=<choose a password>
 DAALU_HOST_IP=192.168.0.77          # from `hostname -I`
 SECRET_KEY=<output of: openssl rand -hex 32>
+SERVICE_TOKEN_SECRET_KEY=<another: openssl rand -hex 32>
 ```
+
+`SERVICE_TOKEN_SECRET_KEY` signs calls between Daalu's own services (for example
+when you add a GPU); `docker compose up` refuses to start without it.
+
+`ADMIN_EMAIL` needs an ordinary domain: login rejects reserved ones such as `.local`,
+`.test` and `.localhost`. No mail is sent to it.
 
 Add your model settings (see [Prerequisites](#0-prerequisites)) in the LLM
 sections of the same file. Leave everything else at its default: Compose points
@@ -133,12 +145,13 @@ The API is on **http://localhost:8000** (interactive docs at `/docs`).
 | `beat` | Celery scheduler (briefings, polling cadence) |
 | `agents` | Agent host: listens to the event stream and runs alert triage |
 | `executor` | Runs approved change proposals |
+| `gpu-controller` | Deploys and runs the model on a connected cluster's GPU (AI Factory → Add GPU) |
 | `wg-hub` | WireGuard hub on UDP :51820 that managed clusters dial |
 | `net` | Holds the shared network namespace (like a pod's pause container); the API's port 8000 is published here |
 | `postgres`, `redis` | State and queues (data persists in the `pgdata` volume) |
 | `migrate` | One-shot: schema, default tenant, admin login. Runs on every `up` |
 
-The WireGuard hub, API, worker, agent host and executor share one network
+The WireGuard hub, API, worker, agent host, executor and GPU controller share one network
 namespace, owned by the small `net` container, so they reach managed clusters
 on their tunnel addresses (`10.200.0.0/16`) directly. That's also why the
 API's port is published on the `net` service.
@@ -194,7 +207,8 @@ Then open **http://localhost:8080** and sign in. Check the pods:
 ```bash
 kubectl -n daalu-automation get pods
 # daalu-api, daalu-worker, daalu-beat, daalu-agents, daalu-executor,
-# daalu-frontend, daalu-postgres, daalu-redis, daalu-wireguard-hub
+# daalu-frontend, daalu-gpu-controller, daalu-postgres, daalu-redis,
+# daalu-wireguard-hub
 ```
 
 Port 8080 taken? `DAALU_HTTP_PORT=18080 make bootstrap-dev`. Re-running
@@ -224,8 +238,8 @@ the Daalu cluster itself. Remove everything with `make down`.
    kubectl label node <node> daalu.io/wireguard-hub=true
    ```
 
-3. **Create the app Secret** from a production `.env` (real `SECRET_KEY`, your
-   model keys, and the hub endpoint):
+3. **Create the app Secret** from a production `.env` (real `SECRET_KEY` and
+   `SERVICE_TOKEN_SECRET_KEY`, your model keys, and the hub endpoint):
 
    ```bash
    # in .env:
@@ -342,9 +356,36 @@ same onboarding API the UI uses, runs the `helm install daalu-edge` command it
 returns, waits for the tunnel, and registers the Prometheus, Loki and Kubernetes
 integrations.
 
+### Option C: a cluster you already have
+
+Any Kubernetes cluster that can reach `DAALU_HOST_IP` on UDP 51820 works, including
+one on the same machine as Daalu (k3s, kind, …). It needs no inbound ports.
+
+1. In Daalu, open **Managed infra → Clusters & observability → Onboard cluster**,
+   enter a slug (e.g. `lab`) and a display name, and submit. Copy the
+   `helm install daalu-edge …` command it shows: its bootstrap token is shown once.
+2. Run it against your cluster. Installing the edge in its own namespace keeps it
+   apart from your workloads (and lets fault-injection tools protect it):
+
+   ```bash
+   kubectl create namespace daalu-edge
+   # paste the command, adding -n daalu-edge after `helm install daalu-edge`
+   ```
+
+3. Within about 30 seconds the cluster shows **Connected**. The edge registers the
+   cluster's Kubernetes API with Daalu by itself.
+4. Connect the cluster's Prometheus: in **Observability → Prometheus / Alertmanager →
+   Connect**, tick **Reachable via federation tunnel**, pick the cluster, and enter its
+   in-cluster URL, for example
+   `http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090` for a
+   kube-prometheus-stack release of that name in `monitoring`
+   (`kubectl get svc -A | grep prometheus` shows yours), then **Test** and **Save**.
+   Prometheus alerting rules you add to the cluster now reach Daalu as alerts. Loki,
+   if you run it, connects the same way.
+
 ### Check the tunnel
 
-- In the UI: **Managed infra → Clusters & observability** lists `daalu-demo` as Connected.
+- In the UI: **Managed infra → Clusters & observability** lists the cluster as Connected.
 - From Daalu's side:
 
   ```bash
@@ -358,7 +399,31 @@ integrations.
 
 ---
 
-## 4. Watch the agent find and fix a problem
+## 4. Run Daalu's AI on your own GPU (optional)
+
+If the cluster you connected has an NVIDIA GPU, Daalu can run its AI there instead
+of on a hosted model: it deploys an open model (Qwen3.6-35B-A3B on a 48 GB card,
+Llama 3.1 8B on a 16 GB one) with vLLM, downloads the weights, and routes its own
+requests to it over the tunnel. Prompts and logs stay on your hardware.
+
+1. **The cluster needs the NVIDIA GPU Operator.** If
+   `kubectl get nodes -o jsonpath='{.items[*].status.allocatable.nvidia\.com/gpu}'`
+   prints nothing, install it with
+   [Installing the NVIDIA GPU Operator](user-guide/06-advanced-topics/35-local-gpu-skus.md#installing-the-nvidia-gpu-operator)
+   (it covers k3s's extra settings and the GPU metrics AI Factory shows).
+2. **AI Factory → Add GPU**: pick the cluster, click the detected GPU node, keep the
+   suggested model, **Deploy & connect**. Expand **Deploy progress** to watch the image
+   pull, the weight download and the first start; the card turns **Online** when the
+   model answers.
+
+The full walkthrough, with what to expect at each step and troubleshooting, is
+[chapter 35](user-guide/06-advanced-topics/35-local-gpu-skus.md) of the User Guide.
+
+---
+
+## 5. Watch the agent find and fix a problem
+
+With the demo cluster from Option A or B:
 
 ```bash
 ./demo/break.sh            # bad-image (default) | crashloop | errors
@@ -376,7 +441,7 @@ To fix it by hand instead: `kubectl --context kind-daalu-demo -n daalu-demo roll
 
 ---
 
-## 5. Tear down
+## 6. Tear down
 
 ```bash
 DAALU_TOKEN=dpat_... ./demo/down.sh   # delete the demo cluster and detach it from Daalu
