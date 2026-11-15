@@ -31,6 +31,7 @@ import {
   type AiFactoryMetric,
   type AiFactoryRange,
   type AiFactoryRole,
+  type GpuServing,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { cn, formatRelative } from "@/lib/utils";
@@ -103,6 +104,26 @@ export default function AiFactoryPage() {
   const gpus = summary.data?.gpus ?? [];
   const consumer = summary.data?.consumer ?? null;
   const worstHealth = worstOf(gpus);
+
+  // The deployed GPU itself (from the GPU record, not Prometheus). Metrics and
+  // deployment are independent: a serving GPU whose cluster Prometheus isn't
+  // connected yet must still show up and open, or the page reads as "no GPU".
+  const serving = useQuery({
+    queryKey: ["gpu", "serving"],
+    queryFn: api.onboarding.gpu.serving,
+    enabled: isHardware,
+    refetchInterval: 30_000,
+  });
+  const deployed = serving.data ?? null;
+
+  // A card opened before its metrics arrived switches to the full metric
+  // view as soon as that node starts reporting.
+  useEffect(() => {
+    if (!selectedGpu?.startsWith(NODE_KEY)) return;
+    const node = selectedGpu.slice(NODE_KEY.length);
+    const match = summary.data?.gpus?.find((g) => g.hostname === node);
+    if (match) setSelectedGpu(match.id);
+  }, [summary.data, selectedGpu]);
 
   return (
     <div className="space-y-8 max-w-[1200px]">
@@ -189,7 +210,7 @@ export default function AiFactoryPage() {
       )}
 
       {/* ── metrics not available ──────────────────────────────────── */}
-      {role !== "none" && !metricsAvailable && overview.isSuccess && (
+      {!isHardware && role !== "none" && !metricsAvailable && overview.isSuccess && (
         <section className="rounded-xl border border-line bg-bg-elevated/40 p-8 text-center">
           <Activity className="h-8 w-8 mx-auto text-muted" />
           <div className="text-sm font-medium mt-3">
@@ -222,15 +243,29 @@ export default function AiFactoryPage() {
           on their own pages from the tiles — results never clutter the
           overview, and one card's noise (e.g. GpuUnderUtilised) stays under
           that card. */}
-      {isHardware && metricsAvailable && selectedGpu == null && (
+      {isHardware && selectedGpu == null && (
         <>
-          {showPanel("metrics") && (
-            <GpuList
-              gpus={gpus}
-              query={summary}
-              onSelect={setSelectedGpu}
-            />
-          )}
+          {showPanel("metrics") &&
+            (metricsAvailable ? (
+              <GpuList
+                gpus={gpus}
+                query={summary}
+                deployed={deployed}
+                onSelect={setSelectedGpu}
+              />
+            ) : (
+              <LoadState query={serving} loadingText="Loading your GPUs…">
+                {deployed ? (
+                  <DeployedGpuList
+                    deployed={deployed}
+                    metrics="not_connected"
+                    onSelect={setSelectedGpu}
+                  />
+                ) : (
+                  <NoDeployedGpu />
+                )}
+              </LoadState>
+            ))}
           <FactoryOps
             isAdmin={isAdmin}
             isSuperuser={isSuperuser}
@@ -239,7 +274,18 @@ export default function AiFactoryPage() {
           {role === "provider" && showPanel("consumers") && <ConsumersNote />}
         </>
       )}
-      {isHardware && metricsAvailable && selectedGpu != null && (
+      {isHardware && selectedGpu?.startsWith(NODE_KEY) && (
+        <DeployedGpuDetail
+          deployed={deployed}
+          metrics={metricsAvailable ? "waiting" : "not_connected"}
+          onBack={() => setSelectedGpu(null)}
+          canManage={isAdmin}
+        />
+      )}
+      {isHardware &&
+        metricsAvailable &&
+        selectedGpu != null &&
+        !selectedGpu.startsWith(NODE_KEY) && (
         <GpuDetail
           gpu={gpus.find((g) => g.id === selectedGpu) ?? null}
           gpuId={selectedGpu}
@@ -451,9 +497,11 @@ function useSlow(active: boolean, ms = 10_000): boolean {
 function GpuList({
   gpus,
   query,
+  deployed,
   onSelect,
 }: {
   gpus: AiFactoryGpu[];
+  deployed: GpuServing | null;
   query: {
     isLoading: boolean;
     isError: boolean;
@@ -509,6 +557,11 @@ function GpuList({
           </div>
         )}
       </section>
+    );
+  }
+  if (gpus.length === 0 && deployed) {
+    return (
+      <DeployedGpuList deployed={deployed} metrics="waiting" onSelect={onSelect} />
     );
   }
   if (gpus.length === 0) {
@@ -576,6 +629,163 @@ function GpuList({
           </button>
         ))}
       </div>
+    </section>
+  );
+}
+
+// ── Deployed GPU without metrics ────────────────────────────────────────
+// Selection key for a card known from the GPU record but not (yet) reporting
+// DCGM metrics. Real cards key on their DCGM UUID, which never has this prefix.
+const NODE_KEY = "node:";
+
+type MetricsGap = "not_connected" | "waiting";
+
+function servingWord(d: GpuServing): { word: string; color: string } {
+  if (d.state === "active" && d.healthy) return { word: "Serving", color: "var(--accent)" };
+  if (d.state === "active") return { word: "Not responding", color: "var(--warning)" };
+  if (d.state === "error") return { word: "Error", color: "var(--critical)" };
+  if (d.state === "deleting") return { word: "Disconnecting", color: "var(--warning)" };
+  return { word: "Deploying", color: "var(--info)" };
+}
+
+function ServingDot({ deployed }: { deployed: GpuServing }) {
+  const { word, color } = servingWord(deployed);
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs text-muted whitespace-nowrap">
+      <span
+        aria-hidden
+        className="inline-block h-2 w-2 rounded-full"
+        style={{ background: color, boxShadow: `0 0 8px ${color}` }}
+      />
+      {word}
+    </span>
+  );
+}
+
+function DeployedGpuList({
+  deployed,
+  metrics,
+  onSelect,
+}: {
+  deployed: GpuServing;
+  metrics: MetricsGap;
+  onSelect: (gpu: string) => void;
+}) {
+  const node = deployed.node ?? "gpu";
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-medium">
+          Your GPUs <span className="text-muted font-normal">(1)</span>
+        </h3>
+        <span className="text-[11px] text-muted">Select a GPU for details</span>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        <button
+          type="button"
+          onClick={() => onSelect(NODE_KEY + node)}
+          className="text-left rounded-xl border border-line bg-bg-elevated/40 p-4 hover:border-accent-emerald/40 transition-colors group"
+        >
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="text-sm font-medium truncate flex items-center gap-1.5">
+                <Cpu className="h-4 w-4 text-accent-emerald shrink-0" />
+                GPU on {node}
+              </div>
+              <div className="text-[11px] text-muted font-mono mt-0.5 truncate">
+                {[deployed.cluster_name, deployed.gpu_class].filter(Boolean).join(" · ")}
+              </div>
+            </div>
+            <ServingDot deployed={deployed} />
+          </div>
+          <div className="mt-3 rounded-lg bg-bg-base/40 px-2 py-1.5 text-xs">
+            <div className="text-[11px] uppercase tracking-wide text-muted">Model</div>
+            <div className="font-mono mt-0.5 truncate">{deployed.model}</div>
+          </div>
+          <div className="mt-2 text-xs text-muted">
+            {metrics === "waiting"
+              ? "Metrics: waiting for the first samples"
+              : "Metrics: not connected yet"}
+          </div>
+          <div className="mt-3 text-[11px] text-accent-emerald opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center gap-1">
+            View details <ArrowUpRight className="h-3 w-3" />
+          </div>
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function MetricsGapNotice({ metrics }: { metrics: MetricsGap }) {
+  return (
+    <div
+      role="status"
+      className="flex items-start gap-2 rounded-lg border border-line bg-bg-elevated/30 px-3.5 py-3 text-xs text-muted"
+    >
+      <Activity className="h-4 w-4 mt-0.5 shrink-0 text-accent-emerald" aria-hidden />
+      {metrics === "waiting" ? (
+        <span>
+          Your cluster&apos;s Prometheus is connected. Utilisation, temperature
+          and memory charts appear here once its first GPU samples arrive,
+          usually within a minute.
+        </span>
+      ) : (
+        <span>
+          Utilisation, temperature and memory charts come from your
+          cluster&apos;s Prometheus. Daalu connects it on its own once the GPU
+          is serving, usually within a minute. If this cluster doesn&apos;t run
+          Prometheus, connect one and the charts appear here.{" "}
+          <Link href="/integrations" className="text-accent-emerald hover:underline">
+            Connect Prometheus
+          </Link>
+        </span>
+      )}
+    </div>
+  );
+}
+
+function DeployedGpuDetail({
+  deployed,
+  metrics,
+  onBack,
+  canManage,
+}: {
+  deployed: GpuServing | null;
+  metrics: MetricsGap;
+  onBack: () => void;
+  canManage: boolean;
+}) {
+  return (
+    <section className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <button
+          type="button"
+          onClick={onBack}
+          className="text-xs h-8 px-3 rounded-lg border border-line text-muted hover:text-[color:var(--text)] inline-flex items-center gap-1.5"
+        >
+          ← All GPUs
+        </button>
+        {deployed && (
+          <div className="text-sm font-medium flex items-center gap-2">
+            <Cpu className="h-4 w-4 text-accent-emerald" />
+            GPU on {deployed.node ?? "your cluster"}
+            <ServingDot deployed={deployed} />
+          </div>
+        )}
+      </div>
+      <MetricsGapNotice metrics={metrics} />
+      {deployed && (
+        <GpuServingPanel hostname={deployed.node ?? ""} canManage={canManage} />
+      )}
+    </section>
+  );
+}
+
+function NoDeployedGpu() {
+  return (
+    <section className="rounded-xl border border-line p-6 text-sm text-muted">
+      No GPU is deployed for this tenant right now. Use Add GPU to deploy a
+      model onto a GPU in a connected cluster.
     </section>
   );
 }

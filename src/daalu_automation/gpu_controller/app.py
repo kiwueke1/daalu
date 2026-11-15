@@ -43,7 +43,7 @@ from daalu_automation.database import get_db
 from daalu_automation.gpu_controller import aiperf as aiperf_build
 from daalu_automation.gpu_controller import diagnostics as diag
 from daalu_automation.gpu_controller import k8s as k8s_helpers
-from daalu_automation.gpu_controller import manifests
+from daalu_automation.gpu_controller import manifests, metrics_source
 from daalu_automation.gpu_controller import operator as gpu_operator
 from daalu_automation.models.aiperf_run import AiperfRun, AiperfRunState
 from daalu_automation.models.cluster_tunnel import (
@@ -545,6 +545,7 @@ async def _reconcile_one(db: AsyncSession, row: GpuTenant) -> None:
             logger.info(
                 "gpu_controller.tenant_active", tenant_id=str(row.tenant_id)
             )
+            await _ensure_metrics_source(db, row)
         return
 
     if row.state == GpuTenantState.active:
@@ -563,6 +564,38 @@ async def _reconcile_one(db: AsyncSession, row: GpuTenant) -> None:
                 row.last_error = None
             row.last_ready_at = datetime.now(tz=timezone.utc)
             await db.commit()
+            # Also covers GPUs that went active before this existed, and a
+            # Prometheus installed after the GPU. One DB read when connected.
+            await _ensure_metrics_source(db, row)
+
+
+async def _ensure_metrics_source(db: AsyncSession, row: GpuTenant) -> None:
+    """Connect the GPU cluster's Prometheus so AI Factory shows the card.
+
+    Best-effort: a cluster with no Prometheus just leaves the card showing
+    "metrics not connected" with a link to connect one by hand.
+    """
+    if row.target_cluster_tunnel_id is None:
+        return  # hub-local GPU: the hub's own Prometheus is the source
+    try:
+        if not await metrics_source.needs_prometheus(db, row.tenant_id):
+            return
+        async with _api_client_for(db, row) as api:
+            url = await metrics_source.discover_prometheus_url(api)
+        if url:
+            await metrics_source.record_prometheus(
+                db,
+                tenant_id=row.tenant_id,
+                cluster_tunnel_id=row.target_cluster_tunnel_id,
+                url=url,
+            )
+    except Exception as e:  # noqa: BLE001 — never fail the reconcile for this
+        await db.rollback()
+        logger.warning(
+            "gpu_controller.prometheus_discovery_failed",
+            tenant_id=str(row.tenant_id),
+            error=str(e)[:300],
+        )
 
 
 async def _do_apply(db: AsyncSession, row: GpuTenant) -> None:
