@@ -18,7 +18,7 @@ the DORA metrics do for software delivery:
 | Group | Metric | Tile on the page | Better is |
 |---|---|---|---|
 | Speed | Time to triage | **Time to triage** | Lower |
-| Speed | Time to resolve | **MTTR** | Lower |
+| Speed | Time to resolve | **Time to resolve** (MTTR) | Lower |
 | Quality | Agreement rate | **Agreement rate** | Higher |
 | Quality | Change-failure rate | **Change-failure rate** | Lower |
 | Autonomy | Escalation rate | **Escalation rate** | Lower |
@@ -113,21 +113,30 @@ is highlighted and reads **Your level**. Every other tile reads **Met**,
 level's criteria without being at it yet; the "blocked by" tile shows that
 and names the lower level whose gap is holding you back.
 
-### The stat tiles
+### The TRACE card
 
-Eight tiles with the headline numbers. Five of them are the TRACE metrics
-(time to triage, MTTR, agreement rate, change-failure rate and escalation
-rate); the other three are supporting metrics:
+The five TRACE metrics sit together in one card, in the order of the word:
+**T**ime to triage, time to **R**esolve, **A**greement rate, **C**hange-failure
+rate, **E**scalation rate. Each tile shows its letter, its group (Speed,
+Quality or Autonomy), the number, the counts behind it, the question it
+answers, whether lower or higher is better, and which level it gates:
+
+| Tile | What it shows |
+|---|---|
+| **T · Time to triage** | Median time from the alert firing to the AI's root cause. Gates no level |
+| **R · Time to resolve** | Median time from the alert firing to a verified fix (MTTR). Gates no level |
+| **A · Agreement rate** | How often your team agreed with the AI's root cause, with verdict coverage underneath. Gates Level 5 (≥ 80%) |
+| **C · Change-failure rate** | Share of executed fixes that failed verification; turns red above 15%. Gates Level 3 |
+| **E · Escalation rate** | Share of resolved investigations that needed a human. Gates Level 5 (≤ 50%) |
+
+### Supporting metrics
+
+Under the card, three tiles explain the TRACE numbers:
 
 | Tile | What it shows |
 |---|---|
 | **AI triage rate** | Share of alerts the AI investigated, with "*n* of *m* alerts" underneath |
-| **Time to triage** | Median time from the alert firing to the AI's root cause |
-| **Agreement rate** | How often your team agreed with the AI's root cause, with verdict coverage underneath |
 | **Approval rate** | Share of human-gated proposals that were approved, with approved / rejected counts |
-| **Change-failure rate** | Share of executed fixes that failed verification; turns red above 15% |
-| **Escalation rate** | Share of resolved investigations that needed a human (not fixed automatically) |
-| **MTTR** | Median time from the alert firing to resolution |
 | **Audit chain** | "Intact" or "Broken", with a link to the audit log |
 
 A dash (—) means there isn't enough data to compute the number yet.

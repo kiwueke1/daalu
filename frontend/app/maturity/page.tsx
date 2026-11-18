@@ -90,45 +90,30 @@ export default function MaturityPage() {
 
             <MaturityLadder maturity={m} />
 
-            <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <StatTile
-                label="AI triage rate"
-                value={<Live value={fmtRate(met.ai_triage_rate)} />}
-                hint={`${met.investigations_total} of ${met.alerts_total} alerts`}
-              />
-              <StatTile label="Time to triage" value={<Live value={fmtDuration(met.median_time_to_triage_s)} />} hint="median" />
-              <StatTile
-                label="Agreement rate"
-                value={<Live value={fmtRate(met.agreement_rate)} />}
-                hint={`verdicts on ${fmtRate(met.verdict_coverage)} of investigations`}
-              />
-              <StatTile
-                label="Approval rate"
-                value={<Live value={fmtRate(met.proposal_approval_rate)} />}
-                hint={`${met.actions.approved} approved · ${met.actions.rejected} rejected`}
-              />
-              <StatTile
-                label="Change-failure rate"
-                value={<Live value={fmtRate(met.change_failure_rate)} />}
-                hint={`${met.actions.failed_verification} of ${met.actions.executed} executed failed verification`}
-                tone={
-                  met.change_failure_rate !== null && met.change_failure_rate > 0.15
-                    ? "critical"
-                    : undefined
-                }
-              />
-              <StatTile
-                label="Escalation rate"
-                value={<Live value={fmtRate(met.escalation_rate)} />}
-                hint={`${met.resolutions.approved + met.resolutions.manual} needed a human · ${met.resolutions.auto} auto-resolved`}
-              />
-              <StatTile label="MTTR" value={<Live value={fmtDuration(met.median_time_to_resolve_s)} />} hint="median time to resolve" />
-              <StatTile
-                label="Audit chain"
-                value={<Live value={met.audit_chain_ok ? "Intact" : "Broken"} />}
-                tone={met.audit_chain_ok ? "accent" : "critical"}
-                hint={<Link href="/audit" className="underline underline-offset-2">Open audit log</Link>}
-              />
+            <TraceMetrics met={met} />
+
+            <section aria-labelledby="supporting-metrics">
+              <div id="supporting-metrics" className="text-[11px] uppercase tracking-wider text-muted mb-2">
+                Supporting metrics · what explains the TRACE numbers
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <StatTile
+                  label="AI triage rate"
+                  value={<Live value={fmtRate(met.ai_triage_rate)} />}
+                  hint={`${met.investigations_total} of ${met.alerts_total} alerts investigated by the AI`}
+                />
+                <StatTile
+                  label="Approval rate"
+                  value={<Live value={fmtRate(met.proposal_approval_rate)} />}
+                  hint={`${met.actions.approved} approved · ${met.actions.rejected} rejected`}
+                />
+                <StatTile
+                  label="Audit chain"
+                  value={<Live value={met.audit_chain_ok ? "Intact" : "Broken"} />}
+                  tone={met.audit_chain_ok ? "accent" : "critical"}
+                  hint={<Link href="/audit" className="underline underline-offset-2">Open audit log</Link>}
+                />
+              </div>
             </section>
 
             <section className="rounded-2xl border border-line bg-bg-card p-4 lg:p-5">
@@ -215,6 +200,125 @@ export default function MaturityPage() {
         )}
       </LoadState>
     </div>
+  );
+}
+
+type Metrics = NonNullable<Awaited<ReturnType<typeof api.aiops.maturity.get>>>["metrics"];
+
+/** The five TRACE metrics, one lettered card each, so each can be read out in
+ *  order: Time to Triage, time to Resolve, Agreement, Change failure, Escalation.
+ *  Copy follows docs/maturity-model.md ("The five TRACE metrics"). */
+function TraceMetrics({ met }: { met: Metrics }) {
+  const cards: {
+    letter: string;
+    name: string;
+    group: "Speed" | "Quality" | "Autonomy";
+    value: string;
+    question: string;
+    better: "Lower" | "Higher";
+    detail: string;
+    gates: string;
+    bad?: boolean;
+  }[] = [
+    {
+      letter: "T",
+      name: "Time to triage",
+      group: "Speed",
+      value: fmtDuration(met.median_time_to_triage_s),
+      question: "How long from the alert firing to the AI naming a root cause?",
+      better: "Lower",
+      detail: "median",
+      gates: "Gates no level: compare with your own history",
+    },
+    {
+      letter: "R",
+      name: "Time to resolve",
+      group: "Speed",
+      value: fmtDuration(met.median_time_to_resolve_s),
+      question: "How long from the alert firing to a verified fix?",
+      better: "Lower",
+      detail: "median (MTTR)",
+      gates: "Gates no level: compare with your own history",
+    },
+    {
+      letter: "A",
+      name: "Agreement rate",
+      group: "Quality",
+      value: fmtRate(met.agreement_rate),
+      question: "How often does the team agree with the AI's root cause?",
+      better: "Higher",
+      detail:
+        met.verdict_coverage === null || met.verdict_coverage === 0
+          ? "no verdicts yet: grade investigations to measure it"
+          : `verdicts on ${fmtRate(met.verdict_coverage)} of investigations`,
+      gates: "Gates Level 5 (≥ 80 %)",
+    },
+    {
+      letter: "C",
+      name: "Change-failure rate",
+      group: "Quality",
+      value: fmtRate(met.change_failure_rate),
+      question: "Of the AI fixes that ran, how many didn't fix the problem?",
+      better: "Lower",
+      detail: `${met.actions.failed_verification} of ${met.actions.executed} executed failed verification`,
+      gates: "Gates Level 3",
+      bad: met.change_failure_rate !== null && met.change_failure_rate > 0.15,
+    },
+    {
+      letter: "E",
+      name: "Escalation rate",
+      group: "Autonomy",
+      value: fmtRate(met.escalation_rate),
+      question: "Of resolved incidents, how many still needed a human?",
+      better: "Lower",
+      detail: `${met.resolutions.approved + met.resolutions.manual} needed a human · ${met.resolutions.auto} auto-resolved`,
+      gates: "Gates Level 5 (≤ 50 %)",
+    },
+  ];
+  return (
+    <section aria-labelledby="trace-title" className="rounded-2xl border border-line bg-bg-card p-4 lg:p-5">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-3">
+        <h2 id="trace-title" className="text-[15px] font-medium">
+          <span className="tracking-[0.25em] font-bold text-accent">TRACE</span> · how well the AI is doing
+        </h2>
+        <div className="text-xs text-muted">
+          Two speed numbers, two quality numbers, one for autonomy. &ldquo;—&rdquo; means nothing to
+          measure yet in this window.
+        </div>
+      </div>
+      <ol className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        {cards.map((c) => (
+          <li key={c.letter} className="rounded-xl border border-line bg-bg-elevated/40 p-4 flex flex-col gap-2">
+            <div className="flex items-center justify-between gap-2">
+              <span
+                aria-hidden
+                className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-xl font-bold text-accent"
+                style={{ background: "color-mix(in srgb, var(--accent) 14%, transparent)" }}
+              >
+                {c.letter}
+              </span>
+              <span className="text-[11px] uppercase tracking-wider text-muted">{c.group}</span>
+            </div>
+            <div className="text-sm font-medium">
+              <span className="sr-only">{c.letter}: </span>
+              {c.name}
+            </div>
+            <div
+              className="text-2xl font-semibold tabular-nums"
+              style={c.bad ? { color: "var(--critical)" } : undefined}
+            >
+              <Live value={c.value} />
+            </div>
+            <div className="text-xs text-muted">{c.detail}</div>
+            <p className="text-xs text-fg/80 leading-relaxed">{c.question}</p>
+            <div className="mt-auto pt-2 border-t border-line/60 text-xs text-muted space-y-0.5">
+              <div>{c.better} is better</div>
+              <div>{c.gates}</div>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }
 

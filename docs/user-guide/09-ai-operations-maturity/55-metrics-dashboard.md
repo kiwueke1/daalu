@@ -47,7 +47,7 @@ change-failure rate stays low, with escalation rate falling on top.
 
 **What:** the median time from an alert firing to the AI posting its root
 cause. Alerts the AI hasn't triaged aren't included.
-**Tile:** **Time to triage** (median).
+**Tile:** **T · Time to triage** (median), in the TRACE card.
 **Read it:** seconds to a few minutes is normal with automatic investigation.
 Long times usually mean the alert sat unopened before anyone triggered the
 AI.
@@ -58,7 +58,7 @@ AI.
 **What:** the median time from an alert firing to its investigation being
 resolved — by a verified fix, or by the alert being closed (manually or
 because it cleared).
-**Tile:** **MTTR** (median time to resolve).
+**Tile:** **R · Time to resolve** (median, MTTR), in the TRACE card.
 **Read it:** this is the end-to-end number your on-call feels. It should fall
 as more fixes are proposed, approved and, later, run automatically.
 **Gates:** no level. It is tracked, not thresholded (see below).
@@ -67,7 +67,7 @@ as more fixes are proposed, approved and, later, run automatically.
 
 **What:** how often your team agreed with the AI's root cause: (correct + half
 of partly right) ÷ all verdicts.
-**Tile:** **Agreement rate**, with verdict coverage underneath.
+**Tile:** **A · Agreement rate**, with verdict coverage underneath.
 **Healthy:** Level 5 needs 80% or more. It only means something once you have
 a reasonable number of verdicts — see verdict coverage below.
 
@@ -75,7 +75,7 @@ a reasonable number of verdicts — see verdict coverage below.
 
 **What:** of the fixes that ran (automatic or approved), the share that
 failed verification — the workload didn't come back.
-**Tile:** **Change-failure rate**, with "*n* of *m* executed failed
+**Tile:** **C · Change-failure rate**, with "*n* of *m* executed failed
 verification". It turns red above 15%.
 **Healthy:** Level 3 needs 15% or less. This is the number to watch when you
 widen automatic rules.
@@ -85,7 +85,7 @@ widen automatic rules.
 **What:** of the investigations that ended resolved (automatically, by an
 approved fix, or manually), the share that needed a human: approved or
 resolved manually. It's the inverse of the share resolved automatically.
-**Tile:** **Escalation rate**, with the auto-resolved count.
+**Tile:** **E · Escalation rate**, with the auto-resolved count.
 **Healthy:** Level 5 needs 50% or less.
 
 ---
