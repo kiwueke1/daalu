@@ -207,7 +207,8 @@ What a healthy climb looks like: the **Investigated** line hugging the
 
 **Why did our level drop?** Levels are recomputed for the window. If you
 switch to 7 days and there were no eval runs this week, the Level 4 eval
-criterion isn't met. Look at the criteria table for the first "not yet".
+criterion isn't met. Flip the level cards, or open **All criteria**, for the
+first "not yet".
 
 **Why is the approval rate "—"?** No human-gated fix has been approved or
 rejected in the window.

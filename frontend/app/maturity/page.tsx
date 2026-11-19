@@ -3,9 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Check, Gauge, X } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, Gauge, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { LoadState } from "@/components/ui/load-state";
+import { Accordion, AccordionItem } from "@/components/ui/accordion";
 import {
   PageHeader,
   Segmented,
@@ -20,6 +21,7 @@ import {
   MaturityLadder,
   MetricsTrend,
   fmtCriterionValue,
+  useReveal,
 } from "@/components/aiops/maturity-parts";
 
 /**
@@ -51,9 +53,7 @@ export default function MaturityPage() {
           />
         }
       >
-        How your team works with the AI SRE, measured from what actually
-        happened in the last {days} days: triage, approvals, escalations,
-        verdicts and runbooks.
+        How your team works with the AI SRE, measured from the last {days} days.
       </PageHeader>
 
       <LoadState query={q} loadingText="Computing your maturity level…">
@@ -72,7 +72,7 @@ export default function MaturityPage() {
               <div className="flex-1 min-w-[16rem] text-sm text-fg/80">
                 {current?.description}
                 <div className="text-xs text-muted mt-1">
-                  The highest level whose criteria (and every level below) are all met.
+                  Levels count in order. Hover or tap a level to see its criteria.
                 </div>
               </div>
               {m.assessment && (
@@ -94,7 +94,7 @@ export default function MaturityPage() {
 
             <section aria-labelledby="supporting-metrics">
               <div id="supporting-metrics" className="text-[11px] uppercase tracking-wider text-muted mb-2">
-                Supporting metrics · what explains the TRACE numbers
+                Supporting metrics
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <StatTile
@@ -124,11 +124,11 @@ export default function MaturityPage() {
             </section>
 
             <div className="grid lg:grid-cols-[1.4fr_1fr] gap-4">
-              <section className="rounded-2xl border border-line bg-bg-card overflow-x-auto">
-                <div className="px-4 pt-4 text-[11px] uppercase tracking-wider text-muted">
-                  Criteria
-                </div>
-                <table className="w-full min-w-[520px] text-sm mt-2">
+              <section className="rounded-2xl border border-line bg-bg-card overflow-hidden self-start">
+                <Accordion>
+                  <AccordionItem id="criteria" title="All criteria" meta={<span className="tabular-nums">{m.criteria.filter((c) => c.met).length} of {m.criteria.length} met</span>}>
+                    <div className="overflow-x-auto -mx-4">
+                <table className="w-full min-w-[520px] text-sm ">
                   <thead className="text-[11px] uppercase tracking-wider text-muted bg-bg-elevated/50">
                     <tr>
                       <th className="text-left px-4 py-2">Level</th>
@@ -145,16 +145,16 @@ export default function MaturityPage() {
                         <td className="px-4 py-2">{c.label}</td>
                         <td className="px-4 py-2">
                           {c.met ? (
-                            <span className="inline-flex items-center gap-1 text-accent text-xs">
+                            <span className="inline-flex items-center gap-1 text-accent text-xs whitespace-nowrap">
                               <Check aria-hidden className="h-3.5 w-3.5" /> met
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 text-muted text-xs">
+                            <span className="inline-flex items-center gap-1 text-muted text-xs whitespace-nowrap">
                               <X aria-hidden className="h-3.5 w-3.5" /> not yet
                             </span>
                           )}
                         </td>
-                        <td className="px-4 py-2 text-right tabular-nums">{fmtCriterionValue(c.value)}</td>
+                        <td className="px-4 py-2 text-right tabular-nums">{fmtCriterionValue(c.value, c.target)}</td>
                         <td className="px-4 py-2 text-right tabular-nums text-muted">
                           {fmtCriterionValue(c.target)}
                         </td>
@@ -162,6 +162,9 @@ export default function MaturityPage() {
                     ))}
                   </tbody>
                 </table>
+                    </div>
+                  </AccordionItem>
+                </Accordion>
               </section>
 
               <section className="rounded-2xl border border-line bg-bg-card p-4 lg:p-5">
@@ -190,8 +193,7 @@ export default function MaturityPage() {
               <div className="flex flex-wrap items-baseline gap-2 mb-3">
                 <div className="text-[15px] font-medium">Self-assessment</div>
                 <div className="text-xs text-muted">
-                  The organisational practices the data can&apos;t see. Reported
-                  beside the automatic level; the headline stays automatic.
+                  What the data can&apos;t see. Shown beside your level, never instead of it.
                 </div>
               </div>
               <AssessmentForm maturity={m} days={days} />
@@ -209,17 +211,7 @@ type Metrics = NonNullable<Awaited<ReturnType<typeof api.aiops.maturity.get>>>["
  *  order: Time to Triage, time to Resolve, Agreement, Change failure, Escalation.
  *  Copy follows docs/maturity-model.md ("The five TRACE metrics"). */
 function TraceMetrics({ met }: { met: Metrics }) {
-  const cards: {
-    letter: string;
-    name: string;
-    group: "Speed" | "Quality" | "Autonomy";
-    value: string;
-    question: string;
-    better: "Lower" | "Higher";
-    detail: string;
-    gates: string;
-    bad?: boolean;
-  }[] = [
+  const cards: TraceCardData[] = [
     {
       letter: "T",
       name: "Time to triage",
@@ -281,44 +273,84 @@ function TraceMetrics({ met }: { met: Metrics }) {
         <h2 id="trace-title" className="text-[15px] font-medium">
           <span className="tracking-[0.25em] font-bold text-accent">TRACE</span> · how well the AI is doing
         </h2>
-        <div className="text-xs text-muted">
-          Two speed numbers, two quality numbers, one for autonomy. &ldquo;—&rdquo; means nothing to
-          measure yet in this window.
-        </div>
+        <div className="text-xs text-muted">&ldquo;—&rdquo; means nothing to measure yet.</div>
       </div>
       <ol className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
         {cards.map((c) => (
-          <li key={c.letter} className="rounded-xl border border-line bg-bg-elevated/40 p-4 flex flex-col gap-2">
-            <div className="flex items-center justify-between gap-2">
-              <span
-                aria-hidden
-                className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-xl font-bold text-accent"
-                style={{ background: "color-mix(in srgb, var(--accent) 14%, transparent)" }}
-              >
-                {c.letter}
-              </span>
-              <span className="text-[11px] uppercase tracking-wider text-muted">{c.group}</span>
-            </div>
-            <div className="text-sm font-medium">
-              <span className="sr-only">{c.letter}: </span>
-              {c.name}
-            </div>
-            <div
-              className="text-2xl font-semibold tabular-nums"
-              style={c.bad ? { color: "var(--critical)" } : undefined}
-            >
-              <Live value={c.value} />
-            </div>
-            <div className="text-xs text-muted">{c.detail}</div>
-            <p className="text-xs text-fg/80 leading-relaxed">{c.question}</p>
-            <div className="mt-auto pt-2 border-t border-line/60 text-xs text-muted space-y-0.5">
-              <div>{c.better} is better</div>
-              <div>{c.gates}</div>
-            </div>
-          </li>
+          <TraceCard key={c.letter} card={c} />
         ))}
       </ol>
     </section>
+  );
+}
+
+type TraceCardData = {
+  letter: string;
+  name: string;
+  group: "Speed" | "Quality" | "Autonomy";
+  value: string;
+  question: string;
+  better: "Lower" | "Higher";
+  detail: string;
+  gates: string;
+  bad?: boolean;
+};
+
+/** One TRACE letter: the number and its question up front; hover (focus, tap)
+ *  drops a drawer out of the bottom with which way is better and what it gates.
+ *  The drawer overlays what's below, so opening one card never reflows the row. */
+function TraceCard({ card: c }: { card: TraceCardData }) {
+  const { open, bind } = useReveal();
+  return (
+    <li
+      {...bind}
+      className={[
+        "relative rounded-xl border border-line bg-bg-elevated p-4 flex flex-col gap-2 outline-none",
+        "focus-visible:ring-2 focus-visible:ring-accent/60 cursor-default",
+        open ? "z-20 rounded-b-none" : "",
+      ].join(" ")}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span
+          aria-hidden
+          className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-xl font-bold text-accent"
+          style={{ background: "color-mix(in srgb, var(--accent) 14%, transparent)" }}
+        >
+          {c.letter}
+        </span>
+        <span className="text-[11px] uppercase tracking-wider text-muted">{c.group}</span>
+      </div>
+      <div className="text-sm font-medium">
+        <span className="sr-only">{c.letter}: </span>
+        {c.name}
+      </div>
+      <div
+        className="text-2xl font-semibold tabular-nums"
+        style={c.bad ? { color: "var(--critical)" } : undefined}
+      >
+        <Live value={c.value} />
+      </div>
+      <div className="text-xs text-muted">{c.detail}</div>
+      <p className="text-xs text-fg/80 leading-relaxed">{c.question}</p>
+      <ChevronDown
+        aria-hidden
+        className={[
+          "mt-auto self-center h-4 w-4 text-muted/70 transition-transform duration-[var(--dur)]",
+          open ? "rotate-180" : "",
+        ].join(" ")}
+      />
+      <div
+        className={[
+          "absolute left-[-1px] right-[-1px] top-full rounded-b-xl border border-t-0 border-line bg-bg-elevated",
+          "px-4 pb-3 pt-2 text-xs text-muted space-y-0.5 shadow-lg",
+          "transition-[opacity,transform] duration-[var(--dur)] ease-[var(--ease-out)]",
+          open ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-1 pointer-events-none",
+        ].join(" ")}
+      >
+        <div className="border-t border-line/60 pt-2">{c.better} is better</div>
+        <div>{c.gates}</div>
+      </div>
+    </li>
   );
 }
 

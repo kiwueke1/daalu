@@ -100,26 +100,33 @@ Everything on the page recomputes for the window you pick.
 
 ### The headline
 
-A large **L***n* with the level's name, its description, and the line "The
-highest level whose criteria (and every level below) are all met." If
+A large **L***n* with the level's name, its description, and the reminder
+that levels count in order. If
 someone has saved a self-assessment, a **Self-assessed** box sits on the
 right with that level, who saved it, and when.
 
 ### The ladder
 
-Six tiles, Level 0 to Level 5, each with its description. Your current level
-is highlighted and reads **Your level**. Every other tile reads **Met**,
-**Not met yet**, or **Criteria met · blocked by L***n*. You can meet a higher
-level's criteria without being at it yet; the "blocked by" tile shows that
-and names the lower level whose gap is holding you back.
+Six cards, Level 0 to Level 5. The front of each shows only the level, its
+name and its status: **Your level**, **Met**, **Not met**, or
+**Met · needs L***n* **first**. Hover over a card (tap it on a phone, or tab
+to it with the keyboard) and it flips over to show the level's description
+and its criteria, each with a tick or a cross and, for thresholds, your value
+against the target (for example "Alerts investigated by the AI 43% / ≥ 50%").
+
+You can meet a higher level's criteria without being at it yet. Levels count
+in order, so a level whose own criteria are met still waits for every level
+below it; its card says **needs L***n* **first** and names the level holding
+you back. Flip that lower card to see which criterion is missing.
 
 ### The TRACE card
 
 The five TRACE metrics sit together in one card, in the order of the word:
 **T**ime to triage, time to **R**esolve, **A**greement rate, **C**hange-failure
 rate, **E**scalation rate. Each tile shows its letter, its group (Speed,
-Quality or Autonomy), the number, the counts behind it, the question it
-answers, whether lower or higher is better, and which level it gates:
+Quality or Autonomy), the number, the counts behind it and the question it
+answers. Hover over a tile (or tap it) and a drawer drops out of the bottom
+with whether lower or higher is better and which level it gates:
 
 | Tile | What it shows |
 |---|---|
@@ -146,9 +153,10 @@ A dash (—) means there isn't enough data to compute the number yet.
 A line chart over the window: **Alerts**, **Investigated**,
 **Auto-resolved** and **Resolved by approved fix** per day.
 
-### Criteria
+### All criteria
 
-The threshold table from the section above, filled in with your numbers. Columns:
+Folded by default, with a count such as "7 of 14 met". Open it for the
+threshold table from the section above, filled in with your numbers. Columns:
 **Level**, **Criterion**, **Met** ("met" or "not yet"), **Value** and
 **Target**.
 
