@@ -393,9 +393,16 @@ async def _list_pods(
     *,
     namespace: str,
     label_selector: str | None = None,
+    deployment: str | None = None,
     _tenant_id: uuid.UUID | None = None,
 ) -> str:
-    core, _apps, _client = await _tenant_kube_or_default(_tenant_id)
+    core, apps, _client = await _tenant_kube_or_default(_tenant_id)
+    if deployment and not label_selector:
+        # Only that Deployment's pods: its own selector, read at run time, so a
+        # caller (e.g. a verify step planned before the fix ran) needs just the name.
+        d = await _run(apps.read_namespaced_deployment, name=deployment, namespace=namespace)
+        labels = (d.spec.selector.match_labels or {}) if d.spec.selector else {}
+        label_selector = ",".join(f"{k}={v}" for k, v in sorted(labels.items())) or None
     pods = await _run(
         core.list_namespaced_pod,
         namespace=namespace,
@@ -1064,12 +1071,19 @@ TOOLS: dict[str, ToolSpec] = {
     ),
     "list_pods": ToolSpec(
         name="list_pods",
-        description="List pods in a namespace with status + restart counts.",
+        description=(
+            "List pods in a namespace with status + restart counts. Pass `deployment` "
+            "to list only that Deployment's pods."
+        ),
         input_schema={
             "type": "object",
             "properties": {
                 "namespace": {"type": "string"},
                 "label_selector": {"type": "string"},
+                "deployment": {
+                    "type": "string",
+                    "description": "Only this Deployment's pods (uses its selector).",
+                },
             },
             "required": ["namespace"],
         },

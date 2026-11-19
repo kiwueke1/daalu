@@ -410,7 +410,17 @@ def _verification_steps(action: AlertAction) -> list[tuple[str, dict, str]]:
                 f"Wait for rollout & verify deployment {ns}/{name} recovered",
             )
         )
-    if ns:
+        # Just the fixed Deployment's pods, not every pod in the namespace.
+        steps.append(
+            (
+                "list_pods",
+                {"namespace": ns, "deployment": name},
+                f"Check {name} pods in {ns}",
+            )
+        )
+    elif ns:
+        # delete_pod / patch_resource: the replacement pod has a new name and we
+        # don't know its owner here, so fall back to the whole namespace.
         steps.append(
             ("list_pods", {"namespace": ns}, f"Check pods in {ns}")
         )
