@@ -145,6 +145,12 @@ class SyntheticInfraAdapter(IntegrationAdapter):
 register_integration(SyntheticInfraAdapter)
 
 
+# Rules that only say "there is no Alertmanager". On this fallback path that is
+# known and intended (Daalu reads Prometheus directly), so they would sit open
+# forever with nothing to fix.
+_NO_ALERTMANAGER_NOISE = frozenset({"PrometheusNotConnectedToAlertmanagers"})
+
+
 def _labels_fingerprint(labels: dict) -> str:
     """Stable fingerprint from a label set — the Prometheus fallback's stand-in
     for Alertmanager's own ``fingerprint`` so re-fires of the same alert collapse
@@ -313,6 +319,8 @@ class PrometheusAdapter(IntegrationAdapter):
             if a.get("state") != "firing":
                 continue
             labels = a.get("labels", {}) or {}
+            if labels.get("alertname") in _NO_ALERTMANAGER_NOISE:
+                continue
             out.append(
                 (labels, a.get("annotations", {}) or {},
                  _labels_fingerprint(labels))

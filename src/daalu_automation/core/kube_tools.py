@@ -314,6 +314,8 @@ async def _get_pod_logs(
         tail_lines=tail_lines,
         previous=previous,
     )
+    if isinstance(text, bytes):  # some client versions hand back raw bytes
+        text = text.decode("utf-8", errors="replace")
     return text or "(empty)"
 
 

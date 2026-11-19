@@ -691,10 +691,56 @@ def _messages_for_openai(
                 {
                     "role": "tool",
                     "tool_call_id": m.tool_call_id or "",
-                    "content": m.content,
+                    "content": _clip_tool_output(m.content),
                 }
             )
     return out
+
+
+# A local model's context is small (32k tokens on the lab GPU): one pod log of
+# 32 KB plus the system prompt and tool list overflowed it, and the whole
+# investigation failed. Each tool result goes to the model clipped; the full
+# output stays in the transcript for the Evidence tab.
+_TOOL_OUTPUT_MAX_CHARS = 6000
+_TOOL_OUTPUT_HEAD_CHARS = 1500
+
+
+def _clip_tool_output(text: str) -> str:
+    """Keep the head (what the output is) and the tail (logs: the newest lines)."""
+    text = text or ""
+    if len(text) <= _TOOL_OUTPUT_MAX_CHARS:
+        return text
+    tail = _TOOL_OUTPUT_MAX_CHARS - _TOOL_OUTPUT_HEAD_CHARS
+    cut = len(text) - _TOOL_OUTPUT_HEAD_CHARS - tail
+    return (
+        f"{text[:_TOOL_OUTPUT_HEAD_CHARS]}\n"
+        f"… [{cut} characters cut to fit the model's context; ask for a narrower "
+        f"query if you need them] …\n"
+        f"{text[-tail:]}"
+    )
+
+
+def _unavailable_text(error: str) -> str:
+    """What the transcript says when no model answered, by cause."""
+    e = error.lower()
+    if "context length" in e or "context window" in e or "input_tokens" in e:
+        return (
+            "The AI model couldn't finish this investigation: the evidence it "
+            "gathered was longer than the model's context window. Re-triage to "
+            "try again; tool output is trimmed before it reaches the model."
+        )
+    if "tier configured" in e or "not configured" in e:
+        return (
+            "AI copilot is offline — no LLM tier is configured. Set "
+            "LLM_API_KEY/LLM_BASE_URL (DeepSeek/OpenAI) or a local vLLM "
+            "endpoint to enable remediation chat. The Acknowledge / Resolve "
+            "buttons still work."
+        )
+    return (
+        "The AI model didn't answer (every configured model returned an error), "
+        "so this investigation stopped. Re-triage to try again; the API log has "
+        "the model's error. The Acknowledge / Resolve buttons still work."
+    )
 
 
 async def _ask_model(
@@ -744,12 +790,7 @@ async def _ask_model(
             "content": [
                 {
                     "type": "text",
-                    "text": (
-                        "AI copilot is offline — no LLM tier is configured. Set "
-                        "LLM_API_KEY/LLM_BASE_URL (DeepSeek/OpenAI) or a local "
-                        "vLLM endpoint to enable remediation chat. The "
-                        "Acknowledge / Resolve buttons still work."
-                    ),
+                    "text": _unavailable_text(str(e)),
                 }
             ],
         }

@@ -49,3 +49,24 @@ async def test_list_pods_resolves_the_deployment_selector(monkeypatch):
     assert out.startswith("NAME")
     assert seen["read"]["name"] == "keystone-api"
     assert seen["list"]["label_selector"] == "application=keystone,component=api"
+
+
+def test_big_tool_output_is_clipped_for_the_model_keeping_the_tail():
+    log = "HEAD\n" + "x" * 40_000 + "\nNEWEST LINE"
+    out = alert_chat._clip_tool_output(log)
+    assert len(out) < 6_200
+    assert out.startswith("HEAD") and out.endswith("NEWEST LINE")
+    assert "characters cut" in out
+    assert alert_chat._clip_tool_output("short") == "short"
+
+
+def test_unavailable_text_names_the_cause():
+    ctx = alert_chat._unavailable_text(
+        "All tool-capable tiers failed: Error code: 400 - This model's maximum "
+        "context length is 32768 tokens"
+    )
+    assert "context window" in ctx and "offline" not in ctx
+    none = alert_chat._unavailable_text("No tool-capable LLM tier configured. Set LLM_API_KEY")
+    assert "offline" in none
+    other = alert_chat._unavailable_text("All tool-capable tiers failed: 503")
+    assert "didn't answer" in other
