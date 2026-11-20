@@ -42,9 +42,16 @@ _REDACT_FIELDS = {
     "opensearch": {"password"},
     "grafana": {"api_token", "token", "bearer_token", "password"},
     "kubernetes": {"kubeconfig"},
-    "aws": {"secret_access_key", "session_token"},
-    "gcp": {"service_account_json"},
-    "azure": {"client_secret"},
+    # Cloud secrets are sealed on write (core.cloud_config); both shapes are
+    # redacted so a legacy plaintext row never echoes either.
+    "aws": {
+        "secret_access_key",
+        "session_token",
+        "secret_access_key_ciphertext",
+        "session_token_ciphertext",
+    },
+    "gcp": {"service_account_json", "service_account_json_ciphertext"},
+    "azure": {"client_secret", "client_secret_ciphertext"},
     # Both the ciphertext shape (from operator PUTs / hosted provisioning)
     # and the plaintext shape (from the onboarding wizard's BYO form) are
     # redacted on GET so the wizard pre-fill never echoes a real secret.
@@ -109,6 +116,11 @@ _SEAL_ON_WRITE: dict[str, dict[str, str]] = {
 
 
 def _seal_credential_config(provider: str, cfg: dict) -> dict:
+    from daalu_automation.core import cloud_config
+
+    if provider in cloud_config.CLOUD_SECRETS:
+        # AWS/GCP/Azure: same sealing, one mapping shared with the read path.
+        return cloud_config.seal(provider, cfg)
     mapping = _SEAL_ON_WRITE.get(provider)
     if not mapping:
         return cfg

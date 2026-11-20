@@ -67,6 +67,39 @@ _COPILOT_TOOLS = frozenset(
     }
 )
 
+# Cloud read tools, per provider. Offered only when the tenant has that
+# provider connected, so a tenant without AWS isn't shown five AWS tools.
+_CLOUD_TOOLS: dict[str, frozenset[str]] = {
+    "aws": frozenset(
+        {
+            "aws_describe_instances",
+            "aws_get_cloudwatch_logs",
+            "aws_query_cloudwatch_metric",
+            "aws_describe_rds_instances",
+            "aws_describe_lambda",
+        }
+    ),
+    "gcp": frozenset(
+        {
+            "gcp_list_instances",
+            "gcp_query_logging",
+            "gcp_query_monitoring",
+            "gcp_describe_sql_instance",
+            "gcp_describe_function",
+        }
+    ),
+    "azure": frozenset(
+        {
+            "azure_list_vms",
+            "azure_query_log_analytics",
+            "azure_query_metrics",
+            "azure_describe_sql_db",
+            "azure_describe_function",
+        }
+    ),
+}
+_ALL_CLOUD_TOOLS = frozenset().union(*_CLOUD_TOOLS.values())
+
 # Tools that read one cluster. Each gets a ``cluster`` argument (an onboarded
 # cluster's slug) so the model can't answer about one cluster with another's
 # data. Source-of-truth tools are fabric-wide and take none.
@@ -106,6 +139,10 @@ You have tools that read the user's REAL infrastructure. Use them:
 - `list_pods`, `describe_pod`, `get_pod_events`, `get_pod_logs`,
   `get_deployment` — Kubernetes state.
 - `query_prometheus`, `query_loki` — metrics and logs.
+- Cloud tools (`aws_*`, `gcp_*`, `azure_*`) — read-only views of the cloud
+  accounts listed under CLOUD ACCOUNTS: instances/VMs, logs, metrics,
+  databases, functions. Offered only for connected accounts; they take no
+  `cluster` argument.
 
 Clusters: the user may have several Kubernetes clusters (listed under
 CLUSTERS below). Every Kubernetes, metrics or logs tool takes a `cluster`
@@ -130,15 +167,22 @@ Rules:
 """
 
 
-def _tool_definitions() -> list[dict[str, Any]]:
+def _allowed_tools(clouds: set[str] | frozenset[str] = frozenset()) -> frozenset[str]:
+    """The allowlist plus the cloud tools of the connected providers."""
+    extra = [_CLOUD_TOOLS[c] for c in clouds if c in _CLOUD_TOOLS]
+    return _COPILOT_TOOLS.union(*extra)
+
+
+def _tool_definitions(clouds: set[str] | frozenset[str] = frozenset()) -> list[dict[str, Any]]:
     """OpenAI-shaped definitions for the allowlisted tools only, with a
     ``cluster`` argument added to the per-cluster ones."""
     import copy
 
+    allowed = _allowed_tools(clouds)
     out = []
     for d in kube_tools.openai_tool_definitions():
         name = d.get("function", {}).get("name")
-        if name not in _COPILOT_TOOLS:
+        if name not in allowed:
             continue
         if name in _CLUSTER_TOOLS:
             d = copy.deepcopy(d)
@@ -226,6 +270,30 @@ async def _clusters_context(
     return [t.slug for t in tunnels], lines
 
 
+async def _clouds_context(db: AsyncSession, tenant_id: Any) -> tuple[set[str], list[str]]:
+    """(connected cloud providers, prompt lines) — never includes secrets."""
+    rows = (
+        await db.execute(
+            select(Integration.provider, Integration.config).where(
+                Integration.tenant_id == tenant_id,
+                Integration.provider.in_(tuple(_CLOUD_TOOLS)),
+            )
+        )
+    ).all()
+    clouds: set[str] = set()
+    lines: list[str] = []
+    for provider, cfg in rows:
+        cfg = cfg or {}
+        clouds.add(provider)
+        where = {
+            "aws": f"default region {cfg.get('region') or 'us-east-1'}",
+            "gcp": f"project {cfg.get('project_id') or '?'}",
+            "azure": f"subscription {cfg.get('subscription_id') or '?'}",
+        }[provider]
+        lines.append(f"- {provider} ({where}); read-only")
+    return clouds, sorted(lines)
+
+
 @router.post("/ask", response_model=CommandResponse)
 async def ask(
     req: CommandRequest,
@@ -262,6 +330,8 @@ async def ask(
     # are small, bounded, and relevant to most questions, so paying for a
     # round trip to fetch them would only add latency.
     slugs, cluster_lines = await _clusters_context(db, tenant_id)
+    clouds, cloud_lines = await _clouds_context(db, tenant_id)
+    allowed = _allowed_tools(clouds)
     requested = getattr(req, "cluster", None)
     viewing = requested if requested in slugs else None
     default_cluster = viewing or (slugs[0] if len(slugs) == 1 else None)
@@ -280,6 +350,8 @@ async def ask(
             ),
             "CLUSTERS:",
             *(cluster_lines or ["- (none onboarded)"]),
+            "CLOUD ACCOUNTS:",
+            *(cloud_lines or ["- (none connected)"]),
             "",
             "RECENT EVENTS:",
             *(
@@ -300,7 +372,7 @@ async def ask(
     ]
 
     answer = ""
-    tools = _tool_definitions()
+    tools = _tool_definitions(clouds)
     try:
         for _ in range(_MAX_TOOL_ROUNDS):
             reply = await chat_with_tools(
@@ -338,7 +410,7 @@ async def ask(
             )
             for c in calls:
                 name = c["name"]
-                if name not in _COPILOT_TOOLS:
+                if name not in allowed:
                     # Belt and braces: the model was never offered this, so
                     # reaching here means a malformed or hallucinated call.
                     result = f"error: tool {name!r} is not available from the copilot"

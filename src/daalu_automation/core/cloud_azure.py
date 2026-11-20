@@ -17,8 +17,7 @@ from typing import Any
 
 import structlog
 
-from daalu_automation.database import AsyncSessionLocal
-from daalu_automation.models import Integration
+from daalu_automation.core import cloud_config
 
 logger = structlog.get_logger(__name__)
 
@@ -27,50 +26,46 @@ class AzureUnavailable(RuntimeError):
     """No Azure integration registered, or its credentials are malformed."""
 
 
-_creds_cache: dict[str, tuple[Any, str]] = {}
+# tenant -> (config fingerprint, ClientSecretCredential, subscription_id)
+_creds_cache: dict[str, tuple[str, Any, str]] = {}
 
 
-async def _load_azure_config(tenant_id: uuid.UUID | None) -> dict[str, Any]:
+async def _load_azure_config(tenant_id: uuid.UUID | None) -> tuple[dict[str, Any], str]:
     if tenant_id is None:
         raise AzureUnavailable("tenant context missing — cannot resolve Azure integration")
-    async with AsyncSessionLocal() as db:
-        row = (
-            await db.execute(
-                Integration.__table__.select().where(
-                    Integration.tenant_id == tenant_id,
-                    Integration.provider == "azure",
-                )
-            )
-        ).first()
-    if row is None:
+    loaded = await cloud_config.load(tenant_id, "azure")
+    if loaded is None:
         raise AzureUnavailable(
             "no Azure integration registered for this tenant — add one with "
             "provider='azure' and config={tenant_id, client_id, client_secret, "
             "subscription_id}."
         )
-    cfg = row._mapping["config"] or {}
+    cfg, fp = loaded
     for key in ("tenant_id", "client_id", "client_secret", "subscription_id"):
         if not cfg.get(key):
             raise AzureUnavailable(f"Azure integration is missing {key}.")
-    return cfg
+    return cfg, fp
 
 
 async def _credentials(tenant_id: uuid.UUID | None) -> tuple[Any, str]:
-    """Return (ClientSecretCredential, subscription_id) for this tenant."""
+    """Return (ClientSecretCredential, subscription_id) for this tenant.
+
+    Cached until the stored config changes (a rotated client secret).
+    """
     from azure.identity import ClientSecretCredential
 
-    cfg = await _load_azure_config(tenant_id)
+    cfg, fp = await _load_azure_config(tenant_id)
     key = str(tenant_id)
     cached = _creds_cache.get(key)
-    if cached is None:
+    if cached is None or cached[0] != fp:
         cred = ClientSecretCredential(
             tenant_id=cfg["tenant_id"],
             client_id=cfg["client_id"],
             client_secret=cfg["client_secret"],
         )
-        cached = (cred, cfg["subscription_id"])
+        cached = (fp, cred, cfg["subscription_id"])
         _creds_cache[key] = cached
-    return cached
+    return cached[1], cached[2]
 
 
 def _json(data: Any) -> str:

@@ -19,8 +19,7 @@ from typing import Any
 
 import structlog
 
-from daalu_automation.database import AsyncSessionLocal
-from daalu_automation.models import Integration
+from daalu_automation.core import cloud_config
 
 logger = structlog.get_logger(__name__)
 
@@ -29,30 +28,23 @@ class GCPUnavailable(RuntimeError):
     """No GCP integration registered, or its credentials are malformed."""
 
 
-_creds_cache: dict[str, Any] = {}
+# tenant -> (config fingerprint, Credentials)
+_creds_cache: dict[str, tuple[str, Any]] = {}
 
 
-async def _load_gcp_config(tenant_id: uuid.UUID | None) -> dict[str, Any]:
+async def _load_gcp_config(tenant_id: uuid.UUID | None) -> tuple[dict[str, Any], str]:
     if tenant_id is None:
         raise GCPUnavailable("tenant context missing — cannot resolve GCP integration")
-    async with AsyncSessionLocal() as db:
-        row = (
-            await db.execute(
-                Integration.__table__.select().where(
-                    Integration.tenant_id == tenant_id,
-                    Integration.provider == "gcp",
-                )
-            )
-        ).first()
-    if row is None:
+    loaded = await cloud_config.load(tenant_id, "gcp")
+    if loaded is None:
         raise GCPUnavailable(
             "no GCP integration registered for this tenant — add one with "
             "provider='gcp' and config={service_account_json, project_id}."
         )
-    cfg = row._mapping["config"] or {}
+    cfg, fp = loaded
     if not cfg.get("service_account_json") or not cfg.get("project_id"):
         raise GCPUnavailable("GCP integration is missing service_account_json / project_id.")
-    return cfg
+    return cfg, fp
 
 
 async def _credentials(tenant_id: uuid.UUID | None) -> tuple[Any, str]:
@@ -61,19 +53,19 @@ async def _credentials(tenant_id: uuid.UUID | None) -> tuple[Any, str]:
     Returns the project_id explicitly because none of the typed
     clients infer it from the service-account JSON reliably in all
     SDK versions — we'd rather be explicit than pull surprise
-    projects.
+    projects. Cached until the stored config changes (a new key).
     """
     from google.oauth2 import service_account
 
-    cfg = await _load_gcp_config(tenant_id)
+    cfg, fp = await _load_gcp_config(tenant_id)
     key = str(tenant_id)
     cached = _creds_cache.get(key)
-    if cached is None:
+    if cached is None or cached[0] != fp:
         raw = cfg["service_account_json"]
         info = json.loads(raw) if isinstance(raw, str) else raw
-        cached = service_account.Credentials.from_service_account_info(info)
+        cached = (fp, service_account.Credentials.from_service_account_info(info))
         _creds_cache[key] = cached
-    return cached, cfg["project_id"]
+    return cached[1], cfg["project_id"]
 
 
 def _json(data: Any) -> str:

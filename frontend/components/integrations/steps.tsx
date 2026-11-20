@@ -232,10 +232,11 @@ export const STEPS: IntegrationStep[] = [
     optional: true,
     fields: [
       { key: "access_key_id", label: "Access key ID", type: "text", placeholder: "AKIA..." },
-      { key: "secret_access_key", label: "Secret access key", type: "password" },
+      { key: "secret_access_key", label: "Secret access key", type: "password", help: "Stored encrypted at rest." },
       { key: "region", label: "Default region", type: "text", placeholder: "us-east-1" },
       { key: "session_token", label: "Session token", type: "password", optional: true, help: "Only for short-lived STS credentials." },
-      { key: "role_arn", label: "Assume-role ARN", type: "text", optional: true, placeholder: "arn:aws:iam::123456789012:role/DaaluRemediation", help: "If set, the session keys above only need sts:AssumeRole on this ARN; everything else is granted via the role's policy." },
+      { key: "role_arn", label: "Assume-role ARN", type: "text", optional: true, placeholder: "arn:aws:iam::123456789012:role/DaaluRemediation", help: "If set, the session keys above only need sts:AssumeRole on this ARN; everything else is granted via the role's policy. Test connection assumes the role, so a wrong ARN or trust policy fails there." },
+      { key: "external_id", label: "External ID", type: "text", optional: true, help: "Only if the role's trust policy requires sts:ExternalId." },
     ],
   },
   {
@@ -270,7 +271,7 @@ export const STEPS: IntegrationStep[] = [
     fields: [
       { key: "tenant_id", label: "Azure AD tenant ID", type: "text", placeholder: "00000000-0000-0000-0000-000000000000" },
       { key: "client_id", label: "Application (client) ID", type: "text", placeholder: "00000000-0000-0000-0000-000000000000" },
-      { key: "client_secret", label: "Client secret", type: "password" },
+      { key: "client_secret", label: "Client secret", type: "password", help: "Stored encrypted at rest." },
       { key: "subscription_id", label: "Subscription ID", type: "text", placeholder: "00000000-0000-0000-0000-000000000000" },
     ],
   },

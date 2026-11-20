@@ -11,9 +11,12 @@ dialog, click **Test connection** to check the credentials, then
 save with **Connect \[provider\]**. You can also set them up in
 order on the *Onboarding* tab.
 
-Credentials are stored encrypted at rest. Cloud access is
-**read-only**: the agent uses it to look at what an alert
-touches while it investigates. Changes the AI proposes go
+Credentials are stored encrypted at rest and never shown
+again after you save them. A changed key takes effect on the
+next call, without a restart. Cloud access is **read-only**:
+the agent uses it to look at what an alert touches while it
+investigates, and the **Assistant** can use it to answer
+questions about a connected account without an alert. Changes the AI proposes go
 through the approval flow (Chapter 52), not through these
 credentials.
 
@@ -32,9 +35,15 @@ The **AWS account** dialog asks for:
 - **Assume-role ARN** — optional. If you set it, the access
   keys above only need `sts:AssumeRole` on that role;
   everything else is granted by the role's policy.
+- **External ID** — optional, only if the role's trust policy
+  requires `sts:ExternalId`.
 
 **Test connection** asks AWS who the credentials belong to and
-shows the caller ARN when they're accepted.
+shows the caller ARN when they're accepted. With an assume-role
+ARN it also assumes the role and shows the assumed-role ARN, so
+a wrong ARN or trust policy fails here, not during an
+investigation. Assumed-role sessions are renewed before they
+expire.
 
 ### What the agent can read
 

@@ -167,7 +167,10 @@ class ValidateOut(BaseModel):
 def _missing_for(provider: str, config: dict[str, Any]) -> list[str]:
     if provider not in _REQUIRED:
         return []
-    return [k for k in _REQUIRED[provider] if not config.get(k)]
+    from daalu_automation.core.cloud_config import has_secret
+
+    # A cloud secret is stored as ``<field>_ciphertext``; that counts as set.
+    return [k for k in _REQUIRED[provider] if not has_secret(provider, config, k)]
 
 
 @router.get("/status", response_model=OnboardingStatusOut)
@@ -443,22 +446,37 @@ async def _test_kubernetes(config: dict[str, Any]) -> tuple[bool, str]:
 
 def _test_aws_sync(config: dict[str, Any]) -> tuple[bool, str]:
     """STS GetCallerIdentity — the cheapest possible 'these creds work'
-    probe in AWS. Never touches a billable service."""
+    probe in AWS. Never touches a billable service.
+
+    With a role ARN it goes through the same session builder the tools use,
+    so the role is actually assumed: a wrong ARN, a missing trust policy or
+    a bad external ID fails here instead of on the first investigation.
+    """
     try:
-        import boto3  # type: ignore
+        import boto3  # type: ignore  # noqa: F401
     except ImportError:
         return False, "boto3 is not installed in the API image"
+    from daalu_automation.core.cloud_aws import build_session
+
+    if not config.get("access_key_id") or not config.get("secret_access_key"):
+        return False, "access_key_id and secret_access_key are required"
+    region = config.get("region") or "us-east-1"
+    role_arn = config.get("role_arn")
     try:
-        sess = boto3.session.Session(
-            aws_access_key_id=config.get("access_key_id"),
-            aws_secret_access_key=config.get("secret_access_key"),
-            aws_session_token=config.get("session_token"),
-            region_name=config.get("region") or "us-east-1",
-        )
+        sess, _ = build_session({**config, "role_arn": None}, region)
         ident = sess.client("sts").get_caller_identity()
     except Exception as e:  # noqa: BLE001
         return False, f"AWS rejected the credentials: {e}"
-    return True, f"AWS accepted; caller arn = {ident.get('Arn')}"
+    if not role_arn:
+        return True, f"AWS accepted; caller arn = {ident.get('Arn')}"
+    try:
+        role_sess, _ = build_session(config, region)
+        role_ident = role_sess.client("sts").get_caller_identity()
+    except Exception as e:  # noqa: BLE001
+        return False, (
+            f"The keys work (caller {ident.get('Arn')}), but assuming {role_arn} failed: {e}"
+        )
+    return True, f"AWS accepted; assumed role, caller arn = {role_ident.get('Arn')}"
 
 
 async def _test_aws(config: dict[str, Any]) -> tuple[bool, str]:
@@ -625,6 +643,11 @@ async def test_provider(
             config[k] = stored.get(k, "")
     for k, v in stored.items():
         config.setdefault(k, v)
+    # Cloud secrets are stored sealed; open them so a saved connection can be
+    # re-tested without retyping the key.
+    from daalu_automation.core.cloud_config import open_config
+
+    config = open_config(provider, config)
 
     # Resolve the edge-proxy URL if the caller wants to test through a
     # cluster tunnel. Only the HTTP-shaped observability testers accept a

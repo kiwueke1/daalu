@@ -2,8 +2,10 @@
 
 Tenants register an AWS connection as an Integration row with
 ``provider='aws'`` and ``config={access_key_id, secret_access_key,
-region, [session_token, role_arn]}``. We instantiate a boto3 Session
-per tenant on first use and cache it for the worker's lifetime.
+region, [session_token, role_arn, external_id]}``; the secrets are stored
+sealed (see ``core.cloud_config``). We build a boto3 Session per tenant and
+region and cache it until the stored config changes or an assumed role's
+credentials are about to expire.
 
 All tools here are **read-only**. Write tools (restart an instance,
 redeploy a function) belong in a future cloud_write module so they
@@ -20,8 +22,7 @@ from typing import Any
 
 import structlog
 
-from daalu_automation.database import AsyncSessionLocal
-from daalu_automation.models import Integration
+from daalu_automation.core import cloud_config
 
 logger = structlog.get_logger(__name__)
 
@@ -30,30 +31,62 @@ class AWSUnavailable(RuntimeError):
     """No AWS integration registered, or its credentials are malformed."""
 
 
-_session_cache: dict[tuple[str, str], Any] = {}
+# (tenant, region) -> (config fingerprint, session, expires_at or None)
+_session_cache: dict[tuple[str, str], tuple[str, Any, datetime | None]] = {}
+
+# Refresh an assumed-role session this long before STS says it expires.
+_ROLE_REFRESH_MARGIN = timedelta(minutes=5)
+ROLE_SESSION_NAME = "daalu"
 
 
-async def _load_aws_config(tenant_id: uuid.UUID | None) -> dict[str, Any]:
+async def _load_aws_config(tenant_id: uuid.UUID | None) -> tuple[dict[str, Any], str]:
     if tenant_id is None:
         raise AWSUnavailable("tenant context missing — cannot resolve AWS integration")
-    async with AsyncSessionLocal() as db:
-        row = (
-            await db.execute(
-                Integration.__table__.select().where(
-                    Integration.tenant_id == tenant_id,
-                    Integration.provider == "aws",
-                )
-            )
-        ).first()
-    if row is None:
+    loaded = await cloud_config.load(tenant_id, "aws")
+    if loaded is None:
         raise AWSUnavailable(
             "no AWS integration registered for this tenant — add one with "
             "provider='aws' and config={access_key_id, secret_access_key, region}."
         )
-    cfg = row._mapping["config"] or {}
+    cfg, fp = loaded
     if not cfg.get("access_key_id") or not cfg.get("secret_access_key"):
         raise AWSUnavailable("AWS integration is missing access_key_id / secret_access_key.")
-    return cfg
+    return cfg, fp
+
+
+def build_session(cfg: dict[str, Any], region: str) -> tuple[Any, datetime | None]:
+    """A boto3 Session from a connection config, assuming ``role_arn`` when set.
+
+    Returns the session and, for an assumed role, when its credentials
+    expire. Blocking (STS call); run it in a thread. Shared with the
+    connection test so "Test" exercises exactly what the tools use.
+    """
+    import boto3  # local import keeps the cold-path light on workers that never touch AWS
+
+    session = boto3.session.Session(
+        aws_access_key_id=cfg["access_key_id"],
+        aws_secret_access_key=cfg["secret_access_key"],
+        aws_session_token=cfg.get("session_token") or None,
+        region_name=region,
+    )
+    role_arn = cfg.get("role_arn")
+    if not role_arn:
+        return session, None
+    kwargs: dict[str, Any] = {
+        "RoleArn": role_arn,
+        "RoleSessionName": ROLE_SESSION_NAME,
+        "DurationSeconds": 3600,
+    }
+    if cfg.get("external_id"):
+        kwargs["ExternalId"] = cfg["external_id"]
+    creds = session.client("sts").assume_role(**kwargs)["Credentials"]
+    assumed = boto3.session.Session(
+        aws_access_key_id=creds["AccessKeyId"],
+        aws_secret_access_key=creds["SecretAccessKey"],
+        aws_session_token=creds["SessionToken"],
+        region_name=region,
+    )
+    return assumed, creds.get("Expiration")
 
 
 async def _session(tenant_id: uuid.UUID | None, region: str | None = None) -> Any:
@@ -61,43 +94,21 @@ async def _session(tenant_id: uuid.UUID | None, region: str | None = None) -> An
 
     Region resolution: explicit kwarg > Integration.config.region. We
     cache on (tenant, region) so callers can opt into a non-default
-    region without poisoning the default-region session.
+    region without poisoning the default-region session. The cache entry
+    is dropped when the stored config changes (key rotated, role edited)
+    and, for an assumed role, shortly before its credentials expire.
     """
-    import boto3  # local import keeps the cold-path light on workers that never touch AWS
-
-    cfg = await _load_aws_config(tenant_id)
+    cfg, fp = await _load_aws_config(tenant_id)
     region = region or cfg.get("region") or "us-east-1"
     key = (str(tenant_id), region)
     cached = _session_cache.get(key)
     if cached is not None:
-        return cached
-    session = boto3.session.Session(
-        aws_access_key_id=cfg["access_key_id"],
-        aws_secret_access_key=cfg["secret_access_key"],
-        aws_session_token=cfg.get("session_token"),
-        region_name=region,
-    )
-    role_arn = cfg.get("role_arn")
-    if role_arn:
-        # Assume the configured role and rebuild the session with the
-        # temporary credentials. Useful for tenants that prefer
-        # cross-account assume-role over storing long-lived keys.
-        sts = session.client("sts")
-        creds = (
-            await asyncio.to_thread(
-                sts.assume_role,
-                RoleArn=role_arn,
-                RoleSessionName="daalu-remediation",
-                DurationSeconds=3600,
-            )
-        )["Credentials"]
-        session = boto3.session.Session(
-            aws_access_key_id=creds["AccessKeyId"],
-            aws_secret_access_key=creds["SecretAccessKey"],
-            aws_session_token=creds["SessionToken"],
-            region_name=region,
-        )
-    _session_cache[key] = session
+        c_fp, c_session, c_expires = cached
+        fresh = c_expires is None or c_expires - _ROLE_REFRESH_MARGIN > datetime.now(timezone.utc)
+        if c_fp == fp and fresh:
+            return c_session
+    session, expires = await asyncio.to_thread(build_session, cfg, region)
+    _session_cache[key] = (fp, session, expires)
     return session
 
 
