@@ -110,9 +110,10 @@ right with that level, who saved it, and when.
 Six cards, Level 0 to Level 5. The front of each shows only the level, its
 name and its status: **Your level**, **Met**, **Not met**, or
 **Met · needs L***n* **first**. Hover over a card (tap it on a phone, or tab
-to it with the keyboard) and it flips over to show the level's description
-and its criteria, each with a tick or a cross and, for thresholds, your value
-against the target (for example "Alerts investigated by the AI 43% / ≥ 50%").
+to it with the keyboard) and it flips over to show your progress on each of
+its criteria: a tick or a cross, a bar for targets you fill up, and where you
+stand in words (for example "8 of 29 investigated · 7 more for 50%"). Level 0
+has no criteria, so its back shows what the level means.
 
 You can meet a higher level's criteria without being at it yet. Levels count
 in order, so a level whose own criteria are met still waits for every level

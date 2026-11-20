@@ -14,6 +14,7 @@ The headline ``level`` is the automatic one.
 
 from __future__ import annotations
 
+import math
 import uuid
 from typing import Any
 
@@ -98,6 +99,77 @@ def _fmt(v: Any) -> str:
     if isinstance(v, float):
         return f"{v:.0%}" if 0 <= v <= 1 else f"{v:g}"
     return str(v)
+
+
+def _plural(n: int, word: str) -> str:
+    return f"{n} {word}" if n == 1 else f"{n} {_plural_word(word)}"
+
+
+def _plural_word(word: str) -> str:
+    return word + "es" if word.endswith(("x", "s")) else word + "s"
+
+
+def _count(done: int, need: int, word: str) -> dict[str, Any]:
+    """Progress toward "at least ``need``": "0 of 1 approved fix"."""
+    if done >= need:
+        return {"text": _plural(done, word), "ratio": 1.0}
+    return {"text": f"{done} of {need} {word if need == 1 else _plural_word(word)}", "ratio": done / need}
+
+
+def _share(done: int, total: int, target: float, noun: str, verb: str) -> dict[str, Any]:
+    """Progress toward "at least ``target`` of ``total``", with how many more."""
+    if total == 0:
+        return {"text": f"No {noun}s yet", "ratio": 0.0}
+    more = max(0, math.ceil(target * total) - done)
+    text = f"{done} of {total} {verb}"
+    if more:
+        text += f" · {more} more for {target:.0%}"
+    return {"text": text, "ratio": min(1.0, done / (target * total))}
+
+
+def _ceiling(value: float | None, limit: float, what: str, empty: str) -> dict[str, Any]:
+    """A "stay at or below" target: no bar to fill, just where it stands."""
+    if value is None:
+        return {"text": empty, "ratio": None}
+    return {"text": f"{value:.0%} {what} · limit {limit:.0%}", "ratio": None}
+
+
+def build_progress(m: dict[str, Any], ex: dict[str, Any], pol: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Per-criterion progress for the level cards: a short sentence and,
+    for "reach at least" targets, a 0–1 bar fill. Pure."""
+    n = m["alerts_total"]
+    acts = m.get("actions", {})
+    decided = acts.get("approved", 0) + acts.get("rejected", 0)
+    inv = m["investigations_total"]
+    nv = ex.get("verdicts_total", 0)
+    return {
+        "triage_rate": _share(ex.get("alerts_triaged", 0), n, 0.5, "alert", "investigated"),
+        "alert_volume": {"text": f"{_plural(n, 'alert')} in {m['days']} days · 5 needed",
+                         "ratio": min(1.0, n / 5)},
+        "human_approved_executed": _count(ex["human_executed"], 1, "approved fix"),
+        "approval_rate_known": (
+            {"text": f"{decided} decided · {m['proposal_approval_rate']:.0%} approved", "ratio": 1.0}
+            if decided else {"text": "Approve or reject one proposal", "ratio": 0.0}
+        ),
+        "auto_rule": _count(pol["auto_rules"], 1, "automatic rule"),
+        "auto_executed": _count(ex["auto_executed"], 1, "automatic action"),
+        "change_failure_rate": _ceiling(m["change_failure_rate"], 0.15, "of fixes failed",
+                                        "No fixes executed yet"),
+        "verdict_coverage": _share(nv, inv, 0.3, "investigation", "with a verdict"),
+        "runbooks_published": _count(m["runbooks_published"], 1, "runbook"),
+        "eval_runs": _count(m["eval_runs"], 1, "eval run"),
+        "escalation_rate": _ceiling(m["escalation_rate"], 0.5, "needed a human",
+                                    "No resolved incidents yet"),
+        "agreement_rate": (
+            {"text": f"{m['agreement_rate']:.0%} over {_plural(nv, 'verdict')} · 80% needed",
+             "ratio": min(1.0, m["agreement_rate"] / 0.8)}
+            if m["agreement_rate"] is not None else {"text": "No verdicts yet", "ratio": 0.0}
+        ),
+        "audit_chain_ok": {"text": "Hash chain verifies" if m["audit_chain_ok"] else "Hash chain is broken",
+                           "ratio": None},
+        "guardrails": {"text": "Circuit breaker and rate limit set" if pol["guardrails"]
+                       else "Not set in the saved policy", "ratio": None},
+    }
 
 
 def build_criteria(m: dict[str, Any], ex: dict[str, Any], pol: dict[str, Any]) -> list[dict[str, Any]]:
@@ -255,6 +327,9 @@ async def compute(db: AsyncSession, tenant_id: uuid.UUID, days: int = 30) -> dic
     m, ex = await metrics_mod.collect(db, tenant_id, days)
     pol = await _policy_facts(db, tenant_id)
     crit = build_criteria(m, ex, pol)
+    progress = build_progress(m, ex, pol)
+    for c in crit:
+        c["progress"] = progress.get(c["id"])
     level = level_from_criteria(crit)
     levels = []
     for lv in LEVELS:

@@ -142,7 +142,8 @@ async def test_metrics_and_levels(db, seeded):
     assert lv[4]["met"] is True and lv[4]["achieved"] is False
     assert lv[3]["met"] is False
     crit = {c["id"]: c for c in r["criteria"]}
-    assert set(crit["triage_rate"]) == {"level", "id", "label", "met", "value", "target"}
+    assert set(crit["triage_rate"]) == {"level", "id", "label", "met", "value", "target", "progress"}
+    assert "investigated" in crit["triage_rate"]["progress"]["text"]
     assert not crit["auto_rule"]["met"]
     assert any("auto_after_trust" in s for s in r["next_steps"])
     assert r["assessment"] is None

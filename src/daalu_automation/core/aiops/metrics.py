@@ -146,6 +146,8 @@ async def collect(db: AsyncSession, tenant_id: uuid.UUID, days: int = 30) -> tup
     failed_verification = sum(1 for a in executed if a.verified_resolved is False)
     auto_n = sum(1 for a in acts if a.auto_executed)
     extras = {
+        "alerts_triaged": len(triaged_alerts & alerts_by_id.keys()),
+        "verdicts_total": n_verdicts,
         "human_executed": sum(1 for a in executed if not a.auto_executed),
         "auto_executed": sum(1 for a in executed if a.auto_executed),
     }

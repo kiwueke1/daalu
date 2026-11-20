@@ -163,38 +163,55 @@ function LevelCard({
               </span>
             )}
           </div>
-          <p className="text-muted leading-snug">{l.description}</p>
           {criteria.length > 0 ? (
-            <ul className="space-y-1.5 mt-auto">
+            <ul className="space-y-2.5">
               {criteria.map((c) => (
-                <li key={c.id} className="flex gap-1.5 leading-snug">
-                  {c.met ? (
-                    <Check aria-hidden className="h-3.5 w-3.5 mt-px shrink-0 text-accent" />
-                  ) : (
-                    <X aria-hidden className="h-3.5 w-3.5 mt-px shrink-0 text-critical" />
-                  )}
-                  <span className="min-w-0">
-                    {c.label}
-                    {/* Numbers only for comparisons ("≥ 50%"); a yes/no target
-                        ("verifies", "known") is said by the icon alone. */}
-                    {typeof c.target === "string" && /^[≥≤]/.test(c.target) && (
-                      <span className="text-muted tabular-nums whitespace-nowrap">
-                        {" "}
-                        {fmtCriterionValue(c.value, c.target)} / {c.target}
-                      </span>
-                    )}
-                  </span>
-                </li>
+                <CriterionProgress key={c.id} c={c} />
               ))}
             </ul>
           ) : (
-            <p className="mt-auto text-muted">The starting point: nothing to meet.</p>
+            <p className="text-muted leading-snug">{l.description} The starting point: nothing to meet.</p>
           )}
           {blockedBy !== undefined && (
             <p className="text-muted">Levels count in order, so this waits for L{blockedBy}.</p>
           )}
         </div>
       </div>
+    </li>
+  );
+}
+
+/** One requirement on a level card's back: its name, a bar for "reach at
+ *  least" targets, and where the user stands in words. */
+function CriterionProgress({ c }: { c: Criterion }) {
+  const p = c.progress;
+  const Icon = c.met ? Check : X;
+  return (
+    <li className="leading-snug">
+      <div className="flex gap-1.5">
+        <Icon aria-hidden className={cn("h-3.5 w-3.5 mt-px shrink-0", c.met ? "text-accent" : "text-signal-critical")} />
+        <span className="min-w-0 font-medium">{c.label}</span>
+      </div>
+      {p && (
+        <div className="pl-5 mt-1 space-y-1">
+          {typeof p.ratio === "number" && (
+            <div
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(p.ratio * 100)}
+              aria-label={c.label}
+              className="h-1.5 rounded-full bg-line/60 overflow-hidden"
+            >
+              <div
+                className={cn("h-full rounded-full", c.met ? "bg-accent" : "bg-signal-warning")}
+                style={{ width: `${Math.max(p.ratio > 0 ? 4 : 0, p.ratio * 100)}%` }}
+              />
+            </div>
+          )}
+          <div className="text-muted tabular-nums">{p.text}</div>
+        </div>
+      )}
     </li>
   );
 }

@@ -1515,6 +1515,9 @@ export interface Maturity {
     met: boolean;
     value: unknown;
     target: unknown;
+    /** Where the user stands: "8 of 29 alerts investigated · 7 more to reach
+     *  50%". `ratio` fills a bar (0–1); null for "stay below" targets. */
+    progress?: { text: string; ratio: number | null } | null;
   }[];
   next_steps: string[];
   metrics: AiopsMetrics;
