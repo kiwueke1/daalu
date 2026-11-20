@@ -832,6 +832,14 @@ _SUMMARY_NUDGE = (
     "call any more tools. Post your final answer now, with exactly the three "
     "sections: ## Root cause, ## Background, ## Remediation plan."
 )
+# The loop ran out of turns before the write-up. Same contract, no tools.
+_FINAL_SUMMARY_NUDGE = (
+    "You are out of investigation turns. Do not call any more tools. Using only "
+    "the evidence already gathered above, post your final answer now, with "
+    "exactly the three sections: ## Root cause, ## Background, ## Remediation "
+    "plan. If an action is already queued for approval, describe it in the plan."
+)
+_MAX_LOOP_TURNS = 12
 # "## Remediation plan", or the bare / bold title on its own line, which the
 # tiles also accept.
 _REMEDIATION_HEADING_RE = re.compile(
@@ -966,7 +974,7 @@ async def _assistant_turn_loop(
     )
     cluster = _cluster_for_alert(alert)
     severity = alert.severity.value if alert.severity is not None else ""
-    for _ in range(12):  # hard cap to avoid runaway loops
+    for _ in range(_MAX_LOOP_TURNS):  # hard cap to avoid runaway loops
         # Re-read the transcript fresh each iteration so any tool
         # results we just persisted are included.
         msgs, _ = await _load_chat(db, tenant_id, alert.id)
@@ -1186,6 +1194,44 @@ async def _assistant_turn_loop(
         if any_pending_write or reply.get("stop_reason") == "end_turn":
             return
     logger.warning("alert_chat.loop_cap_hit", alert_id=str(alert.id))
+    if not summary_seen:
+        # Without this the investigation ends on a mid-flight "let me check…"
+        # message: the Root cause / Background / Remediation tiles stay empty
+        # even though the evidence (and often a queued fix) is all there.
+        await _final_summary(
+            db=db, tenant_id=tenant_id, alert=alert,
+            investigation=investigation, runbook_context=runbook_context,
+        )
+
+
+async def _final_summary(
+    *, db: AsyncSession, tenant_id, alert: Alert, investigation: Any,
+    runbook_context: str,
+) -> None:
+    """One tool-less turn that writes the three-section answer from the
+    evidence already in the transcript. Any tool call the model still makes
+    is dropped, so nothing is queued or run."""
+    msgs, _ = await _load_chat(db, tenant_id, alert.id)
+    try:
+        reply = await _ask_model(
+            alert=alert, transcript=msgs, tenant_id=tenant_id,
+            force_tool_use=False, nudge=_FINAL_SUMMARY_NUDGE,
+            runbook_context=runbook_context,
+        )
+    except Exception:  # noqa: BLE001 — the transcript so far still stands
+        logger.exception("alert_chat.final_summary_failed", alert_id=str(alert.id))
+        return
+    narration = "\n".join(
+        b.get("text", "") for b in reply["content"] if b.get("type") == "text"
+    ).strip()
+    if not narration:
+        return
+    inv_mod.note_answer(investigation, narration, model=str(reply.get("model") or ""))
+    db.add(AlertChatMessage(
+        tenant_id=tenant_id, alert_id=alert.id, role=ChatRole.assistant,
+        content=narration, tool_calls_json=[],
+    ))
+    await db.commit()
 
 
 # ── Endpoints ────────────────────────────────────────────────────────────

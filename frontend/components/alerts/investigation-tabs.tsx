@@ -1525,8 +1525,20 @@ interface Sections {
 const SECTION_LINE_RE =
   /^[ \t]*(?:#{1,6}[ \t]*)?(?:\*\*)?(root cause|background|context|remediation plan)(?:\*\*)?[ \t]*:?[ \t]*(?:\*\*)?[ \t]*$/gim;
 
+/**
+ * A bold label with the text on the same line ("**Root cause**: The pod…",
+ * "**Root cause:** The pod…"), which models also write. Split it into a
+ * heading and its body.
+ */
+const INLINE_SECTION_RE =
+  /^[ \t]*\*\*(root cause|background|context|remediation plan)(:?)\*\*[ \t]*(:?)[ \t]*(\S.*)$/gim;
+
 function normalizeHeadings(md: string): string {
-  return md.replace(SECTION_LINE_RE, (_line, title: string) => `## ${title}`);
+  return md
+    .replace(SECTION_LINE_RE, (_line, title: string) => `## ${title}`)
+    .replace(INLINE_SECTION_RE, (line, title: string, c1: string, c2: string, rest: string) =>
+      c1 || c2 ? `## ${title}\n${rest}` : line
+    );
 }
 
 function parseSections(md: string): Sections {
