@@ -4,7 +4,7 @@ Two views, reported side by side:
 
 * the **automatic level**, computed from data: the highest level whose
   criteria are met *and* every lower level's criteria are met (levels are
-  cumulative, so meeting L4's criteria without L3's leaves a team at L2);
+  cumulative, so meeting L3's criteria without L2's leaves a team at L1);
 * the **self-assessed level**, from yes/no answers about the organisational
   practices the data can't see. Same rule: the highest level whose questions,
   and every lower level's, are all answered yes (unanswered = no).
@@ -25,19 +25,19 @@ from daalu_automation.core.aiops import metrics as metrics_mod
 from daalu_automation.core.aiops import policy as policy_mod
 
 LEVELS: list[dict[str, Any]] = [
-    {"level": 0, "name": "Ad hoc",
-     "description": "Individuals paste logs into a chatbot. No shared context, no record."},
+    # Level 0 is the starting point, not a rung: nothing is measured yet.
+    {"level": 0, "name": "Not started",
+     "description": "People paste logs into a chatbot. No shared context, no record, nothing to measure."},
     {"level": 1, "name": "Assisted",
      "description": "AI reads alerts, logs, metrics and explains them. Read-only."},
-    {"level": 2, "name": "Proposing",
-     "description": "AI names the root cause and proposes a fix; every change is human-approved."},
+    {"level": 2, "name": "Supervised",
+     "description": "AI names the root cause and proposes the exact fix; every change waits for a human and is verified after it runs."},
     {"level": 3, "name": "Trusted",
-     "description": "Policy lets low-risk, proven actions run automatically."},
-    {"level": 4, "name": "Learning",
-     "description": "Every incident improves the next: verdicts, runbooks, evals, metrics."},
-    {"level": 5, "name": "Autonomous",
-     "description": "AI resolves most routine incidents; humans own policy and exceptions."},
+     "description": "Policy lets low-risk, proven actions run alone, earned by a learning loop: verdicts, runbooks, evals."},
+    {"level": 4, "name": "Autonomous",
+     "description": "AI resolves most routine incidents behind a kill switch, rate limits and an audit log; humans own policy and exceptions."},
 ]
+TOP_LEVEL = LEVELS[-1]["level"]
 LEVEL_NAMES = {lv["level"]: lv["name"] for lv in LEVELS}
 
 QUESTIONS: list[dict[str, Any]] = [
@@ -48,7 +48,7 @@ QUESTIONS: list[dict[str, Any]] = [
      "text": "The AI has read access to the same logs, metrics and cluster state on-call uses."},
     {"id": "no_private_chatbots", "level": 1,
      "text": "Investigations happen in a shared, recorded place instead of personal chatbot sessions."},
-    # L2 — Proposing
+    # L2 — Supervised
     {"id": "oncall_reviews_rca", "level": 2,
      "text": "On-call reviews the AI's root cause before acting on it."},
     {"id": "changes_via_approval", "level": 2,
@@ -62,21 +62,20 @@ QUESTIONS: list[dict[str, Any]] = [
      "text": "The team has agreed which actions are low-risk enough to run automatically, per environment."},
     {"id": "kill_switch_known", "level": 3,
      "text": "Everyone on call knows how to use the kill switch, and it has been tested."},
-    # L4 — Learning
-    {"id": "pir_includes_ai", "level": 4,
+    {"id": "pir_includes_ai", "level": 3,
      "text": "Post-incident reviews include the AI's investigation and a verdict on it."},
-    {"id": "runbooks_maintained", "level": 4,
+    {"id": "runbooks_maintained", "level": 3,
      "text": "Runbooks are kept as code and updated after incidents (including AI-drafted ones)."},
-    {"id": "evals_before_change", "level": 4,
+    {"id": "evals_before_change", "level": 3,
      "text": "Model or prompt changes are evaluated against the scenario suite before rollout."},
-    {"id": "metrics_reviewed", "level": 4,
+    {"id": "metrics_reviewed", "level": 3,
      "text": "AI-Ops metrics (agreement, change failure, escalation rate) are reviewed on a regular cadence."},
-    # L5 — Autonomous
-    {"id": "page_on_exceptions", "level": 5,
+    # L4 — Autonomous
+    {"id": "page_on_exceptions", "level": 4,
      "text": "Humans are paged only for exceptions the policy can't handle."},
-    {"id": "audit_reviewed", "level": 5,
+    {"id": "audit_reviewed", "level": 4,
      "text": "The audit log is verified and sampled regularly (security/compliance owns it)."},
-    {"id": "autonomy_budget", "level": 5,
+    {"id": "autonomy_budget", "level": 4,
      "text": "There's an explicit error budget for automatic changes; breaching it demotes autonomy."},
 ]
 QUESTION_IDS = {q["id"] for q in QUESTIONS}
@@ -84,7 +83,7 @@ QUESTION_IDS = {q["id"] for q in QUESTIONS}
 
 def self_assessed_level(answers: dict[str, bool]) -> int:
     level = 0
-    for lv in range(1, 6):
+    for lv in range(1, TOP_LEVEL + 1):
         qs = [q for q in QUESTIONS if q["level"] == lv]
         if qs and all(bool(answers.get(q["id"])) for q in qs):
             level = lv
@@ -212,28 +211,28 @@ def build_criteria(m: dict[str, Any], ex: dict[str, Any], pol: dict[str, Any]) -
           cfr is not None and cfr <= 0.15, cfr, "≤ 15%",
           f"Change-failure rate is {_fmt(cfr)}. Investigations → review the fixes that "
           "failed verification; narrow or demote the rules that produced them."),
-        c(4, "verdict_coverage", "Investigations with a human verdict",
+        c(3, "verdict_coverage", "Investigations with a human verdict",
           vc is not None and vc >= 0.3, vc, "≥ 30%",
           f"Verdict coverage is {_fmt(vc)}. Investigations → filter 'needs verdict' and "
           "mark root causes correct / partial / wrong."),
-        c(4, "runbooks_published", "Published runbooks",
+        c(3, "runbooks_published", "Published runbooks",
           m["runbooks_published"] >= 1, m["runbooks_published"], "≥ 1",
           "Runbooks → publish a runbook (review an AI-generated draft or import your "
           "existing markdown runbooks)."),
-        c(4, "eval_runs", "Eval runs in the window", m["eval_runs"] >= 1, m["eval_runs"], "≥ 1",
+        c(3, "eval_runs", "Eval runs in the window", m["eval_runs"] >= 1, m["eval_runs"], "≥ 1",
           "Evals → run a scenario: `daalu eval run dummy-app-bad-image --label <model>` "
           "against a test cluster."),
-        c(5, "escalation_rate", "Escalation rate",
+        c(4, "escalation_rate", "Escalation rate",
           esc is not None and esc <= 0.5, esc, "≤ 50%",
           f"{_fmt(esc)} of resolved incidents still needed a human. Autonomy policy → "
           "extend auto / auto_after_trust rules to your most frequent proven fixes."),
-        c(5, "agreement_rate", "Agreement rate",
+        c(4, "agreement_rate", "Agreement rate",
           agr is not None and agr >= 0.8, agr, "≥ 80%",
           f"Agreement rate is {_fmt(agr)}. Runbooks → add runbooks for the alerts the "
           "AI gets wrong, and use Evals to compare models before switching."),
-        c(5, "audit_chain_ok", "Audit chain verifies", m["audit_chain_ok"], m["audit_chain_ok"], "verifies",
+        c(4, "audit_chain_ok", "Audit chain verifies", m["audit_chain_ok"], m["audit_chain_ok"], "verifies",
           "Audit log → Verify: the hash chain is broken; investigate who edited audit rows."),
-        c(5, "guardrails", "Guardrails configured (circuit breaker + rate limit)",
+        c(4, "guardrails", "Guardrails configured (circuit breaker + rate limit)",
           pol["guardrails"], pol["guardrails"], "circuit breaker + hourly rate limit",
           "Autonomy policy → set `guardrails.circuit_breaker` and "
           "`guardrails.max_auto_actions_per_hour` in your saved policy."),
@@ -242,7 +241,7 @@ def build_criteria(m: dict[str, Any], ex: dict[str, Any], pol: dict[str, Any]) -
 
 def level_from_criteria(criteria: list[dict[str, Any]]) -> int:
     level = 0
-    for lv in range(1, 6):
+    for lv in range(1, TOP_LEVEL + 1):
         cs = [c for c in criteria if c["level"] == lv]
         if cs and all(c["met"] for c in cs):
             level = lv
@@ -317,8 +316,8 @@ def next_steps(criteria: list[dict[str, Any]], level: int, *, limit: int = 6) ->
     steps: list[str] = []
     for lv in (level + 1, level + 2):
         steps += [c["step"] for c in criteria if c["level"] == lv and not c["met"]]
-    if not steps and level >= 5:
-        steps.append("You're at Level 5. Keep verdict coverage and evals running so the "
+    if not steps and level >= TOP_LEVEL:
+        steps.append(f"You're at Level {TOP_LEVEL}. Keep verdict coverage and evals running so the "
                      "level holds; review the autonomy policy quarterly.")
     return steps[:limit]
 

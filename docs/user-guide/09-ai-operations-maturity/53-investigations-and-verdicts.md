@@ -5,7 +5,7 @@ started, how long it took to name a root cause, what it proposed, what
 happened to each proposal, how the alert ended, and — once someone on your
 team has looked — whether the AI was right. That record is an
 **investigation**. Grading it is the single most useful thing you can do to
-move from Level 2 to Level 4: it's how "the AI is usually right" becomes a
+move from Level 2 to Level 3: it's how "the AI is usually right" becomes a
 number instead of a feeling. That number is **agreement rate**, one of the
 five TRACE metrics (chapter 55).
 
@@ -135,7 +135,7 @@ Anyone on the team can give or change a verdict.
   correct and one partly right is 83%.
 - **Verdict coverage** = investigations with a verdict ÷ all investigations.
 
-Level 4 needs verdicts on at least 30% of investigations; Level 5 needs
+Level 3 needs verdicts on at least 30% of investigations; Level 4 needs
 agreement of at least 80%. You don't need to grade everything — a steady
 sample is enough — but grade the ones that went badly as well as the ones
 that went well, or the agreement number flatters the AI.

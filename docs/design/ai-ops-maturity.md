@@ -32,17 +32,19 @@ Supporting: `alerts_total`, `ai_triage_rate` (coverage), `verdict_coverage`
 
 | Level | Name | Definition | What Daalu provides |
 |---|---|---|---|
-| 0 | Ad hoc | Individuals paste logs into a chatbot. No shared context, no record. | — |
 | 1 | Assisted | AI reads alerts, logs, metrics and explains them. Read-only. | Auto-investigation, read-only tools, briefings |
-| 2 | Proposing | AI names the root cause and proposes a fix; every change is human-approved. | Pending actions, approve/reject, verification |
-| 3 | Trusted | Policy lets low-risk, proven actions run automatically. | Autonomy policy as code, trust thresholds, previews, multi-approver |
-| 4 | Learning | Every incident improves the next: verdicts, runbooks, evals, metrics. | Investigations + verdicts, runbooks as code, eval harness, metrics |
-| 5 | Autonomous | AI resolves most routine incidents; humans own policy and exceptions. | Auto-execution with guardrails (kill switch, circuit breaker, freeze windows, rate limit), audit chain, exception queue, MCP for any agent |
+| 2 | Supervised | AI names the root cause and proposes the exact fix; every change waits for a human and is verified after it runs. | Pending actions, approve/reject, verification |
+| 3 | Trusted | Policy lets specific low-risk, proven actions run alone, earned by a learning loop: verdicts, runbooks, evals. | Autonomy policy as code, trust thresholds, previews, multi-approver; investigations + verdicts, runbooks as code, eval harness, metrics |
+| 4 | Autonomous | AI resolves most routine incidents; humans own policy and exceptions. | Auto-execution with guardrails (kill switch, circuit breaker, freeze windows, rate limit), audit chain, exception queue, MCP for any agent |
+
+Before L1 a team is **not started** (reported as level 0): people paste logs
+into a chatbot, with no shared context, no record and nothing to measure. It
+is the starting point, not a level.
 
 The level a team is *at* is the highest level whose criteria are all met
 (section 7). Levels are cumulative. Three TRACE metrics gate a level
 (change-failure rate `change_failure_rate` → L3; escalation rate
-`escalation_rate` and agreement rate `agreement_rate` → L5); the two speed metrics gate none, on purpose, and are tracked against
+`escalation_rate` and agreement rate `agreement_rate` → L4); the two speed metrics gate none, on purpose, and are tracked against
 the team's own history.
 
 ## 2. Data model (`src/daalu_automation/models/aiops.py`, migration `0034_aiops_maturity`)
@@ -223,9 +225,8 @@ level below:
 
 * **L1**: `ai_triage_rate ≥ 0.5` and `alerts_total ≥ 5`.
 * **L2**: ≥ 1 human-approved action executed and `proposal_approval_rate` known.
-* **L3**: `change_failure_rate ≤ 0.15`, active policy with at least one `auto`/`auto_after_trust` rule, ≥ 1 auto action executed.
-* **L4**: `verdict_coverage ≥ 0.3`, `runbooks_published ≥ 1`, `eval_runs ≥ 1` in the window.
-* **L5**: `escalation_rate ≤ 0.5`, `agreement_rate ≥ 0.8`, `audit_chain_ok`, guardrails configured (circuit breaker + rate limit).
+* **L3**: `change_failure_rate ≤ 0.15`, active policy with at least one `auto`/`auto_after_trust` rule, ≥ 1 auto action executed, `verdict_coverage ≥ 0.3`, `runbooks_published ≥ 1`, `eval_runs ≥ 1` in the window.
+* **L4**: `escalation_rate ≤ 0.5`, `agreement_rate ≥ 0.8`, `audit_chain_ok`, guardrails configured (circuit breaker + rate limit).
 
 Time to triage (`median_time_to_triage_s`) and time to resolve
 (`median_time_to_resolve_s`) gate no level:

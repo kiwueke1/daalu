@@ -4,7 +4,7 @@ The autonomy policy is a per-tenant YAML document that decides, for every
 **write** the agent wants to make, whether the write is denied, waits for
 human approval, or runs on its own. It is the practice that turns Level 2
 (every change approved) into Level 3 (proven, low-risk changes run
-automatically), and its guardrails are what make Level 5 safe.
+automatically), and its guardrails are what make Level 4 safe.
 
 Code: `src/daalu_automation/core/aiops/policy.py` (schema, `decide`,
 persistence), `src/daalu_automation/api/routers/aiops_policy.py` (API).

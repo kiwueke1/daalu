@@ -68,7 +68,7 @@ as more fixes are proposed, approved and, later, run automatically.
 **What:** how often your team agreed with the AI's root cause: (correct + half
 of partly right) ÷ all verdicts.
 **Tile:** **A · Agreement rate**, with verdict coverage underneath.
-**Healthy:** Level 5 needs 80% or more. It only means something once you have
+**Healthy:** Level 4 needs 80% or more. It only means something once you have
 a reasonable number of verdicts — see verdict coverage below.
 
 ### Change-failure rate
@@ -86,7 +86,7 @@ widen automatic rules.
 approved fix, or manually), the share that needed a human: approved or
 resolved manually. It's the inverse of the share resolved automatically.
 **Tile:** **E · Escalation rate**, with the auto-resolved count.
-**Healthy:** Level 5 needs 50% or less.
+**Healthy:** Level 4 needs 50% or less.
 
 ---
 
@@ -108,7 +108,7 @@ is off.
 
 **What:** investigations with a verdict ÷ all investigations.
 **Shown:** under the agreement rate tile and in the criteria table.
-**Healthy:** Level 4 needs 30% or more.
+**Healthy:** Level 3 needs 30% or more.
 
 ### Approval rate
 
@@ -124,20 +124,20 @@ need work — read the rejected ones.
 
 **What:** whether your audit log's hash chain verifies end to end.
 **Tile:** **Audit chain** — **Intact** or **Broken**, with a link to the audit
-log. Level 5 needs it intact. See chapter 56.
+log. Level 4 needs it intact. See chapter 56.
 
 ### Runbooks published / generated
 
 **What:** how many runbooks are published, and how many the AI has drafted
 in total. Current totals.
-**Shown:** the **Published runbooks** row of the criteria table. Level 4
+**Shown:** the **Published runbooks** row of the criteria table. Level 3
 needs at least one published.
 
 ### Eval runs and mean score
 
 **What:** eval runs started in the window and their average score.
 **Shown:** the **Eval runs in the window** row of the criteria table; the
-details are on the **Evals** page (chapter 57). Level 4 needs at least one.
+details are on the **Evals** page (chapter 57). Level 3 needs at least one.
 
 ---
 
@@ -152,15 +152,15 @@ From the metric side:
 | Time to triage | Key | — | Tracked at every level |
 | Time to resolve (MTTR) | Key | — | Tracked at every level |
 | Change-failure rate | Key | Level 3 | 15% or less |
-| Escalation rate | Key | Level 5 | 50% or less |
-| Agreement rate | Key | Level 5 | 80% or more |
+| Escalation rate | Key | Level 4 | 50% or less |
+| Agreement rate | Key | Level 4 | 80% or more |
 | Alerts in the window | Supporting | Level 1 | 5 or more |
 | AI triage rate | Supporting | Level 1 | 50% or more |
 | Approval rate | Supporting | Level 2 | Known (at least one decision) |
-| Verdict coverage | Supporting | Level 4 | 30% or more |
-| Published runbooks | Supporting | Level 4 | 1 or more |
-| Eval runs | Supporting | Level 4 | 1 or more |
-| Audit chain | Supporting | Level 5 | Intact |
+| Verdict coverage | Supporting | Level 3 | 30% or more |
+| Published runbooks | Supporting | Level 3 | 1 or more |
+| Eval runs | Supporting | Level 3 | 1 or more |
+| Audit chain | Supporting | Level 4 | Intact |
 
 The two speed metrics gate no level, on purpose. How fast a team diagnoses
 and resolves depends on its systems and its alert mix, so no single threshold
@@ -206,7 +206,7 @@ What a healthy climb looks like: the **Investigated** line hugging the
 ## Questions people ask
 
 **Why did our level drop?** Levels are recomputed for the window. If you
-switch to 7 days and there were no eval runs this week, the Level 4 eval
+switch to 7 days and there were no eval runs this week, the Level 3 eval
 criterion isn't met. Flip the level cards, or open **All criteria**, for the
 first "not yet".
 

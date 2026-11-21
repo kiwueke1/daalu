@@ -28,7 +28,7 @@ export const STARTER_POLICIES: StarterPolicy[] = [
     label: "Level 2 — every change approved",
     level: 2,
     description: "The AI proposes, a human approves every write. Nothing runs on its own.",
-    yaml: `# Level 2 (Proposing): every write the AI proposes needs one human approval.
+    yaml: `# Level 2 (Supervised): every write the AI proposes needs one human approval.
 version: 1
 investigate_automatically: true
 defaults:
@@ -87,12 +87,12 @@ rules:
 `,
   },
   {
-    id: "level-5-guardrails",
-    label: "Level 5 — trusted, with guardrails",
-    level: 5,
+    id: "level-4-guardrails",
+    label: "Level 4 — autonomous, with guardrails",
+    level: 4,
     description:
       "Routine fixes run everywhere once earned; patches and external calls stay human-gated; kill switch, breaker, freeze window and rate cap all on.",
-    yaml: `# Level 5 (Autonomous): the AI resolves routine incidents; humans own the
+    yaml: `# Level 4 (Autonomous): the AI resolves routine incidents; humans own the
 # policy and the exceptions. Guardrails narrow auto back to approve.
 version: 1
 investigate_automatically: true

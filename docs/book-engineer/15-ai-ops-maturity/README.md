@@ -42,12 +42,11 @@ criteria table):
 
 | Level | Name | Gated by |
 |---|---|---|
-| 0 | Ad hoc | Nothing: the starting point. |
+| — | Not started | Nothing: the starting point, not a level. |
 | 1 | Assisted | `alerts_total ≥ 5`, `ai_triage_rate ≥ 0.5` |
-| 2 | Proposing | ≥ 1 human-approved write executed, `proposal_approval_rate` known |
-| 3 | Trusted | change-failure rate ≤ 0.15 (`change_failure_rate`), an `auto` rule saved, ≥ 1 automatic write executed |
-| 4 | Learning | `verdict_coverage ≥ 0.3`, `runbooks_published ≥ 1`, `eval_runs ≥ 1` |
-| 5 | Autonomous | escalation rate ≤ 0.5 (`escalation_rate`), agreement rate ≥ 0.8 (`agreement_rate`), `audit_chain_ok`, guardrails saved |
+| 2 | Supervised | ≥ 1 human-approved write executed, `proposal_approval_rate` known |
+| 3 | Trusted | change-failure rate ≤ 0.15 (`change_failure_rate`), an `auto` rule saved, ≥ 1 automatic write executed, `verdict_coverage ≥ 0.3`, `runbooks_published ≥ 1`, `eval_runs ≥ 1` |
+| 4 | Autonomous | escalation rate ≤ 0.5 (`escalation_rate`), agreement rate ≥ 0.8 (`agreement_rate`), `audit_chain_ok`, guardrails saved |
 
 The two speed metrics (time to triage, time to resolve) gate no level, on purpose: they depend on each team's
 systems and alert mix. They are what climbing the levels should improve.
@@ -56,7 +55,7 @@ systems and alert mix. They are what climbing the levels should improve.
 
 | # | Chapter | What it covers |
 |---|---------|----------------|
-| 81 | [The maturity model](81-the-maturity-model.md) | The TRACE and supporting metrics, how they map to the six levels, how the automatic level is computed, and a map of every Daalu feature (old and new) to the level it serves. |
+| 81 | [The maturity model](81-the-maturity-model.md) | The TRACE and supporting metrics, how they map to the four levels, how the automatic level is computed, and a map of every Daalu feature (old and new) to the level it serves. |
 | 82 | [Autonomy policy as code](82-autonomy-policy.md) | The policy schema, `decide()`, versioned storage, the API, and why the policy governs writes only. |
 | 83 | [Guardrails and automatic execution](83-guardrails-and-auto-execution.md) | `auto` / `auto_after_trust`, trust stats, kill switch, circuit breaker, freeze windows, hourly cap, multi-approver, and the background execute-then-verify path. |
 | 84 | [Investigations and verdicts](84-investigations-and-verdicts.md) | The per-alert investigation record, root-cause detection, outcome verification, `manual` resolution, verdicts, automatic investigation. |

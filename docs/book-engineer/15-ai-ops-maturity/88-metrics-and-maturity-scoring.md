@@ -117,17 +117,16 @@ Known inaccuracies:
 |---|---|---|
 | 1 | `alerts_total ≥ 5`, `ai_triage_rate ≥ 0.5` | — |
 | 2 | `proposal_approval_rate` not null | ≥ 1 human-approved write executed |
-| 3 | `change_failure_rate ≤ 0.15` | an `auto` / `auto_after_trust` rule saved; ≥ 1 automatic write executed |
-| 4 | `verdict_coverage ≥ 0.3`, `runbooks_published ≥ 1`, `eval_runs ≥ 1` | — |
-| 5 | `escalation_rate ≤ 0.5`, `agreement_rate ≥ 0.8`, `audit_chain_ok` | guardrails saved (circuit breaker + hourly cap) |
+| 3 | `change_failure_rate ≤ 0.15`, `verdict_coverage ≥ 0.3`, `runbooks_published ≥ 1`, `eval_runs ≥ 1` | an `auto` / `auto_after_trust` rule saved; ≥ 1 automatic write executed |
+| 4 | `escalation_rate ≤ 0.5`, `agreement_rate ≥ 0.8`, `audit_chain_ok` | guardrails saved (circuit breaker + hourly cap) |
 
 Three of the five TRACE metrics gate a level: change-failure rate (L3),
-escalation rate and agreement rate (L5). Time to triage
+escalation rate and agreement rate (L4). Time to triage
 (`median_time_to_triage_s`) and time to resolve
 (`median_time_to_resolve_s`) gate none (chapter 81 explains why); they are
 returned in `metrics` and shown as tiles, and that is all.
 
-`maturity.compute` (`core/aiops/maturity.py:254`) returns:
+`maturity.compute` (`core/aiops/maturity.py:325`) returns:
 
 ```
 {level, name,
@@ -141,15 +140,15 @@ returned in `metrics` and shown as tiles, and that is all.
 
 `levels[].met` is "this level's own criteria hold"; `achieved` is the
 cumulative "this level is reached". The UI ladder shows both, so a team
-can see that it already meets the Level 4 criteria while being held at
-Level 2 by Level 3.
+can see that it already meets the Level 3 criteria while being held at
+Level 1 by Level 2.
 
 The fourteen criteria, by id, are listed in chapter 81.
-`build_criteria` (`core/aiops/maturity.py:103`) is pure: it takes the
+`build_criteria` (`core/aiops/maturity.py:174`) is pure: it takes the
 metrics, two counts that aren't in the public metrics shape
 (`human_executed`, `auto_executed`, from `collect`'s `extras`), and the
-saved-policy facts (`_policy_facts`, `:182`). Each criterion carries a
-`step` sentence used by `next_steps` (`:243`): unmet criteria of the next
+saved-policy facts (`_policy_facts`, `:253`). Each criterion carries a
+`step` sentence used by `next_steps` (`:314`): unmet criteria of the next
 level, then of the one after, at most six.
 
 The design doc's response shape omits `achieved`, the assessment's `id` and
@@ -163,7 +162,7 @@ team in weeks, not a benchmark: 50 % triage (half your alerts reach the AI),
 ≤ 15 % change failure (the upper bound of DORA's "high performer" band),
 30 % verdict coverage (a sample big enough to mean something without
 grading every alert), 80 % agreement rate and at most 50 % escalation rate for
-Level 5. They live in one function so that a v0.2 can change them in one
+Level 4. They live in one function so that a v0.2 can change them in one
 place; the spec's versioning section (§7) lets pre-1.0 minor versions
 tighten them and says implementations should report the thresholds they
 applied, which `criteria[].target` does.
@@ -174,13 +173,15 @@ applied, which `criteria[].target` does.
 
 `POST /aiops/maturity/assessment {answers: {question_id: bool}}`
 (`api/routers/aiops_metrics.py:41`) → `save_assessment`
-(`core/aiops/maturity.py:225`): unknown ids are a 422, unanswered questions
+(`core/aiops/maturity.py:296`): unknown ids are a 422, unanswered questions
 are stored as `false`, the level is computed with the same cumulative rule,
 and a new `maturity_assessments` row is inserted (history is kept; the
 latest is reported). Any user may submit one; it writes no audit event.
 
-The 16 questions (three per level for L1–L3 and L5, four for L4) are in
-`QUESTIONS` (`core/aiops/maturity.py:42`). They ask about the organisation:
+The 16 questions (three each for L1, L2 and L4, seven for L3) are in
+`QUESTIONS` (`core/aiops/maturity.py:43`). Migration
+`0036_maturity_four_levels` remapped assessments saved under the old
+six-level numbering (3→2, 4→3, 5→4). They ask about the organisation:
 whether on-call reviews the AI's root cause before acting, whether the
 policy goes through code review, whether post-incident reviews include the
 AI's investigation, whether there is an error budget for automatic changes.

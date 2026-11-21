@@ -111,7 +111,7 @@ Click **Verify chain** (top right). Daalu walks your entire chain from event
 Everything before seq *X* is still trustworthy; *X* is where to look.
 
 The **Maturity** page runs the same check every time it loads and shows it on
-the **Audit chain** tile. An intact chain is a Level 5 criterion.
+the **Audit chain** tile. An intact chain is a Level 4 criterion.
 
 ### What to do if the chain is broken
 

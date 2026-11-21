@@ -4,7 +4,7 @@ DevOps gave teams four numbers (DORA) anyone could compute, and practices
 written as code. The AI-Ops Maturity Model does the same for how an
 infrastructure team works with AI. It starts with **five TRACE metrics** that
 say how well the AI is doing, then uses thresholds on those metrics to place
-a team on **six levels**, so the level is measured, never claimed.
+a team on **four levels**, so the level is measured, never claimed.
 
 This page is the short version for a team deciding where it stands and what
 to do next: the metrics first, then how they map to the levels. The standard itself is [`spec/README.md`](../spec/README.md)
@@ -64,16 +64,18 @@ For operators: [ch. 55](user-guide/09-ai-operations-maturity/55-metrics-dashboar
 
 ## How the metrics map to the levels
 
-### The six levels
+### The four levels
 
 | Level | Name | What it looks like | You're here if |
 |---|---|---|---|
-| 0 | Ad hoc | Engineers paste logs into a chatbot. Nothing is shared or recorded. | The AI's work disappears when the browser tab closes. |
 | 1 | Assisted | The AI reads alerts, logs, metrics and cluster state and explains them. Read-only. | Most alerts get an AI investigation that the whole team can see. |
-| 2 | Proposing | The AI names the root cause and proposes a fix. Every change is approved by a human and verified afterwards. | Fixes go through an approve button, not a terminal on the side. |
-| 3 | Trusted | A reviewed policy lets low-risk, proven actions run on their own. | Some fixes run without a human, under rules you wrote. |
-| 4 | Learning | Every incident improves the next: verdicts on root causes, runbooks, evals, metrics. | You grade the AI's diagnoses and benchmark models before switching. |
-| 5 | Autonomous | The AI resolves most routine incidents. Humans own the policy and the exceptions. | People get paged for what the policy can't handle. |
+| 2 | Supervised | The AI names the root cause and proposes the exact fix. Every change waits for a human and is verified after it runs. | Fixes go through an approve button, not a terminal on the side. |
+| 3 | Trusted | A reviewed policy lets specific low-risk, proven actions run on their own, earned by a learning loop: verdicts on root causes, runbooks, evals. | Some fixes run without a human, under rules you wrote, and you grade the AI's diagnoses and benchmark models before switching. |
+| 4 | Autonomous | The AI resolves most routine incidents. Humans own the policy and the exceptions. | People get paged for what the policy can't handle. |
+
+Before Level 1 a team is **not started**: engineers paste logs into a
+chatbot, with no shared context, no record and nothing to measure. That is
+the starting point, not a level.
 
 Levels are cumulative: you're at the highest level whose criteria, and
 every lower level's, all hold. Daalu measures this from what actually
@@ -88,13 +90,12 @@ about what ran and what the saved policy allows:
 |---|---|
 | 1 | Alerts in the window ≥ 5, and AI triage rate ≥ 50 %. |
 | 2 | At least one human-approved fix ran, and the approval rate is measured (at least one proposal approved or rejected). |
-| 3 | Change-failure rate ≤ 15 %; your saved autonomy policy has at least one `auto` or `auto_after_trust` rule, and at least one automatic fix ran. |
-| 4 | Verdict coverage ≥ 30 %, at least one runbook published, and at least one eval run in the window. |
-| 5 | Escalation rate ≤ 50 %, agreement rate ≥ 80 %, the audit chain verifies, and the saved policy has a circuit breaker and an hourly cap on automatic actions. |
+| 3 | Change-failure rate ≤ 15 %; your saved autonomy policy has at least one `auto` or `auto_after_trust` rule, and at least one automatic fix ran; verdict coverage ≥ 30 %, at least one runbook published, and at least one eval run in the window. |
+| 4 | Escalation rate ≤ 50 %, agreement rate ≥ 80 %, the audit chain verifies, and the saved policy has a circuit breaker and an hourly cap on automatic actions. |
 
 Read from the metric side, three of the five TRACE metrics gate a level:
 **Change-failure rate** gates Level 3, and **escalation rate** and
-**Agreement rate** gate Level 5. **Time to triage** and **time to resolve**
+**Agreement rate** gate Level 4. **Time to triage** and **time to resolve**
 gate nothing, on purpose: every team's systems and alert mix differ, so
 there is no fair single threshold. They are what climbing the levels is meant
 to improve; compare them against your own history.
@@ -162,7 +163,7 @@ and alerts flowing in.
   approval until each has 10 verified successes with a low failure rate, so
   adding them early costs nothing.
 
-**Days 46–90: Level 3 → 4, aim for 5.**
+**Days 46–90: reach Level 3, aim for 4.**
 
 * Watch **Autonomy policy → Trust by rule** as rules earn automatic
   execution. Make sure everyone on call knows the **Pause all automation**
@@ -175,7 +176,7 @@ and alerts flowing in.
   quarter. Extend `auto_after_trust` to your most frequent proven fixes in
   production, with a freeze window for your riskiest hours.
 
-Level 5 isn't a target date; it is what the numbers look like once most
+Level 4 isn't a target date; it is what the numbers look like once most
 routine incidents are fixed by rules that earned it, and the humans spend
 their time on the policy and the exceptions.
 

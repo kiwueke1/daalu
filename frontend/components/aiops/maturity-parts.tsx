@@ -56,12 +56,12 @@ export function useReveal() {
 type Level = Maturity["levels"][number];
 type Criterion = Maturity["criteria"][number];
 
-/** The 0–5 ladder. Each card shows the level and whether it's met; hover
+/** The four-level ladder (Level 0 is the starting point, not a card). Each card shows the level and whether it's met; hover
  *  (or focus, or tap) flips it to the description and that level's criteria. */
 export function MaturityLadder({ maturity }: { maturity: Maturity }) {
   return (
-    <ol className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-      {maturity.levels.map((l) => (
+    <ol className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+      {maturity.levels.filter((l) => l.level > 0).map((l) => (
         <LevelCard
           key={l.level}
           level={l}
@@ -69,7 +69,7 @@ export function MaturityLadder({ maturity }: { maturity: Maturity }) {
           // A level counts only when every level below it is met too, so a met
           // level above the current one is "met but blocked", not achieved.
           blockedBy={
-            l.met ? maturity.levels.find((b) => b.level < l.level && !b.met)?.level : undefined
+            l.met ? maturity.levels.find((b) => b.level > 0 && b.level < l.level && !b.met)?.level : undefined
           }
           criteria={maturity.criteria.filter((c) => c.level === l.level)}
         />
@@ -117,7 +117,7 @@ function LevelCard({
       )}
     >
       {/* The front sets the card's size; the back overlays it and may grow
-          past the bottom (L5 has four criteria), so the row never reflows. */}
+          past the bottom (L3 has five criteria), so the row never reflows. */}
       <div
         className="relative h-full [transform-style:preserve-3d] transition-transform duration-[var(--dur-slow)] ease-[var(--ease-out)]"
         style={{ transform: open ? "rotateY(180deg)" : undefined }}

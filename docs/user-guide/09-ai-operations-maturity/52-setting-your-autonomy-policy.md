@@ -241,7 +241,7 @@ yours, test it, and save.
 *The AI proposes, a human approves every write. Nothing runs on its own.*
 
 ```yaml
-# Level 2 (Proposing): every write the AI proposes needs one human approval.
+# Level 2 (Supervised): every write the AI proposes needs one human approval.
 version: 1
 investigate_automatically: true
 defaults:
@@ -299,13 +299,13 @@ rules:
     approvers: 2
 ```
 
-### Level 5 — trusted, with guardrails
+### Level 4 — autonomous, with guardrails
 
 *Routine fixes run everywhere once earned; patches and external calls stay
 human-gated; kill switch, breaker, freeze window and rate cap all on.*
 
 ```yaml
-# Level 5 (Autonomous): the AI resolves routine incidents; humans own the
+# Level 4 (Autonomous): the AI resolves routine incidents; humans own the
 # policy and the exceptions. Guardrails narrow auto back to approve.
 version: 1
 investigate_automatically: true
@@ -427,7 +427,7 @@ propose its next step, which will now wait for approval under that rule.
 
 If your policy has no `circuit_breaker`, nothing trips: a failed automatic fix
 is still recorded and still counts against the rule's failure rate, but the
-rule keeps running automatically. That's why the Level 5 criteria require a
+rule keeps running automatically. That's why the Level 4 criteria require a
 breaker.
 
 ---

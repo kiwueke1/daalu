@@ -135,12 +135,13 @@ async def test_metrics_and_levels(db, seeded):
     assert sum(d["auto_resolved"] for d in m["daily"]) == 1
     assert sum(d["approved_resolved"] for d in m["daily"]) == 1
 
-    # No saved policy: L3 unmet, so L4 (whose own criteria ARE met) doesn't count.
+    # No saved policy: L3 unmet (its learning criteria are met, the auto rule isn't).
     r = await maturity.compute(db, tid)
-    assert r["level"] == 2 and r["name"] == "Proposing"
+    assert r["level"] == 2 and r["name"] == "Supervised"
     lv = {x["level"]: x for x in r["levels"]}
-    assert lv[4]["met"] is True and lv[4]["achieved"] is False
-    assert lv[3]["met"] is False
+    assert lv[3]["met"] is False and lv[3]["achieved"] is False
+    crit0 = {c["id"]: c for c in r["criteria"]}
+    assert crit0["verdict_coverage"]["level"] == 3 and crit0["verdict_coverage"]["met"]
     crit = {c["id"]: c for c in r["criteria"]}
     assert set(crit["triage_rate"]) == {"level", "id", "label", "met", "value", "target", "progress"}
     assert "investigated" in crit["triage_rate"]["progress"]["text"]
@@ -159,12 +160,12 @@ async def test_metrics_and_levels(db, seeded):
     assert not crit["change_failure_rate"]["met"]
     assert r["level"] == 2
 
-    # Fix the failure → L3 met → L4 (already met) counts. L5 not (escalation rate 67%).
+    # Fix the failure → L3 met. L4 not (escalation rate 67%).
     await db.execute(update(AlertAction).where(AlertAction.tool_call_id == "t4")
                      .values(verified_resolved=True))
     await db.commit()
     r = await maturity.compute(db, tid)
-    assert r["level"] == 4 and r["name"] == "Learning"
+    assert r["level"] == 3 and r["name"] == "Trusted"
     crit = {c["id"]: c for c in r["criteria"]}
     assert crit["guardrails"]["met"] and crit["audit_chain_ok"]["met"]
     assert not crit["escalation_rate"]["met"] and not crit["agreement_rate"]["met"]
@@ -180,7 +181,7 @@ async def test_empty_tenant_is_level_0(db, seeded):
     assert m["agreement_rate"] is None and m["change_failure_rate"] is None
     assert len(m["daily"]) == 7
     r = await maturity.compute(db, seeded.tenant_a_id, days=7)
-    assert r["level"] == 0 and r["name"] == "Ad hoc"
+    assert r["level"] == 0 and r["name"] == "Not started"
     assert r["next_steps"]
 
 
@@ -188,16 +189,16 @@ def test_level_rules_are_cumulative():
     def crit(met_by_level):
         return [{"level": lv, "met": met} for lv, mets in met_by_level.items() for met in mets]
 
-    assert maturity.level_from_criteria(crit({1: [True], 2: [True], 3: [False], 4: [True], 5: [True]})) == 2
+    assert maturity.level_from_criteria(crit({1: [True], 2: [True], 3: [False], 4: [True]})) == 2
     assert maturity.level_from_criteria(crit({1: [True, False], 2: [True]})) == 0
-    assert maturity.level_from_criteria(crit({1: [True], 2: [True], 3: [True], 4: [True], 5: [True]})) == 5
+    assert maturity.level_from_criteria(crit({1: [True], 2: [True], 3: [True], 4: [True]})) == 4
 
     l1_l2 = {q["id"]: True for q in maturity.QUESTIONS if q["level"] <= 2}
     assert maturity.self_assessed_level(l1_l2) == 2
     all_but_l3 = {q["id"]: q["level"] != 3 for q in maturity.QUESTIONS}
     assert maturity.self_assessed_level(all_but_l3) == 2
     assert maturity.self_assessed_level({}) == 0
-    assert {q["level"] for q in maturity.QUESTIONS} == {1, 2, 3, 4, 5}
+    assert {q["level"] for q in maturity.QUESTIONS} == {1, 2, 3, 4}
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -222,7 +223,7 @@ async def test_metrics_maturity_api(client, db, seeded):
     assert {"level", "name", "levels", "criteria", "next_steps", "metrics", "assessment",
             "questions"} <= set(body)
     assert body["assessment"]["level"] == 2
-    assert len(body["levels"]) == 6
+    assert len(body["levels"]) == 5  # 0 = not started, then 1-4
 
     # Tenant B has no assessment.
     r = await client.get("/api/v1/aiops/maturity",

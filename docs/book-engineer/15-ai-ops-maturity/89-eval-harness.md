@@ -6,7 +6,7 @@ workload on purpose, lets Daalu's agent investigate the resulting alert
 exactly as it would in production, grades what it did against an answer key
 written in advance, and records the run under a label (usually a model
 name). The leaderboard then compares labels on the same outages. This is a
-Level 4 criterion (≥ 1 eval run in the window) and the basis for deciding
+Level 3 criterion (≥ 1 eval run in the window) and the basis for deciding
 which model to trust with more autonomy.
 
 Code: `src/daalu_automation/evals/` (`scenario.py`, `runner.py`,

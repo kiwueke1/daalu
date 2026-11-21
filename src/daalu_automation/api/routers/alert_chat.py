@@ -1029,7 +1029,7 @@ async def _assistant_turn_loop(
                 if err:
                     write_errors[tc["id"]] = err
                     continue
-                # Autonomy policy (AOMM L3/L5): deny / approve / auto.
+                # Autonomy policy (AOMM L3/L4): deny / approve / auto.
                 decision = await policy_mod.decide_for_tenant(
                     db, tenant_id,
                     policy_mod.write_request_for(
@@ -1474,7 +1474,7 @@ async def _record_outcome(
     db: AsyncSession, *, tenant_id, alert: Alert, action: AlertAction,
     output: str, is_error: bool, resolved: bool,
 ) -> None:
-    """Learning loop (AOMM L4) + guardrails (L5) after a write is verified:
+    """Learning loop + guardrails (AOMM L3/L4) after a write is verified:
     store the outcome on the action and investigation, write the audit trail,
     trip the circuit breaker when an automatic action didn't fix things, and
     draft a runbook from a verified fix."""

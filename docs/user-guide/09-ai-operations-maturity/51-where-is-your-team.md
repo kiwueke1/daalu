@@ -4,7 +4,7 @@ The **Maturity** page answers one question: how well does your team work
 with the AI SRE today? It doesn't ask you to fill in a survey to find out.
 It measures what happened over a window (the last 7, 30 or 90 days), reports
 the metrics, and uses thresholds on those metrics to place you on the AI-Ops
-Maturity Model ladder from Level 0 to Level 5.
+Maturity Model ladder from Level 1 to Level 4.
 
 URL: `https://daalu.example.com/maturity` (sidebar: **Insights → Maturity**).
 
@@ -33,27 +33,29 @@ chain** verifies. [Chapter 55](55-metrics-dashboard.md) explains every one.
 
 ## How the metrics map to the levels
 
-### The six levels
+### The four levels
 
 | Level | Name | In one sentence |
 |---|---|---|
-| 0 | Ad hoc | Individuals paste logs into a chatbot. No shared context, no record. |
 | 1 | Assisted | AI reads alerts, logs, metrics and explains them. Read-only. |
-| 2 | Proposing | AI names the root cause and proposes a fix; every change is human-approved. |
-| 3 | Trusted | Policy lets low-risk, proven actions run automatically. |
-| 4 | Learning | Every incident improves the next: verdicts, runbooks, evals, metrics. |
-| 5 | Autonomous | AI resolves most routine incidents; humans own policy and exceptions. |
+| 2 | Supervised | AI names the root cause and proposes the exact fix; every change waits for a human and is verified after it runs. |
+| 3 | Trusted | Policy lets low-risk, proven actions run alone, earned by a learning loop: verdicts, runbooks, evals. |
+| 4 | Autonomous | AI resolves most routine incidents behind a kill switch, rate limits and an audit log; humans own policy and exceptions. |
 
 Those are the exact descriptions the page shows on each level's tile.
 
+Before Level 1 your team is **not started**: people paste logs into a
+chatbot, with no shared context, no record and nothing to measure. That is
+the starting point, not a level.
+
 ### The thresholds behind each level
 
-Each level from 1 to 5 is a short list of criteria. Most are thresholds on
+Each level from 1 to 4 is a short list of criteria. Most are thresholds on
 the metrics above; a few are facts about what ran and what your saved policy
 allows. Daalu checks every one against the data in the window. Your
 **automatic level** is the highest level whose criteria are all met **and**
 every level below it is met too. Levels are cumulative: if you meet Level
-4's criteria but not Level 3's, you are at Level 2.
+3's criteria but not Level 2's, you are at Level 1.
 
 | Level | Criterion (as shown on the page) | Metric or fact behind it | Met when |
 |---|---|---|---|
@@ -64,16 +66,16 @@ every level below it is met too. Levels are cumulative: if you meet Level
 | 3 | Policy rules allowing automatic actions | Fact: saved policy | your **saved** policy has at least one `auto` or `auto_after_trust` rule (a `defaults.mode` of `auto` or `auto_after_trust` also counts as one) |
 | 3 | Automatic actions executed | Fact: what ran | at least 1 automatic action has run |
 | 3 | Change-failure rate | **Change-failure rate** (key) | 15% or less of the executed fixes failed verification |
-| 4 | Investigations with a human verdict | Verdict coverage | at least 30% of investigations have a verdict |
-| 4 | Published runbooks | Runbooks published | at least 1 published runbook |
-| 4 | Eval runs in the window | Eval runs | at least 1 eval run in the window |
-| 5 | Resolved automatically | **Escalation rate** (key) | at most 50% of resolved investigations needed a human |
-| 5 | Agreement rate | **Agreement rate** (key) | at least 80% agreement between the AI's root cause and your verdicts |
-| 5 | Audit chain verifies | Audit chain | the audit log's hash chain is intact |
-| 5 | Guardrails configured (circuit breaker + rate limit) | Fact: saved policy | your **saved** policy sets both `guardrails.circuit_breaker` and a non-zero `guardrails.max_auto_actions_per_hour` |
+| 3 | Investigations with a human verdict | Verdict coverage | at least 30% of investigations have a verdict |
+| 3 | Published runbooks | Runbooks published | at least 1 published runbook |
+| 3 | Eval runs in the window | Eval runs | at least 1 eval run in the window |
+| 4 | Resolved automatically | **Escalation rate** (key) | at most 50% of resolved investigations needed a human |
+| 4 | Agreement rate | **Agreement rate** (key) | at least 80% agreement between the AI's root cause and your verdicts |
+| 4 | Audit chain verifies | Audit chain | the audit log's hash chain is intact |
+| 4 | Guardrails configured (circuit breaker + rate limit) | Fact: saved policy | your **saved** policy sets both `guardrails.circuit_breaker` and a non-zero `guardrails.max_auto_actions_per_hour` |
 
 Read from the metric side: of the five TRACE metrics, change-failure rate
-gates Level 3, and escalation rate and agreement rate gate Level 5. Time
+gates Level 3, and escalation rate and agreement rate gate Level 4. Time
 to triage and time to resolve gate no level, on purpose. Every team's
 systems and alert mix differ, so there is no fair single threshold; they are
 what climbing the levels should improve. Watch them against your own
@@ -83,7 +85,7 @@ Two details worth knowing:
 
 - **Policy criteria only look at a saved policy.** The built-in default
   (what's in force before anyone saves a policy) has no automatic rules, and
-  its guardrails don't count toward Level 5 until you save a policy of your
+  its guardrails don't count toward Level 4 until you save a policy of your
   own.
 - **A rate with no data is "unknown", not zero.** If no fixes have run, the
   change-failure rate is unknown and that criterion is "not yet".
@@ -101,19 +103,19 @@ Everything on the page recomputes for the window you pick.
 ### The headline
 
 A large **L***n* with the level's name, its description, and the reminder
-that levels count in order. If
+that levels count in order. Before you reach Level 1 the headline reads
+**Not started** instead. If
 someone has saved a self-assessment, a **Self-assessed** box sits on the
 right with that level, who saved it, and when.
 
 ### The ladder
 
-Six cards, Level 0 to Level 5. The front of each shows only the level, its
+Four cards, Level 1 to Level 4. The front of each shows only the level, its
 name and its status: **Your level**, **Met**, **Not met**, or
 **Met · needs L***n* **first**. Hover over a card (tap it on a phone, or tab
 to it with the keyboard) and it flips over to show your progress on each of
 its criteria: a tick or a cross, a bar for targets you fill up, and where you
-stand in words (for example "8 of 29 investigated · 7 more for 50%"). Level 0
-has no criteria, so its back shows what the level means.
+stand in words (for example "8 of 29 investigated · 7 more for 50%").
 
 You can meet a higher level's criteria without being at it yet. Levels count
 in order, so a level whose own criteria are met still waits for every level
@@ -133,9 +135,9 @@ with whether lower or higher is better and which level it gates:
 |---|---|
 | **T · Time to triage** | Median time from the alert firing to the AI's root cause. Gates no level |
 | **R · Time to resolve** | Median time from the alert firing to a verified fix (MTTR). Gates no level |
-| **A · Agreement rate** | How often your team agreed with the AI's root cause, with verdict coverage underneath. Gates Level 5 (≥ 80%) |
+| **A · Agreement rate** | How often your team agreed with the AI's root cause, with verdict coverage underneath. Gates Level 4 (≥ 80%) |
 | **C · Change-failure rate** | Share of executed fixes that failed verification; turns red above 15%. Gates Level 3 |
-| **E · Escalation rate** | Share of resolved investigations that needed a human. Gates Level 5 (≤ 50%) |
+| **E · Escalation rate** | Share of resolved investigations that needed a human. Gates Level 4 (≤ 50%) |
 
 ### Supporting metrics
 
@@ -166,7 +168,7 @@ threshold table from the section above, filled in with your numbers. Columns:
 Up to six concrete suggestions: the unmet criteria of the next level first,
 then the level after. Each tells you which page to go to — for example
 "Autonomy policy → set `investigate_automatically: true` so every new alert is
-investigated." At Level 5 it reminds you to keep verdicts and evals running
+investigated." At Level 4 it reminds you to keep verdicts and evals running
 so the level holds.
 
 ---
@@ -191,7 +193,7 @@ instead of it. The headline is always the measured one.
 - The AI has read access to the same logs, metrics and cluster state on-call uses.
 - Investigations happen in a shared, recorded place instead of personal chatbot sessions.
 
-**Level 2 — Proposing**
+**Level 2 — Supervised**
 
 - On-call reviews the AI's root cause before acting on it.
 - Fixes the AI proposes are applied through the approval flow, not by hand on the side.
@@ -202,15 +204,12 @@ instead of it. The headline is always the measured one.
 - The autonomy policy is changed through code review and reviewed at least quarterly.
 - The team has agreed which actions are low-risk enough to run automatically, per environment.
 - Everyone on call knows how to use the kill switch, and it has been tested.
-
-**Level 4 — Learning**
-
 - Post-incident reviews include the AI's investigation and a verdict on it.
 - Runbooks are kept as code and updated after incidents (including AI-drafted ones).
 - Model or prompt changes are evaluated against the scenario suite before rollout.
 - AI-Ops metrics (agreement, change failure, escalation rate) are reviewed on a regular cadence.
 
-**Level 5 — Autonomous**
+**Level 4 — Autonomous**
 
 - Humans are paged only for exceptions the policy can't handle.
 - The audit log is verified and sampled regularly (security/compliance owns it).
@@ -225,17 +224,16 @@ recent one.
 
 Each step moves a metric, and the metric moves the level.
 
-- **Level 0 → 1: raise the triage rate.** Connect your alert source ([chapter 8](../02-getting-started/08-onboarding-your-observability-stack.md)) and turn on
+- **Not started → Level 1: raise the triage rate.** Connect your alert source ([chapter 8](../02-getting-started/08-onboarding-your-observability-stack.md)) and turn on
   `investigate_automatically` in the autonomy policy (chapter 52).
 - **Level 1 → 2: get the approval rate measured.** Approve or reject the
   fixes the AI proposes on the alert page, so a human-approved change runs
   and is verified.
-- **Level 2 → 3: start automatic fixes, keep the change-failure rate low.**
-  Add an `auto_after_trust` rule for a low-risk action you approve often. It
-  runs on its own once it has a clean record.
-- **Level 3 → 4: raise verdict coverage.** Grade investigations, publish a
-  runbook, run an eval.
-- **Level 4 → 5: lower escalation rate, keep agreement rate high.** Widen the
+- **Level 2 → 3: start automatic fixes, keep the change-failure rate low,
+  and build the learning loop.** Add an `auto_after_trust` rule for a
+  low-risk action you approve often. It runs on its own once it has a clean
+  record. Meanwhile grade investigations, publish a runbook and run an eval.
+- **Level 3 → 4: lower escalation rate, keep agreement rate high.** Widen the
   automatic rules to your most frequent proven fixes and save a policy with
   a circuit breaker and an hourly cap.
 

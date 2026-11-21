@@ -5,7 +5,7 @@ metrics) that told a team where it stood, and practices you could write down
 as code. The **AI-Ops Maturity Model (AOMM)** does the same for how an
 infrastructure team works with AI. It starts with **five TRACE metrics** that
 Daalu measures for you from what actually happened, and uses thresholds on
-those metrics to place your team on **six levels**. Practices you keep as code
+those metrics to place your team on **four levels**. Practices you keep as code
 (an autonomy policy, runbooks, eval scenarios) are how you move the numbers.
 
 This part of the handbook is for the operators who use it day to day. The
@@ -36,16 +36,15 @@ audit chain) explain the key five. Chapter 55 covers every number.
 
 ---
 
-## How the metrics map to the six levels
+## How the metrics map to the four levels
 
 | Level | Name | What it looks like | Measured by | What Daalu gives you |
 |---|---|---|---|---|
-| 0 | Ad hoc | People paste logs into a chatbot. No shared context, no record. | — (the starting point) | — |
+| — | Not started | People paste logs into a chatbot. No shared context, no record, nothing to measure. | — (the starting point, not a level) | — |
 | 1 | Assisted | The AI reads alerts, logs and metrics and explains them. Read-only. | Alerts in the window, AI triage rate | Automatic investigation of new alerts, read-only investigation tools, morning briefings |
-| 2 | Proposing | The AI names the root cause and proposes a fix; every change is approved by a human. | A human-approved fix ran; approval rate measured | Approve / reject cards on the alert, verification after every change |
-| 3 | Trusted | A policy lets low-risk, proven actions run on their own. | **Change-failure rate**; an automatic rule and an automatic fix | The autonomy policy, trust thresholds, previews, multiple approvers |
-| 4 | Learning | Every incident improves the next one. | Verdict coverage, published runbooks, eval runs | Investigations and verdicts, runbooks, evals, the metrics dashboard |
-| 5 | Autonomous | The AI resolves most routine incidents; humans own the policy and the exceptions. | **Escalation rate**, **agreement rate**, audit chain, guardrails | Guardrails (kill switch, circuit breaker, freeze windows, hourly cap), the audit log, MCP for any agent |
+| 2 | Supervised | The AI names the root cause and proposes the exact fix; every change waits for a human and is verified after it runs. | A human-approved fix ran; approval rate measured | Approve / reject cards on the alert, verification after every change |
+| 3 | Trusted | A policy lets specific low-risk, proven actions run on their own, earned by a learning loop: verdicts, runbooks, evals. | **Change-failure rate**; an automatic rule and an automatic fix; verdict coverage, published runbooks, eval runs | The autonomy policy, trust thresholds, previews, multiple approvers; investigations and verdicts, runbooks, evals, the metrics dashboard |
+| 4 | Autonomous | The AI resolves most routine incidents; humans own the policy and the exceptions. | **Escalation rate**, **agreement rate**, audit chain, guardrails | Guardrails (kill switch, circuit breaker, freeze windows, hourly cap), the audit log, MCP for any agent |
 
 Levels are cumulative: you are at the highest level whose criteria, and every
 lower level's criteria, are all met. Time to triage and time to resolve

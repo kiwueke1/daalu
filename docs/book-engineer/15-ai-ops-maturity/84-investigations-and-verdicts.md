@@ -6,7 +6,7 @@ what it proposed and what happened to each proposal, how the alert was
 resolved, and whether a human agreed with the diagnosis. It is the row that
 turns a chat transcript into metrics (chapter 88). It serves Level 1 (a
 shared, recorded investigation instead of a private chatbot session) and
-Level 4 (verdicts, verified outcomes).
+Level 3's learning loop (verdicts, verified outcomes).
 
 Code: `core/aiops/investigations.py`, `api/routers/aiops_investigations.py`,
 the hooks in `api/routers/alert_chat.py`, `modules/infra/agent.py`,

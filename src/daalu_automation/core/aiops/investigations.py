@@ -1,4 +1,4 @@
-"""Investigations: the learning-loop record for each AI investigation (AOMM L4).
+"""Investigations: the learning-loop record for each AI investigation (AOMM L3).
 
 One row per alert. The alert chat loop keeps it current:
 

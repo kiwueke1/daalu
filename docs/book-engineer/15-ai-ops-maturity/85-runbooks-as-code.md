@@ -4,7 +4,7 @@ A runbook is a markdown file with YAML frontmatter that says which alerts it
 applies to. Published runbooks that match an alert are injected into the
 AI's triage context, so the agent follows the team's procedure instead of
 rediscovering it. After a verified fix with no matching runbook, the AI
-drafts one for a human to review. Runbooks are a Level 4 practice: each
+drafts one for a human to review. Runbooks are a Level 3 practice: each
 incident leaves something behind that makes the next one faster.
 
 Code: `core/aiops/runbooks.py`, `core/aiops/runbooks_cli.py`,

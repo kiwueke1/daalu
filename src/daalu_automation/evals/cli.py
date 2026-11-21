@@ -26,7 +26,7 @@ from daalu_automation.evals.scenario import (
     load_scenarios,
 )
 
-app = typer.Typer(help="Run AI-SRE eval scenarios (AI-Ops Maturity Level 4).")
+app = typer.Typer(help="Run AI-SRE eval scenarios (AI-Ops Maturity Level 3).")
 
 _URL = typer.Option(None, "--url", help="Daalu base URL (default $DAALU_URL).")
 _TOKEN = typer.Option(None, "--token", help="API token (default $DAALU_TOKEN).")

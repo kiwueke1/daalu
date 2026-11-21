@@ -6,7 +6,7 @@ For AOMM those are the **MCP server** (any agent — Claude Code, Cursor, a
 team's own — gets Daalu's read tools, investigations and policy, and can
 propose fixes through the same policy as Daalu's own agent) and the
 **`spec/` directory** (the AOMM text plus JSON Schemas for every artefact).
-Both are Level 5 practices in the spec ("an open tool protocol").
+Both are Level 4 practices in the spec ("an open tool protocol").
 
 Code: `core/aiops/mcp.py` (protocol + tools), `api/routers/mcp.py` (HTTP),
 `core/aiops/mcp_cli.py` (stdio bridge), `cli/daalu_cli/mcp_bridge.py`

@@ -1,4 +1,4 @@
-"""Autonomy policy as code (AOMM Level 3 and 5).
+"""Autonomy policy as code (AOMM Level 3 and 4).
 
 A tenant's policy is a YAML document (schema: :class:`PolicyDoc`, published as
 ``spec/autonomy-policy.schema.json``). It decides, for every *write* the agent

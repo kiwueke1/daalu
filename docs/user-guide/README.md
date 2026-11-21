@@ -86,7 +86,7 @@ folders.
 
 How well your team works with the AI SRE, measured: five TRACE metrics
 (time to triage, time to resolve, agreement rate, change-failure rate,
-escalation rate), how their thresholds place you on the six levels of
+escalation rate), how their thresholds place you on the four levels of
 the AI-Ops Maturity Model, and how to move up. Start with the
 [section overview](09-ai-operations-maturity/README.md).
 

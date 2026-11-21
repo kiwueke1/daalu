@@ -6,7 +6,7 @@ things at once: shared metrics (DORA) that let a team say where it stands, a
 picture of what good looks like, and practices you can express as code. The
 AI-Ops Maturity Model (AOMM) is the same package for AI in operations, and it
 is built the same way round: metrics first, levels derived from them. This
-chapter presents the metrics, shows how they map to the six levels, explains
+chapter presents the metrics, shows how they map to the four levels, explains
 how Daalu computes a team's level, and maps every Daalu feature, including the
 ones that predate AOMM, to the level it serves.
 
@@ -62,20 +62,25 @@ tiles on the Maturity page.
 
 ---
 
-## The six levels
+## The four levels
 
-| Level | Name | Definition (`core/aiops/maturity.py:26`) |
+| Level | Name | Definition (`LEVELS`, `core/aiops/maturity.py:27`) |
 |---|---|---|
-| 0 | Ad hoc | Individuals paste logs into a chatbot. No shared context, no record. |
+| — | Not started | People paste logs into a chatbot. No shared context, no record, nothing to measure. The starting point, not a level (reported as `level: 0`). |
 | 1 | Assisted | AI reads alerts, logs, metrics and explains them. Read-only. |
-| 2 | Proposing | AI names the root cause and proposes a fix; every change is human-approved. |
-| 3 | Trusted | Policy lets low-risk, proven actions run automatically. |
-| 4 | Learning | Every incident improves the next: verdicts, runbooks, evals, metrics. |
-| 5 | Autonomous | AI resolves most routine incidents; humans own policy and exceptions. |
+| 2 | Supervised | AI names the root cause and proposes the exact fix; every change waits for a human and is verified after it runs. |
+| 3 | Trusted | Policy lets low-risk, proven actions run alone, earned by a learning loop: verdicts, runbooks, evals. |
+| 4 | Autonomous | AI resolves most routine incidents behind a kill switch, rate limits and an audit log; humans own policy and exceptions. |
+
+Earlier drafts had six rungs (an "Ad hoc" Level 0, then Assisted,
+Proposing, Trusted, Learning, Autonomous). Level 0 became the "not started"
+state, Proposing was renamed Supervised, and Learning merged into Trusted:
+see "Why the learning loop is part of Level 3" below. Migration
+`0036_maturity_four_levels` remaps saved self-assessments (3→2, 4→3, 5→4).
 
 The levels describe **who decides** and **what the organisation learns**,
 not how clever the model is. A team running the best frontier model with
-engineers pasting logs into a chat window is at Level 0: nothing is shared,
+engineers pasting logs into a chat window has not started: nothing is shared,
 nothing is recorded, nothing compounds. A team on a modest self-hosted model
 whose every alert is investigated, whose fixes go through a recorded approval
 and verification, and whose low-risk fixes run under a reviewed policy is at
@@ -83,11 +88,10 @@ Level 3.
 
 Levels are **cumulative**. A team is at the highest level whose criteria
 *and every lower level's criteria* hold over the measurement window. Meeting
-the Level 4 criteria without the Level 3 ones leaves a team at Level 2
-(`level_from_criteria`, `core/aiops/maturity.py:171`). The reason: a learning
-loop around a process nobody trusts to run on its own is not more mature than
-a trusted one, it is a different shape, and a ladder that can be climbed out
-of order stops being a ladder.
+the Level 3 criteria without the Level 2 ones leaves a team at Level 1
+(`level_from_criteria`, `core/aiops/maturity.py:242`). The reason: automatic
+fixes without a recorded history of approved, verified ones have nothing to
+stand on, and a ladder that can be climbed out of order stops being a ladder.
 
 ---
 
@@ -95,10 +99,10 @@ of order stops being a ladder.
 
 Each level is a set of thresholds on the metrics above, plus a few facts
 about what ran and what the saved policy allows. `maturity.compute`
-(`core/aiops/maturity.py:254`) reads the metrics for the window
+(`core/aiops/maturity.py:325`) reads the metrics for the window
 (`metrics.collect`, chapter 88), a few facts about the *saved* policy
-(`_policy_facts`, `core/aiops/maturity.py:182`), and evaluates fourteen
-criteria (`build_criteria`, `core/aiops/maturity.py:103`):
+(`_policy_facts`, `core/aiops/maturity.py:253`), and evaluates fourteen
+criteria (`build_criteria`, `core/aiops/maturity.py:174`):
 
 | Level | Criterion id | Met when |
 |---|---|---|
@@ -109,13 +113,13 @@ criteria (`build_criteria`, `core/aiops/maturity.py:103`):
 | 3 | `auto_rule` | the saved policy has ≥ 1 rule in `auto` / `auto_after_trust` (a `defaults.mode` of `auto`/`auto_after_trust` counts as one) |
 | 3 | `auto_executed` | at least one automatic write executed |
 | 3 | `change_failure_rate` | `change_failure_rate ≤ 0.15` |
-| 4 | `verdict_coverage` | `verdict_coverage ≥ 0.3` |
-| 4 | `runbooks_published` | ≥ 1 published runbook |
-| 4 | `eval_runs` | ≥ 1 eval run started in the window |
-| 5 | `escalation_rate` | `escalation_rate ≤ 0.5` |
-| 5 | `agreement_rate` | `agreement_rate ≥ 0.8` |
-| 5 | `audit_chain_ok` | the audit chain verifies |
-| 5 | `guardrails` | the saved policy has a `circuit_breaker` and a non-zero `max_auto_actions_per_hour` |
+| 3 | `verdict_coverage` | `verdict_coverage ≥ 0.3` |
+| 3 | `runbooks_published` | ≥ 1 published runbook |
+| 3 | `eval_runs` | ≥ 1 eval run started in the window |
+| 4 | `escalation_rate` | `escalation_rate ≤ 0.5` |
+| 4 | `agreement_rate` | `agreement_rate ≥ 0.8` |
+| 4 | `audit_chain_ok` | the audit chain verifies |
+| 4 | `guardrails` | the saved policy has a `circuit_breaker` and a non-zero `max_auto_actions_per_hour` |
 
 Read from the metric side:
 
@@ -124,15 +128,15 @@ Read from the metric side:
 | Time to triage (`median_time_to_triage_s`) | TRACE | — | none |
 | Time to resolve (`median_time_to_resolve_s`) | TRACE | — | none |
 | Change-failure rate (`change_failure_rate`) | TRACE | L3 | ≤ 0.15 |
-| Escalation rate (`escalation_rate`) | TRACE | L5 | ≤ 0.5 |
-| Agreement rate (`agreement_rate`) | TRACE | L5 | ≥ 0.8 |
+| Escalation rate (`escalation_rate`) | TRACE | L4 | ≤ 0.5 |
+| Agreement rate (`agreement_rate`) | TRACE | L4 | ≥ 0.8 |
 | `alerts_total` | Supporting | L1 | ≥ 5 |
 | `ai_triage_rate` | Supporting | L1 | ≥ 0.5 |
 | `proposal_approval_rate` | Supporting | L2 | not null |
-| `verdict_coverage` | Supporting | L4 | ≥ 0.3 |
-| `runbooks_published` | Supporting | L4 | ≥ 1 |
-| `eval_runs` | Supporting | L4 | ≥ 1 |
-| `audit_chain_ok` | Supporting | L5 | true |
+| `verdict_coverage` | Supporting | L3 | ≥ 0.3 |
+| `runbooks_published` | Supporting | L3 | ≥ 1 |
+| `eval_runs` | Supporting | L3 | ≥ 1 |
+| `audit_chain_ok` | Supporting | L4 | true |
 
 The other four criteria are not metrics: `human_approved_executed` and
 `auto_executed` are counts `collect` returns outside the public metrics shape
@@ -153,7 +157,7 @@ Two details worth knowing:
   a cap. The built-in default is "nothing runs automatically"; claiming
   guardrails for it would credit a team for a decision it never made.
 * **The headline is automatic, the self-assessment sits beside it.** Sixteen
-  yes/no questions (`QUESTIONS`, `core/aiops/maturity.py:42`) cover what data
+  yes/no questions (`QUESTIONS`, `core/aiops/maturity.py:43`) cover what data
   can't see (on-call reviews the RCA, the policy is changed through code
   review, post-incident reviews include the AI, there is an error budget for
   automatic changes, ...). The self-assessed level uses the same cumulative
@@ -164,7 +168,7 @@ We considered a weighted score (0–100) instead of discrete levels and
 rejected it: a score invites optimising whichever term is cheapest, and
 "we're a 63" tells a team nothing about what to do next. Discrete levels with
 named, binary criteria produce a to-do list. That list is `next_steps`
-(`core/aiops/maturity.py:243`): the unmet criteria of the next level, then of
+(`core/aiops/maturity.py:314`): the unmet criteria of the next level, then of
 the level after, each with a sentence that names the page to open.
 
 ---
@@ -172,7 +176,7 @@ the level after, each with a sentence that names the page to open.
 ## Mapping Daalu features to the levels
 
 AOMM was designed around what Daalu already did, then extended. Most of
-Levels 1 and 2 existed before the AOMM branch; Levels 3–5 are new.
+Levels 1 and 2 existed before the AOMM branch; Levels 3 and 4 are new.
 
 ### Level 1 — Assisted (read before write)
 
@@ -186,9 +190,9 @@ Levels 1 and 2 existed before the AOMM branch; Levels 3–5 are new.
 | Daily briefings | `core/briefings.py`, `api/routers/briefings.py` | Pre-existing. AI-written operational summaries. |
 | Cluster federation | Part V | Pre-existing. The read tools reach the tenant's own clusters through the WireGuard hub and `daalu-edge`, so the AI reads the same state on-call does. |
 | Local-first LLM router | `core/llm.py`, [ch. 31](../06-gpu-and-llm-serving/31-llm-router.md) | Pre-existing. Investigations can run on the customer's own GPU (the SOVEREIGN tier), so "send prod logs to a model" does not have to mean "send them to a third party". This is what makes Level 1 adoptable in regulated shops. |
-| Investigation record | `core/aiops/investigations.py` | New. A shared, recorded investigation per alert is what separates Level 1 from Level 0 (chapter 84). |
+| Investigation record | `core/aiops/investigations.py` | New. A shared, recorded investigation per alert is what separates Level 1 from not started (chapter 84). |
 
-### Level 2 — Proposing (human-gated writes, verified)
+### Level 2 — Supervised (human-gated writes, verified)
 
 | Feature | Where | Notes |
 |---|---|---|
@@ -199,7 +203,7 @@ Levels 1 and 2 existed before the AOMM branch; Levels 3–5 are new.
 | SoT change proposals | [ch. 16](../04-source-of-truth/16-change-proposals.md) | Pre-existing. The network-side equivalent of the approve card. |
 | Policy decision + preview on the approve card | `frontend/components/aiops/action-policy.tsx` | New (chapters 82, 86). |
 
-### Level 3 — Trusted (policy as code)
+### Level 3 — Trusted (policy as code, earned by a learning loop)
 
 | Feature | Where |
 |---|---|
@@ -208,17 +212,12 @@ Levels 1 and 2 existed before the AOMM branch; Levels 3–5 are new.
 | Multi-approver | `api/routers/alert_chat.py:1292` (chapter 83) |
 | Dry-run / blast-radius previews | `core/aiops/preview.py` (chapter 86) |
 | Policy simulator | `POST /aiops/policy/simulate` (chapter 82) |
-
-### Level 4 — Learning
-
-| Feature | Where |
-|---|---|
 | Investigations, outcome verification, verdicts | chapter 84 |
 | Runbooks as code, AI-drafted runbooks | chapter 85 |
 | Eval harness and leaderboard | chapter 89 |
 | Metrics | chapter 88 |
 
-### Level 5 — Autonomous
+### Level 4 — Autonomous
 
 | Feature | Where |
 |---|---|
@@ -242,7 +241,7 @@ we getting better?" looks at the TRACE metrics over time.
 rewards buying features. Levels describe a working relationship between
 people and the AI, and every criterion is measured from what actually
 happened in the window, not from what is configured. A tenant can enable
-every feature and still be Level 0 if no alerts flow in.
+every feature and still be not started if no alerts flow in.
 
 **Why Level 2 requires "every change approved" rather than "AI fixes
 things".** Because the first thing that has to be earned is the record:
@@ -251,14 +250,16 @@ history there is nothing to base a Level 3 policy on. `auto_after_trust`
 (chapter 83) makes the dependency literal: a rule earns automatic execution
 from its own verified track record at Level 2.
 
-**Why Level 4 comes after Level 3.** We argued about this ordering. The
-case for "Learning before Trusted" is that you want verdicts and evals before
-anything runs on its own. The case we took: Level 3 is bounded by its own
-guardrails (narrow rules, trust thresholds, breaker, kill switch), and the
-learning loop is most valuable once there is automatic behaviour whose
-quality has to be watched. The verdict, runbook and eval features all work
-at Level 2 too; nothing stops a team doing them early, it just isn't what
-the next criterion asks for.
+**Why the learning loop is part of Level 3.** Earlier drafts had a separate
+"Learning" level after Trusted, and we argued about the ordering: you want
+verdicts and evals before anything runs on its own, but the learning loop is
+most valuable once there is automatic behaviour whose quality has to be
+watched. Merging them settles it. Trust is *earned* by the learning loop
+(verdicts on the AI's root causes, runbooks for the fixes it repeats, evals
+before a model change), so a team reaches Level 3 only when both the
+automatic fixes and the loop that justifies them are in place. The verdict,
+runbook and eval features all work at Level 2 too; nothing stops a team
+doing them early.
 
 **Why the default policy equals the pre-AOMM behaviour.** Upgrading Daalu
 must never change what runs in a customer's cluster. With no saved policy,

@@ -18,7 +18,7 @@ hosted API. The platform runs the same way with either.
 Daalu implements the **AI-Ops Maturity Model (AOMM)**: a standard for how
 infrastructure teams integrate AI, the way DevOps did for delivery. Like DORA,
 it starts with metrics. Daalu computes them from what actually happened in the
-last 30 days and places your team on one of six levels from them
+last 30 days and places your team on one of four levels from them
 (**AI Ops → Maturity** in the UI).
 
 **Five TRACE metrics**, the AOMM counterpart of the DORA four keys. **TRACE** is their initials: Time to **T**riage, time to **R**esolve, **A**greement rate, **C**hange-failure rate, **E**scalation rate.
@@ -39,12 +39,11 @@ runbook and eval counts, and whether the hash-chained audit log verifies.
 
 | Level | Name | In one line | Reached when (plus every lower level) |
 |---|---|---|---|
-| 0 | Ad hoc | Individuals paste logs into a chatbot; nothing is shared or recorded. | Starting point |
+| — | Not started | People paste logs into a chatbot. No shared context, no record, nothing to measure. | The starting point, not a level |
 | 1 | Assisted | AI reads alerts, logs and metrics and explains them. Read-only. | ≥ 5 alerts, triage rate ≥ 50 % |
-| 2 | Proposing | AI names the root cause and proposes a fix; every change is human-approved and verified. | A human-approved fix ran; approval rate measured |
-| 3 | Trusted | A policy lets low-risk, proven actions run automatically. | Change-failure rate ≤ 15 %; an automatic fix ran under a saved `auto` rule |
-| 4 | Learning | Every incident improves the next: verdicts, runbooks, evals, metrics. | Verdict coverage ≥ 30 %; a runbook published; an eval run |
-| 5 | Autonomous | AI resolves most routine incidents; humans own the policy and the exceptions. | Escalation rate ≤ 50 %, agreement rate ≥ 80 %, audit chain verifies, guardrails saved |
+| 2 | Supervised | AI names the root cause and proposes the exact fix; every change waits for a human and is verified after it runs. | A human-approved fix ran; approve/reject decisions recorded |
+| 3 | Trusted | A policy lets specific low-risk, proven actions run alone, earned by a learning loop: verdicts, runbooks, evals. | A saved `auto` rule and an automatic fix ran; change-failure rate ≤ 15 %; verdict coverage ≥ 30 %; a runbook published; an eval run |
+| 4 | Autonomous | AI resolves most routine incidents; humans own the policy and the exceptions. | Escalation rate ≤ 50 %, agreement rate ≥ 80 %, audit chain verifies, guardrails saved (circuit breaker + hourly rate limit) |
 
 The two speed metrics gate no level, on purpose: they are what climbing the
 levels should improve. The practices that move the metrics are expressed as

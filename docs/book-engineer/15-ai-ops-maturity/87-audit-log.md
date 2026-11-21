@@ -4,7 +4,7 @@ Everything the AI and its approvers do (reads, proposals, denials,
 approvals, executions, verifications, policy changes, verdicts, runbook
 publications, MCP calls, eval runs) is written to an append-only,
 per-tenant, hash-chained log. Editing or deleting any event breaks every
-hash after it. The audit chain is a Level 5 criterion
+hash after it. The audit chain is a Level 4 criterion
 (`audit_chain_ok`): you can't hand routine incidents to an AI without a
 record a security team can verify.
 

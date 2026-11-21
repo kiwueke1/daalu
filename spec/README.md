@@ -124,12 +124,14 @@ it), `manual` (the alert resolved with no executed action), `unresolved`
 
 | Level | Name | Definition |
 |---|---|---|
-| 0 | Ad hoc | Individuals paste logs into a chatbot. No shared context, no record. |
 | 1 | Assisted | AI reads alerts, logs and metrics and explains them. Read-only. |
-| 2 | Proposing | AI names the root cause and proposes a fix; every change is human-approved and verified. |
-| 3 | Trusted | Policy lets low-risk, proven actions run automatically. |
-| 4 | Learning | Every incident improves the next: verdicts, runbooks, evals, metrics. |
-| 5 | Autonomous | AI resolves most routine incidents; humans own policy and exceptions. |
+| 2 | Supervised | AI names the root cause and proposes the exact fix; every change waits for a human and is verified after it runs. |
+| 3 | Trusted | Policy lets specific low-risk, proven actions run alone, earned by a learning loop: verdicts, runbooks, evals. |
+| 4 | Autonomous | AI resolves most routine incidents; humans own policy and exceptions. |
+
+Before level 1 a team is **not started**: people paste logs into a chatbot,
+with no shared context, no record and nothing to measure. Not started is the
+starting point, not a level (implementations report it as level 0).
 
 Levels are cumulative. A team is **at** the highest level whose entry
 criteria, and the criteria of every level below it, are all met over the
@@ -142,16 +144,15 @@ Each row below is the measurable test for the level of the same number in the
 table above. The definition says what the level means; the criteria are the
 signals in the metrics that show a team is there. Where a definition asks for
 something the data cannot show (for example, "humans own policy and
-exceptions" at level 5), the self-assessment in section 4.3 covers it.
+exceptions" at level 4), the self-assessment in section 4.3 covers it.
 
 | Level | Criteria (all must hold) |
 |---|---|
-| L0 · Ad hoc | None. Level 0 is the starting point, not something a team reaches. |
+| Not started | None. It is the starting point, not something a team reaches. |
 | L1 · Assisted | `alerts_total ≥ 5` and `ai_triage_rate ≥ 0.5`. |
-| L2 · Proposing | At least one human-approved write action executed, and `proposal_approval_rate` is defined (at least one human decision recorded). |
-| L3 · Trusted | An active autonomy policy with at least one rule (or the default mode) set to `auto` or `auto_after_trust`; at least one automatic action executed; `change_failure_rate ≤ 0.15`. |
-| L4 · Learning | `verdict_coverage ≥ 0.3`; `runbooks_published ≥ 1`; `eval_runs ≥ 1`. |
-| L5 · Autonomous | `escalation_rate ≤ 0.5`; `agreement_rate ≥ 0.8`; `audit_chain_ok` is true; guardrails configured (a circuit breaker and an hourly rate limit on automatic actions). |
+| L2 · Supervised | At least one human-approved write action executed, and `proposal_approval_rate` is defined (at least one human decision recorded). |
+| L3 · Trusted | An active autonomy policy with at least one rule (or the default mode) set to `auto` or `auto_after_trust`; at least one automatic action executed; `change_failure_rate ≤ 0.15`; `verdict_coverage ≥ 0.3`; `runbooks_published ≥ 1`; `eval_runs ≥ 1`. |
+| L4 · Autonomous | `escalation_rate ≤ 0.5`; `agreement_rate ≥ 0.8`; `audit_chain_ok` is true; guardrails configured (a circuit breaker and an hourly rate limit on automatic actions). |
 
 The same mapping, read from the metric side:
 
@@ -160,33 +161,34 @@ The same mapping, read from the metric side:
 | `median_time_to_triage_s` | Key | — | Tracked at every level; no threshold |
 | `median_time_to_resolve_s` | Key | — | Tracked at every level; no threshold |
 | `change_failure_rate` | Key | L3 | ≤ 0.15 |
-| `escalation_rate` | Key | L5 | ≤ 0.5 |
-| `agreement_rate` | Key | L5 | ≥ 0.8 |
+| `escalation_rate` | Key | L4 | ≤ 0.5 |
+| `agreement_rate` | Key | L4 | ≥ 0.8 |
 | `alerts_total` | Supporting | L1 | ≥ 5 |
 | `ai_triage_rate` | Supporting | L1 | ≥ 0.5 |
 | `proposal_approval_rate` | Supporting | L2 | Defined |
-| `verdict_coverage` | Supporting | L4 | ≥ 0.3 |
-| `runbooks_published` | Supporting | L4 | ≥ 1 |
-| `eval_runs` | Supporting | L4 | ≥ 1 |
-| `audit_chain_ok` | Supporting | L5 | True |
+| `verdict_coverage` | Supporting | L3 | ≥ 0.3 |
+| `runbooks_published` | Supporting | L3 | ≥ 1 |
+| `eval_runs` | Supporting | L3 | ≥ 1 |
+| `audit_chain_ok` | Supporting | L4 | True |
 
 Three criteria are facts about executed actions and the saved policy rather
 than metrics: at least one human-approved action executed (L2), at least one
 automatic action executed and an `auto` rule in the policy (L3), and
-guardrails configured (L5).
+guardrails configured (L4).
 
 The two speed metrics gate no level, on purpose. How fast a team diagnoses and
 resolves depends on its systems and its alert mix, so no single threshold fits
 every team. They are the result climbing the levels is meant to improve, and
 they SHOULD be tracked against the team's own history.
 
-### 4.2 Why L0 has no criteria
+### 4.2 Why "not started" has no criteria
 
-Level 0 describes what happens when there is no shared system: people paste
+Not started describes what happens when there is no shared system: people paste
 logs into a chatbot, and nothing is recorded. There is nothing to measure, so
-there is nothing to test for. Every team starts at level 0 and stays there
-until the L1 criteria hold. A team that meets none of the criteria above is at
-level 0, including a team that has not connected any data yet.
+there is nothing to test for. Every team starts there and stays there until
+the L1 criteria hold. A team that meets none of the criteria above is not
+started (reported as level 0), including a team that has not connected any
+data yet.
 
 ### 4.3 Self-assessment
 
@@ -242,7 +244,7 @@ in the investigation transcript.
   approval (Level 2 behaviour).
 * Every policy change MUST be versioned and audited.
 
-### 5.4 Investigation records and verdicts (L4)
+### 5.4 Investigation records and verdicts (L3)
 * Each investigation MUST be recorded as an investigation record
   ([`investigation.schema.json`](investigation.schema.json)), including when
   it started, when it first named a root cause, the root cause text, the
@@ -250,7 +252,7 @@ in the investigation transcript.
 * Humans grade the root cause with a **verdict**: `correct`, `partial` or
   `wrong`. Verdicts are the ground truth behind `agreement_rate`.
 
-### 5.5 Runbooks as code (L4)
+### 5.5 Runbooks as code (L3)
 * Operational knowledge MUST be stored as runbook files: YAML frontmatter
   ([`runbook.schema.json`](runbook.schema.json)) followed by a markdown body
   with `## Symptoms`, `## Diagnosis` and `## Fix` sections.
@@ -261,7 +263,7 @@ in the investigation transcript.
   implementation SHOULD draft one from the investigation. Drafts MUST NOT be
   used until a human publishes them.
 
-### 5.6 Eval suites (L4)
+### 5.6 Eval suites (L3)
 * Agent quality MUST be measured against reproducible scenarios
   ([`eval-scenario.schema.json`](eval-scenario.schema.json)): how to inject a
   fault, which alert to expect, and an answer key written before any model
@@ -271,8 +273,8 @@ in the investigation transcript.
   diagnosed within the timeout 10 %. Implementations MAY use other weights but
   MUST publish them alongside scores.
 
-### 5.7 An open tool protocol (L5)
-* An implementation at L5 MUST let any external agent use it through an open
+### 5.7 An open tool protocol (L4)
+* An implementation at L4 MUST let any external agent use it through an open
   protocol. The reference binding is the
   [Model Context Protocol](https://modelcontextprotocol.io) (version
   `2025-06-18`).
@@ -283,7 +285,7 @@ in the investigation transcript.
   `allow_external_auto: true`.
 * Every external call MUST be audited (kind `mcp.call`).
 
-### 5.8 Audit chain (L5)
+### 5.8 Audit chain (L4)
 * Every AI read, proposal, denial, approval, rejection, execution,
   verification, policy change, verdict, runbook publication, external call and
   eval result MUST be written to an append-only audit log

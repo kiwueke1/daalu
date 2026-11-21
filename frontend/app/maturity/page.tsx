@@ -66,7 +66,9 @@ export default function MaturityPage() {
               }}
             >
               <div className="flex items-baseline gap-3">
-                <Live value={`L${m.level}`} className="text-6xl font-bold tabular-nums text-accent" />
+                {m.level > 0 && (
+                  <Live value={`L${m.level}`} className="text-6xl font-bold tabular-nums text-accent" />
+                )}
                 <span className="text-2xl font-semibold">{m.name}</span>
               </div>
               <div className="flex-1 min-w-[16rem] text-sm text-fg/80">
@@ -80,7 +82,9 @@ export default function MaturityPage() {
                   <div className="text-[11px] uppercase tracking-wider text-muted">
                     Self-assessed
                   </div>
-                  <div className="text-2xl font-semibold tabular-nums">L{m.assessment.level}</div>
+                  <div className="text-2xl font-semibold tabular-nums">
+                    {m.assessment.level > 0 ? `L${m.assessment.level}` : "Not started"}
+                  </div>
                   <div className="text-xs text-muted">
                     {m.assessment.created_by || "—"} · {fmtDateTime(m.assessment.created_at)}
                   </div>
@@ -243,7 +247,7 @@ function TraceMetrics({ met }: { met: Metrics }) {
         met.verdict_coverage === null || met.verdict_coverage === 0
           ? "no verdicts yet: grade investigations to measure it"
           : `verdicts on ${fmtRate(met.verdict_coverage)} of investigations`,
-      gates: "Gates Level 5 (≥ 80 %)",
+      gates: "Gates Level 4 (≥ 80 %)",
     },
     {
       letter: "C",
@@ -264,7 +268,7 @@ function TraceMetrics({ met }: { met: Metrics }) {
       question: "Of resolved incidents, how many still needed a human?",
       better: "Lower",
       detail: `${met.resolutions.approved + met.resolutions.manual} needed a human · ${met.resolutions.auto} auto-resolved`,
-      gates: "Gates Level 5 (≤ 50 %)",
+      gates: "Gates Level 4 (≤ 50 %)",
     },
   ];
   return (

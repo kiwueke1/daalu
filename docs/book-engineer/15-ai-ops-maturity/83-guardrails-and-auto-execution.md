@@ -3,7 +3,7 @@
 Chapter 82 described how the policy decides. This chapter covers what
 happens after an `auto` decision, how a rule earns `auto` from its track
 record, the guardrails that narrow `auto` back to `approve`, and
-multi-approver approval. This is the machinery of Levels 3 and 5.
+multi-approver approval. This is the machinery of Levels 3 and 4.
 
 Code: `core/aiops/policy.py` (trust, breaker, state),
 `api/routers/alert_chat.py` (`_start_auto_actions`, `approve_action`,
@@ -83,8 +83,8 @@ again like any other turn.
 
 ## `_record_outcome` — the feedback
 
-`_record_outcome` (`api/routers/alert_chat.py:1361`) is where Level 3
-feeds Level 4 and Level 5:
+`_record_outcome` (`api/routers/alert_chat.py:1361`) is where automatic execution
+feeds the learning loop (Level 3) and the guardrails (Level 4):
 
 1. `action.verified_resolved = resolved` — the bit trust stats and the
    change-failure-rate metric count.
@@ -258,7 +258,7 @@ bypassed or mis-counted. Each is fixed and has a regression test in
 Still true: an automatic action in flight dies with the API pod (the run is
 left `running`), and with no `circuit_breaker` configured the only bound on
 repeated failing automatic fixes is the hourly cap. Configure both guardrails
-on any policy with `auto` rules; the Level 5 criterion requires them.
+on any policy with `auto` rules; the Level 4 criterion requires them.
 
 ---
 
