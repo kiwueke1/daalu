@@ -54,6 +54,7 @@ _COPILOT_TOOLS = frozenset(
         "get_device",
         "get_fabric_topology",
         # Kubernetes reads.
+        "list_namespaces",
         "list_pods",
         "describe_pod",
         "get_pod_events",
@@ -106,6 +107,7 @@ _ALL_CLOUD_TOOLS = frozenset().union(*_CLOUD_TOOLS.values())
 _CLUSTER_TOOLS = frozenset(
     {
         "recent_changes",
+        "list_namespaces",
         "list_pods",
         "describe_pod",
         "get_pod_events",
@@ -136,8 +138,11 @@ You have tools that read the user's REAL infrastructure. Use them:
 - `get_device` — full detail for one device, by name (e.g. "leaf1").
 - `get_fabric_topology` — the cabling graph observed from live LLDP;
   which port connects to which. Use for "what is X connected to".
+- `list_namespaces` — every namespace in a cluster. Call it for any
+  question about which namespaces exist; never list namespaces from memory.
 - `list_pods`, `describe_pod`, `get_pod_events`, `get_pod_logs`,
-  `get_deployment` — Kubernetes state.
+  `get_deployment` — Kubernetes state. `list_pods` with no `namespace`
+  covers all namespaces.
 - `query_prometheus`, `query_loki` — metrics and logs.
 - Cloud tools (`aws_*`, `gcp_*`, `azure_*`) — read-only views of the cloud
   accounts listed under CLOUD ACCOUNTS: instances/VMs, logs, metrics,
@@ -422,6 +427,12 @@ async def ask(
                         cluster = _pick_cluster(
                             args.pop("cluster", None), slugs, mentioned, default_cluster
                         )
+                    logger.info(
+                        "copilot.tool tool=%s cluster=%s args=%s",
+                        name,
+                        cluster if not isinstance(cluster, _NoCluster) else "(refused)",
+                        json.dumps(args, sort_keys=True)[:200],
+                    )
                     if isinstance(cluster, _NoCluster):
                         result = cluster.message
                     else:

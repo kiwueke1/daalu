@@ -3,7 +3,7 @@
 Two tiers:
 
 * **Read tools** (``get_pod_logs``, ``describe_pod``, ``get_pod_events``,
-  ``list_pods``, ``get_deployment``, ``rollout_history``,
+  ``list_namespaces``, ``list_pods``, ``get_deployment``, ``rollout_history``,
   ``recent_changes``) — auto-execute
   whenever the LLM calls them. They cannot mutate cluster state.
 * **Write tools** (``rollout_undo``, ``scale_deployment``,
@@ -26,6 +26,7 @@ import uuid
 from collections.abc import Callable, Coroutine
 from contextvars import ContextVar
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
@@ -391,14 +392,54 @@ async def _get_pod_events(
     return "\n".join(lines) or "(no events)"
 
 
+async def _list_namespaces(*, _tenant_id: uuid.UUID | None = None) -> str:
+    """Every namespace in the cluster, like ``kubectl get ns``. Without this
+    the copilot could only guess namespace names (default, kube-system, …)
+    and present the guess as the full list."""
+    core, _apps, _client = await _tenant_kube_or_default(_tenant_id)
+    nss = await _run(core.list_namespace)
+    now = datetime.now(timezone.utc)
+    lines = [f"{len(nss.items)} namespace(s):", "NAME  STATUS  AGE"]
+    for ns in sorted(nss.items, key=lambda n: n.metadata.name):
+        created = ns.metadata.creation_timestamp
+        age = _age(now - created) if created else "?"
+        phase = ns.status.phase if ns.status else "?"
+        lines.append(f"{ns.metadata.name}  {phase}  {age}")
+    return "\n".join(lines)
+
+
+def _age(delta: timedelta) -> str:
+    secs = int(delta.total_seconds())
+    if secs >= 86400:
+        return f"{secs // 86400}d"
+    if secs >= 3600:
+        return f"{secs // 3600}h"
+    return f"{max(secs // 60, 0)}m"
+
+
 async def _list_pods(
     *,
-    namespace: str,
+    namespace: str | None = None,
     label_selector: str | None = None,
     deployment: str | None = None,
     _tenant_id: uuid.UUID | None = None,
 ) -> str:
     core, apps, _client = await _tenant_kube_or_default(_tenant_id)
+    if not namespace or namespace.strip().lower() in ("all", "*", "-a", "--all-namespaces"):
+        # Cluster-wide: `kubectl get pods -A`.
+        if deployment:
+            return "error: `deployment` needs a `namespace`"
+        pods = await _run(core.list_pod_for_all_namespaces, label_selector=label_selector)
+        lines = ["NAMESPACE  NAME  READY  STATUS  RESTARTS  NODE"]
+        for p in pods.items:
+            ready = sum(1 for c in (p.status.container_statuses or []) if c.ready)
+            total = len(p.spec.containers)
+            restarts = sum(c.restart_count for c in (p.status.container_statuses or []))
+            lines.append(
+                f"{p.metadata.namespace}  {p.metadata.name}  {ready}/{total}  "
+                f"{_pod_status(p)}  {restarts}  {p.spec.node_name}"
+            )
+        return "\n".join(lines)
     if deployment and not label_selector:
         # Only that Deployment's pods: its own selector, read at run time, so a
         # caller (e.g. a verify step planned before the fix ran) needs just the name.
@@ -1071,23 +1112,36 @@ TOOLS: dict[str, ToolSpec] = {
         },
         handler=_get_pod_events,
     ),
+    "list_namespaces": ToolSpec(
+        name="list_namespaces",
+        description=(
+            "List every namespace in the cluster with status and age "
+            "(`kubectl get ns`). Use this for any question about which "
+            "namespaces exist — never guess namespace names."
+        ),
+        input_schema={"type": "object", "properties": {}},
+        handler=_list_namespaces,
+    ),
     "list_pods": ToolSpec(
         name="list_pods",
         description=(
-            "List pods in a namespace with status + restart counts. Pass `deployment` "
-            "to list only that Deployment's pods."
+            "List pods with status + restart counts. Omit `namespace` to list "
+            "pods in ALL namespaces (`kubectl get pods -A`). Pass `deployment` "
+            "(with its namespace) to list only that Deployment's pods."
         ),
         input_schema={
             "type": "object",
             "properties": {
-                "namespace": {"type": "string"},
+                "namespace": {
+                    "type": "string",
+                    "description": "Omit for all namespaces.",
+                },
                 "label_selector": {"type": "string"},
                 "deployment": {
                     "type": "string",
                     "description": "Only this Deployment's pods (uses its selector).",
                 },
             },
-            "required": ["namespace"],
         },
         handler=_list_pods,
     ),

@@ -663,3 +663,93 @@ async def test_single_cluster_needs_no_target(monkeypatch):
         monkeypatch, copilot, ["daalu-prod"], call_args={}
     )
     assert executed == [("list_pods", {}, "daalu-prod")]
+
+
+# --------------------------------------------------------------------------
+# Namespaces: the copilot must read them, not guess them
+# --------------------------------------------------------------------------
+
+
+def _ns(name, phase="Active"):
+    from datetime import datetime, timedelta, timezone
+
+    return SimpleNamespace(
+        metadata=SimpleNamespace(
+            name=name, creation_timestamp=datetime.now(timezone.utc) - timedelta(days=10)
+        ),
+        status=SimpleNamespace(phase=phase),
+    )
+
+
+def _pod(ns, name):
+    return SimpleNamespace(
+        metadata=SimpleNamespace(name=name, namespace=ns),
+        spec=SimpleNamespace(containers=[object()], node_name="cp03"),
+        status=SimpleNamespace(
+            phase="Running",
+            container_statuses=[
+                SimpleNamespace(
+                    ready=True,
+                    restart_count=0,
+                    state=SimpleNamespace(waiting=None, terminated=None),
+                    last_state=None,
+                )
+            ],
+        ),
+    )
+
+
+class _FakeCore:
+    def __init__(self):
+        self.calls = []
+
+    def list_namespace(self, **_kw):
+        self.calls.append("list_namespace")
+        return SimpleNamespace(
+            items=[_ns("openstack"), _ns("default"), _ns("kube-system"), _ns("monitoring")]
+        )
+
+    def list_pod_for_all_namespaces(self, label_selector=None, **_kw):
+        self.calls.append("list_pod_for_all_namespaces")
+        return SimpleNamespace(items=[_pod("openstack", "nova-api-0"), _pod("default", "daalu-edge-x")])
+
+
+@pytest.fixture
+def fake_core(monkeypatch):
+    core = _FakeCore()
+
+    async def fake_kube(_tenant_id):
+        return core, None, None
+
+    monkeypatch.setattr(kube_tools, "_tenant_kube_or_default", fake_kube)
+    return core
+
+
+def test_copilot_offers_list_namespaces_per_cluster():
+    from daalu_automation.api.routers.copilot import _CLUSTER_TOOLS, _tool_definitions
+
+    assert "list_namespaces" in {d["function"]["name"] for d in _tool_definitions()}
+    assert "list_namespaces" in _CLUSTER_TOOLS
+    assert not kube_tools.tool_requires_approval("list_namespaces")
+
+
+@pytest.mark.asyncio
+async def test_list_namespaces_returns_every_namespace(fake_core):
+    out = await kube_tools._list_namespaces(_tenant_id=TENANT)
+    assert out.startswith("4 namespace(s):")
+    for name in ("openstack", "default", "kube-system", "monitoring"):
+        assert f"\n{name}  Active  10d" in out
+
+
+@pytest.mark.asyncio
+async def test_list_pods_without_namespace_covers_all_namespaces(fake_core):
+    out = await kube_tools._list_pods(_tenant_id=TENANT)
+    assert fake_core.calls == ["list_pod_for_all_namespaces"]
+    assert "openstack  nova-api-0  1/1  Running" in out
+    assert "default  daalu-edge-x" in out
+
+
+@pytest.mark.asyncio
+async def test_list_pods_deployment_needs_a_namespace(fake_core):
+    out = await kube_tools._list_pods(deployment="web", _tenant_id=TENANT)
+    assert out.startswith("error:")
