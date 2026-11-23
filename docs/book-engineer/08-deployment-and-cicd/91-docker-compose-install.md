@@ -126,7 +126,7 @@ same host **from the bridge gateway address** instead of from the address the
 edge dialled. The kind node's NAT doesn't recognise the reply as part of the
 flow and drops it, so the cluster sits at "Awaiting handshake" forever. Binding
 to `DAALU_HOST_IP` makes replies leave from the address the edge sent to. This
-was found on the 2026-10-31 run (see the S0-02 episode notes) and fixed in the
+was found on the 2026-10-31 run (a dry run of the former Compose install episode) and fixed in the
 same commit.
 
 ---

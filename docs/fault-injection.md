@@ -257,8 +257,8 @@ episodes should show (S2-10's whole point).
 
 | Recipe | What happens | Fault | Episodes |
 |---|---|---|---|
-| `demo/dummy-bad-image` | dummy-app: image tag that doesn't exist | `kubernetes/bad-image` | S0-02, S3-10 |
-| `demo/dummy-crashloop` | dummy-app: container crashes on startup | `kubernetes/crashloop` | S0-03 |
+| `demo/dummy-bad-image` | dummy-app: image tag that doesn't exist | `kubernetes/bad-image` | S3-10 |
+| `demo/dummy-crashloop` | dummy-app: container crashes on startup | `kubernetes/crashloop` | — |
 | `demo/dummy-scaled-to-zero` | dummy-app: scaled to zero | `kubernetes/scale-to-zero` | - |
 | `demo/metrics-error-mode` | metrics-app: error rate climbs, pods stay healthy | `kubernetes/bad-env` | - |
 | `fabric/cable-pulled` | A cable pulled between a leaf and a GPU server | `network/cable-pull` | S2-01 |
@@ -274,14 +274,14 @@ episodes should show (S2-10's whole point).
 | `lab-llm/gpu-memory-overcommit` | chat-llm asks for 90% of a GPU that's already shared (the S1-01 break) | `kubernetes/bad-env` | S1-01, S1-12, S3-01, S3-02, S3-03, S3-04, S3-10 |
 | `lab-llm/gpu-persistence-off` | GPU persistence mode turned off on the GPU node | `node/gpu-persistence-off` | S1-16 |
 | `openstack/cluster-dns-outage` | CoreDNS scaled to zero: every service-to-service call fails | `kubernetes/scale-to-zero` | - |
-| `openstack/compute-node-disk-full` | The compute node's disk fills past the eviction threshold | `node/disk-pressure` | S0-04 |
+| `openstack/compute-node-disk-full` | The compute node's disk fills past the eviction threshold | `node/disk-pressure` | S0-03 |
 | `openstack/database-disk-full` | MariaDB data volume full | `kubernetes/volume-fill` | - |
 | `openstack/database-isolated` | A default-deny NetworkPolicy cuts every service off from MariaDB | `kubernetes/network-policy-deny` | S3-07 |
 | `openstack/glance-never-ready` | Glance readiness probe broken: image API has no endpoints | `kubernetes/readiness-probe-broken` | S4-02 |
 | `openstack/keystone-bad-rollout` | Keystone rolled out with an image that doesn't exist | `kubernetes/bad-image` | S0-01 |
 | `openstack/keystone-service-orphaned` | Keystone Service selector selects nothing | `kubernetes/service-selector-mismatch` | - |
 | `openstack/keystone-service-wrong-port` | Keystone Service targetPort changed | `kubernetes/service-wrong-port` | S1-14 |
-| `openstack/mariadb-down` | The OpenStack database is scaled to zero | `kubernetes/scale-to-zero` | S1-02, S3-06 |
+| `openstack/mariadb-down` | The OpenStack database is scaled to zero | `kubernetes/scale-to-zero` | S0-02, S1-02, S3-06 |
 | `openstack/memcached-down` | Memcached gone: Keystone token validation crawls | `kubernetes/scale-to-zero` | S1-06 |
 | `openstack/namespace-quota-zero` | A ResourceQuota blocks every new pod in the openstack namespace | `kubernetes/resource-quota-block` | - |
 | `openstack/neutron-server-crashloop` | neutron-server rolled out with a command that exits | `kubernetes/crashloop` | S1-07 |

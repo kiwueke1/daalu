@@ -8,6 +8,7 @@ story: Every OpenStack API depends on MariaDB. Someone scales the StatefulSet to
   window and forgets it. All APIs start returning 500s; nothing is crashing, so pod-level checks look
   clean.
 episodes:
+- S0-02
 - S1-02
 - S3-06
 expect:

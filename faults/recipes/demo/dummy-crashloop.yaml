@@ -2,8 +2,7 @@ id: dummy-crashloop
 title: 'dummy-app: container crashes on startup'
 fault: kubernetes/crashloop
 target: dummy-app
-episodes:
-- S0-03
+episodes: []
 expect:
   root_cause: the last rollout changed the command
   fix: rollout_undo
