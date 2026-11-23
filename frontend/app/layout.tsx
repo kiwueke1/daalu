@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Quicksand } from "next/font/google";
+import localFont from "next/font/local";
 import { AppShell } from "@/components/layout/app-shell";
 import { Providers } from "./providers";
 import "./globals.css";
@@ -8,11 +8,13 @@ import "./globals.css";
 // the rounded, single-story-`a` geometric letterforms in the original
 // daalu logo art. Exposed as a CSS variable so the sidebar wordmark (and
 // any future brand text) can opt in without changing the body font, which
-// stays Inter. Self-hosted at build by next/font — no runtime fetch, no
-// layout shift.
-const quicksand = Quicksand({
-  subsets: ["latin"],
-  weight: ["500", "600", "700"],
+// stays Inter. The file is in the repo (OFL, see fonts/Quicksand-OFL.txt)
+// rather than fetched from Google at build time: from some networks Google
+// serves extension-less font URLs that next/font 14.2 crashes on, which
+// broke fresh installs.
+const quicksand = localFont({
+  src: "./fonts/Quicksand-latin.woff2",
+  weight: "500 700",
   variable: "--font-brand",
   display: "swap",
 });
