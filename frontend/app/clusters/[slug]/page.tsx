@@ -53,6 +53,7 @@ import { TabBar, useUrlTab } from "@/components/ui/tabs";
 import { LoadState } from "@/components/ui/load-state";
 import { Button } from "@/components/ui/button";
 import { errorText } from "@/lib/errors";
+import { cn } from "@/lib/utils";
 
 /**
  * Turn the backend's raw "why the API isn't reachable" into a sentence a
@@ -555,9 +556,10 @@ function RelatedDashboards({ slug }: { slug: string }) {
       desc: metrics
         ? `PromQL against this cluster's ${metrics.name}.`
         : "No metrics store connected to this cluster yet.",
-      href: metrics
-        ? `/observability/${metrics.provider}?cluster=${encodeURIComponent(slug)}`
-        : null,
+      // Clickable either way: with nothing connected the console says so and
+      // points at where to connect one.
+      href: `/observability/${metrics?.provider ?? "prometheus"}?cluster=${encodeURIComponent(slug)}`,
+      connected: !!metrics,
     },
     {
       icon: ScrollText,
@@ -565,15 +567,15 @@ function RelatedDashboards({ slug }: { slug: string }) {
       desc: logs
         ? `Search this cluster's logs in ${logs.name}.`
         : "No log store connected to this cluster yet.",
-      href: logs
-        ? `/observability/${logs.provider}?cluster=${encodeURIComponent(slug)}`
-        : null,
+      href: `/observability/${logs?.provider ?? "loki"}?cluster=${encodeURIComponent(slug)}`,
+      connected: !!logs,
     },
     {
       icon: Cpu,
       title: "GPU & AI factory",
       desc: "Per-GPU utilisation, memory, temperature, and diagnostics.",
       href: "/ai-factory",
+      connected: true,
     },
   ];
 
@@ -617,36 +619,37 @@ function RelatedDashboards({ slug }: { slug: string }) {
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {consoles.map((c) =>
-          c.href ? (
+        {consoles.map((c) => {
+          const missing = !c.connected && !storesQuery.isLoading;
+          return (
             <Link
               key={c.title}
               href={c.href}
-              className="group rounded-2xl border border-line bg-bg-card p-4 hover:border-accent-cyan/40 transition-colors"
+              className={cn(
+                "group rounded-2xl border bg-bg-card p-4 hover:border-accent-cyan/40 transition-colors",
+                missing ? "border-dashed border-line" : "border-line",
+              )}
             >
               <div className="flex items-center justify-between">
-                <c.icon className="h-4 w-4 text-accent-cyan" />
+                <c.icon
+                  className={cn("h-4 w-4", missing ? "text-muted" : "text-accent-cyan")}
+                />
                 <ChevronRight className="h-4 w-4 text-muted group-hover:text-accent-cyan" />
               </div>
-              <div className="mt-2 font-medium text-sm group-hover:text-accent-cyan">
+              <div className="mt-2 flex items-center gap-2 font-medium text-sm group-hover:text-accent-cyan">
                 {c.title}
+                {missing && (
+                  <span className="rounded-full border border-line px-1.5 py-0.5 text-[10px] font-normal uppercase tracking-wider text-muted">
+                    Not connected
+                  </span>
+                )}
               </div>
-              <div className="text-xs text-muted mt-1">{c.desc}</div>
-            </Link>
-          ) : (
-            <div
-              key={c.title}
-              className="rounded-2xl border border-dashed border-line bg-bg-card/50 p-4"
-              aria-disabled="true"
-            >
-              <c.icon className="h-4 w-4 text-muted" />
-              <div className="mt-2 font-medium text-sm text-muted">{c.title}</div>
               <div className="text-xs text-muted mt-1">
-                {storesQuery.isLoading ? "Checking this cluster…" : c.desc}
+                {!c.connected && storesQuery.isLoading ? "Checking this cluster…" : c.desc}
               </div>
-            </div>
-          ),
-        )}
+            </Link>
+          );
+        })}
       </div>
     </section>
   );

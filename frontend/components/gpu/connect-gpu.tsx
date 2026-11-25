@@ -125,6 +125,7 @@ export function GpuOnboardingCard({
   const [model, setModel] = useState("meta/llama-3.1-8b-instruct");
   const [gpuClass, setGpuClass] = useState("ada-16");
   const [gpuNode, setGpuNode] = useState<string | null>(null);
+  const [classEdited, setClassEdited] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   // Best-effort GPU node discovery on the selected cluster — pre-fills
@@ -133,11 +134,23 @@ export function GpuOnboardingCard({
     queryKey: ["gpu", "nodes", clusterId],
     queryFn: () => api.onboarding.gpu.nodes(clusterId || null),
     enabled: open,
+    // Right after the GPU Operator comes up, the device plugin advertises the
+    // GPU before GPU Feature Discovery labels its memory, so the class is
+    // still unknown. Keep looking until every found node has one.
+    refetchInterval: (q) => {
+      const found = (q.state.data as { gpu_class?: string | null }[] | undefined) ?? [];
+      return found.some((n) => !n.gpu_class) ? 5_000 : false;
+    },
   });
   const detected = nodes.data ?? [];
   // Discovery answered and found nothing: deploying would leave a pod
   // Pending on FailedScheduling (e.g. the laptop kind cluster from S1-02).
   const noGpu = nodes.isSuccess && !nodes.isFetching && detected.length === 0;
+  // The chosen node is advertised but its memory isn't labelled yet, so its
+  // class (and the model that fits) is still unknown. Hold Deploy for the
+  // few seconds that takes rather than deploying onto a guessed class.
+  const sizing =
+    !classEdited && !!gpuNode && detected.some((n) => n.name === gpuNode && !n.gpu_class);
 
   const onPickCluster = (id: string) => {
     setClusterId(id);
@@ -156,11 +169,22 @@ export function GpuOnboardingCard({
     }
   };
 
-  // Exactly one GPU node on the cluster: pre-select it.
+  // Exactly one GPU node on the cluster: pre-select it, and apply its class
+  // (and the model that fits) once discovery has sized the card — unless the
+  // user has already typed a class of their own.
+  const onlyNode = detected.length === 1 ? detected[0] : null;
   useEffect(() => {
-    if (detected.length === 1 && gpuNode === null) pickNode(detected[0]);
+    if (!onlyNode) return;
+    if (gpuNode === null) pickNode(onlyNode);
+    else if (
+      onlyNode.name === gpuNode &&
+      onlyNode.gpu_class &&
+      !classEdited &&
+      onlyNode.gpu_class !== gpuClass
+    )
+      pickNode(onlyNode);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [detected.length, clusterId]);
+  }, [onlyNode?.name, onlyNode?.gpu_class, clusterId]);
 
   const provision = useMutation({
     mutationFn: () =>
@@ -360,7 +384,7 @@ export function GpuOnboardingCard({
                   title="Deploy onto this node (its class is derived from the GPU's memory)"
                 >
                   <Cpu className="h-3 w-3" /> {n.name}
-                  {n.gpu_class ? ` · ${n.gpu_class}` : ""} ·{" "}
+                  {n.gpu_class ? ` · ${n.gpu_class}` : " · sizing…"} ·{" "}
                   {n.allocatable_gpus}× {n.ready ? "" : "(not ready)"}
                 </button>
               ))}
@@ -371,7 +395,10 @@ export function GpuOnboardingCard({
             <span className="text-muted">GPU class (node label)</span>
             <input
               value={gpuClass}
-              onChange={(e) => setGpuClass(e.target.value)}
+              onChange={(e) => {
+                setClassEdited(true);
+                setGpuClass(e.target.value);
+              }}
               className="mt-1 w-full rounded-md border border-line bg-bg-base px-2 py-1.5 text-xs font-mono"
             />
           </label>
@@ -434,11 +461,17 @@ export function GpuOnboardingCard({
               consequence={`Deploys ${model} onto ${gpuNode ?? "the GPU node"} and routes your AI requests to it.`}
               onConfirm={() => provision.mutate()}
               pending={provision.isPending}
-              disabled={noGpu}
+              disabled={noGpu || sizing}
               icon={<Check className="h-3.5 w-3.5" aria-hidden />}
             />
             {noGpu && (
               <span className="text-xs text-muted">No GPU node on this cluster.</span>
+            )}
+            {sizing && (
+              <span role="status" className="flex items-center gap-1.5 text-xs text-muted">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                Reading {gpuNode}&apos;s GPU memory to pick the class and model…
+              </span>
             )}
           </div>
         </div>

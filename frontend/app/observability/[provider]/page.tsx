@@ -145,12 +145,21 @@ export default function ObservabilityDetailPage() {
         <LoadState
           query={{ isLoading: false, isError: false }}
           empty
-          emptyTitle={`No ${title} on ${cluster} yet`}
-          emptyHint={`This cluster has no ${title} connected, so there's nothing to show. Install one into the cluster, or connect an existing store as an integration linked to ${cluster}.`}
+          emptyTitle={
+            (overview?.family ?? (provider === "loki" || provider === "opensearch" ? "logs" : "metrics")) === "logs"
+              ? `Log server not connected to ${cluster}`
+              : `Metrics server not connected to ${cluster}`
+          }
+          emptyHint={`Daalu has no ${title} for ${cluster}, so there's nothing to query and the agent can't see this signal. Install one into the cluster, or connect an existing store as an integration linked to ${cluster}.`}
           emptyAction={
-            <Link href={back.href} className="text-xs underline">
-              Back to {cluster}
-            </Link>
+            <div className="flex w-full flex-wrap items-center justify-center gap-3">
+              <Link href={HUB.clusters} className="text-xs underline">
+                Connect one in Clusters &amp; observability
+              </Link>
+              <Link href={back.href} className="text-xs text-muted underline">
+                Back to {cluster}
+              </Link>
+            </div>
           }
         >
           {null}
