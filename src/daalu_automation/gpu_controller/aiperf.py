@@ -33,7 +33,7 @@ _ARTIFACT_DIR = "/artifacts"
 # never races a half-written artifact tree.
 _SIGNAL_DIR = "/signal"
 
-# Default in-cluster target — today's vLLM (llama-classifier) Service. The
+# Default in-cluster target — today's vLLM (llm-classifier) Service. The
 # gateway front-door is benchmarked by repointing target_url at the
 # inference-gateway (and the UI flags it via_gateway).
 DEFAULT_TARGET_URL = "http://llm-classifier.daalu.svc.cluster.local:80"

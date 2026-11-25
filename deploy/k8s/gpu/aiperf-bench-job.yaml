@@ -45,7 +45,7 @@ spec:
           args:
             - profile
             # served-model-name the vLLM Deployment advertises (keep in sync
-            # with 03-vllm-llama-classifier.yaml --served-model-name).
+            # with 03-vllm-llm-classifier.yaml --served-model-name).
             - --model=meta/llama-3.1-8b-instruct
             - --url=http://llm-classifier.daalu.svc.cluster.local:80
             - --endpoint-type=chat

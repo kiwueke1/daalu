@@ -1,6 +1,6 @@
 """Manifest builders for the per-tenant vLLM GPU stack.
 
-A faithful, parameterized port of ``deploy/k8s/gpu/03-vllm-llama-classifier.yaml``
+A faithful, parameterized port of ``deploy/k8s/gpu/03-vllm-llm-classifier.yaml``
 and ``05-network-policy.yaml`` plus the ``hf-token`` Secret + namespace —
 returned as plain dicts so the reconcile loop can ``apply_one`` them onto
 the operator's or a customer's cluster.
@@ -21,7 +21,14 @@ from typing import Any
 # Service name is unchanged from the NIM era — the router's endpoint
 # points here. Renaming would require an ops-side config flip.
 SERVICE_NAME = "llm-classifier"
-DEPLOYMENT_NAME = "llama-classifier"
+# The Deployment/PDB/``app`` label share the Service's name. They used to be
+# ``llama-classifier`` (the stack first served Llama 3.1; it now serves
+# whatever the model catalog picks, usually Qwen) — see LEGACY_DEPLOYMENT_NAME.
+DEPLOYMENT_NAME = "llm-classifier"
+# Pre-rename Deployment/PDB name. Clusters provisioned before the rename still
+# run it; the controller deletes it before applying the new stack so the two
+# don't contend for the one GPU (see ``build_legacy_objects``).
+LEGACY_DEPLOYMENT_NAME = "llama-classifier"
 VLLM_PORT = 8000
 SERVICE_PORT = 80
 HF_SECRET_NAME = "hf-token"
@@ -269,6 +276,9 @@ def build_service(params: GpuParams) -> dict[str, Any]:
         "metadata": {
             "name": params.service_name,
             "namespace": params.namespace,
+            # ServiceMonitors select Services by label (vllm-classifier →
+            # app: llm-classifier); without it only annotation scraping works.
+            "labels": {"app": params.deployment_name},
             "annotations": {
                 "prometheus.io/scrape": "true",
                 "prometheus.io/port": str(VLLM_PORT),
@@ -344,6 +354,28 @@ def build_network_policy(params: GpuParams) -> dict[str, Any]:
             ],
         },
     }
+
+
+def build_legacy_objects(params: GpuParams) -> list[dict[str, Any]]:
+    """Pre-rename classifier objects to delete (Deployment, then PDB).
+
+    Only meaningful for the classifier stack: a co-resident stack (the coder)
+    never had a legacy name, so it gets an empty list.
+    """
+    if params.deployment_name != DEPLOYMENT_NAME:
+        return []
+    return [
+        {
+            "apiVersion": "apps/v1",
+            "kind": "Deployment",
+            "metadata": {"name": LEGACY_DEPLOYMENT_NAME, "namespace": params.namespace},
+        },
+        {
+            "apiVersion": "policy/v1",
+            "kind": "PodDisruptionBudget",
+            "metadata": {"name": LEGACY_DEPLOYMENT_NAME, "namespace": params.namespace},
+        },
+    ]
 
 
 def build_all(params: GpuParams, *, include_shared: bool = True) -> list[dict[str, Any]]:

@@ -23,7 +23,7 @@ deploy/k8s/gpu/
 ├── 00-install-gpu-operator.sh       — Operator install for containerd clusters (legacy)
 ├── 01-time-slicing.yaml             — Operator-mode ConfigMap (legacy; see Appendix B)
 ├── 02-hf-token.example.yaml         — HF token secret skeleton (NEVER commit real token)
-├── 03-vllm-llama-classifier.yaml    — vLLM Deployment + Service + PDB (classifier tier)
+├── 03-vllm-llm-classifier.yaml    — vLLM Deployment + Service + PDB (classifier tier)
 ├── 04-tenant-quota.example.yaml     — namespace + ResourceQuota template per tenant
 ├── 05-network-policy.yaml           — locks vLLM pod egress to cluster + HF only
 ├── 06-kueue-flavors.example.yaml    — Resource flavors + queues for batch (P1)
@@ -54,7 +54,7 @@ kubectl -n daalu create secret generic hf-token \
   --dry-run=client -o yaml | kubectl apply -f -
 
 # 2. vLLM deployment + Service
-kubectl apply -f 03-vllm-llama-classifier.yaml
+kubectl apply -f 03-vllm-llm-classifier.yaml
 
 # 3. NetworkPolicy
 kubectl apply -f 05-network-policy.yaml
@@ -87,7 +87,7 @@ is normally free):
 
 ```bash
 export KUBECONFIG=~/.kube/workload-cluster
-kubectl -n daalu scale deploy/llama-classifier --replicas=0   # free the card
+kubectl -n daalu scale deploy/llm-classifier --replicas=0   # free the card
 kubectl -n daalu create secret generic hf-token \
   --from-literal=token="$HF_TOKEN" --dry-run=client -o yaml | kubectl apply -f -
 kubectl apply -f 10-vllm-qwen-coder-14b.yaml

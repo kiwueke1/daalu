@@ -277,7 +277,7 @@ helm install.
 
 ```bash
 kubectl -n daalu logs deploy/daalu-vllm
-kubectl -n daalu describe pod -l app=llama-classifier
+kubectl -n daalu describe pod -l app=llm-classifier
 nvidia-smi   # on the node
 ```
 

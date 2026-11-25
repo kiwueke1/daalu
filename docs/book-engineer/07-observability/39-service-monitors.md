@@ -16,7 +16,7 @@ Current SMs/PMs in `03-servicemonitors.yaml`:
 | Resource | Type | Selects | Port |
 |---|---|---|---|
 | `daalu-api` | SM | Service `app: daalu-api` in daalu-automation/daalu | `http` (named) |
-| `vllm-classifier` | SM | Service `app: llama-classifier` in daalu | `http` |
+| `vllm-classifier` | SM | Service `app: llm-classifier` in daalu | `http` |
 | `nvidia-dcgm` | SM | Service `app: nvidia-dcgm-exporter` in nvidia-device-plugin/gpu-operator | `gpu-metrics` |
 | `daalu-workers` | PM | Pod `app: daalu-worker` in daalu-automation/daalu | `metrics` |
 | `postgres-exporter` | SM | Service `app: postgres-exporter` in daalu-automation/daalu | `http` |

@@ -46,7 +46,7 @@ prometheus:
     # path for things we'd rather not author a SM for.
     additionalScrapeConfigs:
       # vLLM inside the cluster — picked up via Service annotation in
-      # deploy/k8s/gpu/03-vllm-llama-classifier.yaml
+      # deploy/k8s/gpu/03-vllm-llm-classifier.yaml
       - job_name: vllm
         kubernetes_sd_configs:
           - role: service

@@ -37,7 +37,7 @@ spec:
     matchNames: [daalu]
   selector:
     matchLabels:
-      app: llama-classifier
+      app: llm-classifier
   endpoints:
     - port: http
       path: /metrics

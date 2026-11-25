@@ -491,9 +491,9 @@ def render_edge_install_snippet(
     * ``8001`` → ``llm-classifier`` — the routing/classifier stack.
     * ``8000`` → ``llm-coder``      — the coding stack (laptop CLI, workspaces).
 
-    Both upstreams are the **Service** name on port **80** (``llama-classifier``
-    / ``qwen-coder`` are the *Deployment* names, and 8000 is the in-pod
-    container port — neither is dialable here).
+    Both upstreams are the **Service** name on port **80** (the coder's
+    *Deployment* is ``qwen-coder``, and 8000 is the in-pod container port —
+    neither is dialable here).
     """
     import os
 

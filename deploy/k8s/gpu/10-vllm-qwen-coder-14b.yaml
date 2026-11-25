@@ -11,8 +11,8 @@
 # in-IDE Daalu Assistant drive file/search tools natively (chat is unaffected).
 #
 # NOTE: the GPU is allocated exclusively to one pod. On the 16 GB RTX 2000
-# Ada this coder REPLACES the llama-classifier — scale that to 0 first:
-#   kubectl -n daalu scale deploy/llama-classifier --replicas=0
+# Ada this coder REPLACES the llm-classifier — scale that to 0 first:
+#   kubectl -n daalu scale deploy/llm-classifier --replicas=0
 # Provide the HF token Secret (deploy/k8s/gpu/02-hf-token.example.yaml) if
 # the repo is gated.
 apiVersion: v1

@@ -1,10 +1,10 @@
 # vLLM serving Llama-3.1-8B-Instruct (AWQ-INT4) for the classifier tier
 # on the RTX 6000 Ada (48 GB) — node gpu-node-3, gpu-class=ada-48.
 #
-# This is the §A (ada-48) counterpart of 03-vllm-llama-classifier.yaml and
+# This is the §A (ada-48) counterpart of 03-vllm-llm-classifier.yaml and
 # the MANUAL-PATH mirror of what the gpu-controller renders for the
 # operator tenant once its GpuTenant.gpu_class is `ada-48`. It keeps the
-# SAME Deployment/Service names (`llama-classifier` / `llm-classifier`) so
+# SAME Deployment/Service name (`llm-classifier`) so
 # it REPOINTS the classifier tier from gpu-node-1's contended 16 GB card onto
 # gpu-node-3's idle 48 GB card.
 #
@@ -29,10 +29,10 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: llama-classifier
+  name: llm-classifier
   namespace: daalu
   labels:
-    app: llama-classifier
+    app: llm-classifier
     daalu.io/tier: local
     daalu.io/engine: vllm
 spec:
@@ -43,11 +43,11 @@ spec:
     type: Recreate
   selector:
     matchLabels:
-      app: llama-classifier
+      app: llm-classifier
   template:
     metadata:
       labels:
-        app: llama-classifier
+        app: llm-classifier
         daalu.io/tier: local
         daalu.io/engine: vllm
         # Drives the DCGM-joined billing rollup in
@@ -155,7 +155,7 @@ metadata:
 spec:
   type: ClusterIP
   selector:
-    app: llama-classifier
+    app: llm-classifier
   ports:
     - name: http
       port: 80
@@ -164,10 +164,10 @@ spec:
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: llama-classifier
+  name: llm-classifier
   namespace: daalu
 spec:
   minAvailable: 1
   selector:
     matchLabels:
-      app: llama-classifier
+      app: llm-classifier

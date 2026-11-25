@@ -14,11 +14,11 @@ rates. After ~30 min that meaningfully moves the cost-per-call line.
 ```bash
 # Is the pod up?
 kubectl --kubeconfig "$WORKLOAD_KUBECONFIG" -n daalu \
-  get pod -l app=llama-classifier -o wide
+  get pod -l app=llm-classifier -o wide
 
 # What does the pod think?
 kubectl --kubeconfig "$WORKLOAD_KUBECONFIG" -n daalu \
-  logs -l app=llama-classifier --tail=200
+  logs -l app=llm-classifier --tail=200
 
 # Is the node Ready and advertising nvidia.com/gpu?
 kubectl --kubeconfig "$WORKLOAD_KUBECONFIG" get node <gpu-node> \
@@ -31,7 +31,7 @@ sudo wg show wg0
 ## Resolve
 
 **Pod CrashLoopBackOff with CUDA OOM** — VRAM saturated. Lower
-`--gpu-memory-utilization` in `deploy/k8s/gpu/03-vllm-llama-classifier.yaml`
+`--gpu-memory-utilization` in `deploy/k8s/gpu/03-vllm-llm-classifier.yaml`
 from `0.90` to `0.85`, or reduce `--max-model-len`. If you've added
 co-resident models (embeddings, reranker), scale time-slicing back
 from 4-way to 2-way:

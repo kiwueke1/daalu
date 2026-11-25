@@ -624,6 +624,11 @@ async def _do_apply(db: AsyncSession, row: GpuTenant) -> None:
         # can't patch nodes, fall through and let scheduling report the real
         # problem instead of masking it as a permissions error.
         await _ensure_node_labelled(api, row)
+        # Drop the pre-rename ``llama-classifier`` Deployment/PDB first: it
+        # holds the GPU, so the renamed pod would sit Pending beside it. A
+        # 404 (fresh or already-migrated cluster) is a no-op in delete_one.
+        for m in manifests.build_legacy_objects(params):
+            await k8s_helpers.delete_one(api, m)
         for m in bundle:
             await k8s_helpers.apply_one(api, m)
 
@@ -657,7 +662,9 @@ async def _do_destroy(db: AsyncSession, row: GpuTenant) -> None:
     namespace, since ``daalu`` may host other tenant resources."""
     params = manifests.GpuParams(namespace=row.namespace)
     async with _api_client_for(db, row) as api:
-        for m in reversed(manifests.build_all(params)):
+        for m in manifests.build_legacy_objects(params) + list(
+            reversed(manifests.build_all(params))
+        ):
             if m["kind"] == "Namespace":
                 continue  # never delete the shared namespace
             try:

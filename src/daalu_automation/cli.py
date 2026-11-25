@@ -254,7 +254,7 @@ def render_coding_model(
         daalu render-coding-model qwen2.5-coder-14b | kubectl apply -f -
 
     The deployment is named ``qwen-coder`` and the Service ``llm-coder``
-    so it can sit beside the ``llama-classifier`` stack. Remember the GPU
+    so it can sit beside the ``llm-classifier`` stack. Remember the GPU
     is allocated exclusively to one pod — on a 16 GB card the coder
     replaces the classifier (scale the classifier to 0 first).
     """

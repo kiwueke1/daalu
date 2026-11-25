@@ -514,15 +514,18 @@ fi
 if [[ "${SKIP_VLLM}" == "0" ]]; then
   echo
   echo "==> 5/10  Applying vLLM + NetworkPolicy"
-  ${kwl} apply -f "${ROOT}/deploy/k8s/gpu/03-vllm-llama-classifier.yaml"
+  # Pre-rename name: an old llama-classifier pod would keep the GPU and leave
+  # the renamed llm-classifier pod Pending.
+  ${kwl} -n daalu delete deploy/llama-classifier pdb/llama-classifier --ignore-not-found
+  ${kwl} apply -f "${ROOT}/deploy/k8s/gpu/03-vllm-llm-classifier.yaml"
   ${kwl} apply -f "${ROOT}/deploy/k8s/gpu/05-network-policy.yaml"
 
   echo
   echo "==> 6/10  Waiting for vLLM rollout (first start downloads ~5 GB of AWQ weights — ~5–10 min on a normal pipe)"
-  if ! ${kwl} -n daalu rollout status deploy/llama-classifier --timeout=15m; then
+  if ! ${kwl} -n daalu rollout status deploy/llm-classifier --timeout=15m; then
     echo "==> ERROR: vLLM rollout did not become Ready in 15 min." >&2
-    echo "    Inspect: ${kwl} -n daalu describe pod -l app=llama-classifier" >&2
-    echo "             ${kwl} -n daalu logs -l app=llama-classifier --tail=200" >&2
+    echo "    Inspect: ${kwl} -n daalu describe pod -l app=llm-classifier" >&2
+    echo "             ${kwl} -n daalu logs -l app=llm-classifier --tail=200" >&2
     exit 1
   fi
 else

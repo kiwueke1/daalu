@@ -119,8 +119,8 @@ model isn't deployed" — distinct from the 403 the eligibility gate raises.
 
 ## Manifest parameterization
 
-`gpu_controller/manifests.py` was single-deployment (`llama-classifier` /
-`llm-classifier` hardcoded). It now parameterizes `deployment_name`,
+`gpu_controller/manifests.py` was single-deployment (the classifier's
+Deployment and Service names hardcoded). It now parameterizes `deployment_name`,
 `service_name`, `network_policy_name`, and `mem_request`/`mem_limit` on
 `GpuParams`, so a second, co-resident stack doesn't collide. The coder is
 named `qwen-coder` (Deployment) / `llm-coder` (Service).

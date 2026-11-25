@@ -20,7 +20,7 @@
 #     --dry-run=client -o yaml | kubectl apply -f -
 #
 # Daalu's app pods never read this secret directly — only the vLLM
-# Deployment in `03-vllm-llama-classifier.yaml` mounts it.
+# Deployment in `03-vllm-llm-classifier.yaml` mounts it.
 apiVersion: v1
 kind: Secret
 metadata:

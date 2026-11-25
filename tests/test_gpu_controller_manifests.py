@@ -83,7 +83,28 @@ def test_service_maps_80_to_8000_and_selects_deployment():
     assert port["port"] == m.SERVICE_PORT == 80
     assert port["targetPort"] == m.VLLM_PORT == 8000
     assert svc["spec"]["selector"]["app"] == m.DEPLOYMENT_NAME
+    # The vllm-classifier ServiceMonitor selects on this label.
+    assert svc["metadata"]["labels"]["app"] == m.DEPLOYMENT_NAME
     assert svc["metadata"]["name"] == m.SERVICE_NAME == "llm-classifier"
+
+
+def test_classifier_deployment_shares_the_service_name():
+    bundle = _by_kind(m.build_all(m.GpuParams()))
+    assert bundle["Deployment"]["metadata"]["name"] == "llm-classifier"
+    assert bundle["PodDisruptionBudget"]["metadata"]["name"] == "llm-classifier"
+
+
+def test_legacy_llama_classifier_objects_are_targeted_for_cleanup():
+    legacy = m.build_legacy_objects(m.GpuParams(namespace="t1"))
+    assert [(x["kind"], x["metadata"]["name"], x["metadata"]["namespace"]) for x in legacy] == [
+        ("Deployment", "llama-classifier", "t1"),
+        ("PodDisruptionBudget", "llama-classifier", "t1"),
+    ]
+
+
+def test_coder_stack_has_no_legacy_cleanup():
+    params = m.GpuParams(deployment_name="qwen-coder", service_name="llm-coder")
+    assert m.build_legacy_objects(params) == []
 
 
 def test_max_model_len_and_mem_util_are_parameterized():

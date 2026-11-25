@@ -221,7 +221,7 @@ daalu render-coding-model qwen2.5-coder-14b --gpu-class ada-16 \
 # The GPU is allocated EXCLUSIVELY to one pod — a 16 GB card
 # can't hold the 8B classifier AND a 14B coder. Free the card first
 # (if your classifier runs on an external provider, it's idle):
-kubectl -n daalu scale deploy/llama-classifier --replicas=0
+kubectl -n daalu scale deploy/llm-classifier --replicas=0
 kubectl -n daalu create secret generic hf-token \
   --from-literal=token="$HF_TOKEN" --dry-run=client -o yaml | kubectl apply -f -
 kubectl apply -f deploy/k8s/gpu/10-vllm-qwen-coder-14b.yaml

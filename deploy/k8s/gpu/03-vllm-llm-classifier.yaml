@@ -23,10 +23,10 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: llama-classifier
+  name: llm-classifier
   namespace: daalu
   labels:
-    app: llama-classifier
+    app: llm-classifier
     daalu.io/tier: local
     daalu.io/engine: vllm
 spec:
@@ -39,11 +39,11 @@ spec:
     type: Recreate
   selector:
     matchLabels:
-      app: llama-classifier
+      app: llm-classifier
   template:
     metadata:
       labels:
-        app: llama-classifier
+        app: llm-classifier
         daalu.io/tier: local
         daalu.io/engine: vllm
         # Tenant label drives the DCGM-joined billing rollup in
@@ -189,7 +189,7 @@ metadata:
 spec:
   type: ClusterIP
   selector:
-    app: llama-classifier
+    app: llm-classifier
   ports:
     - name: http
       port: 80
@@ -198,10 +198,10 @@ spec:
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: llama-classifier
+  name: llm-classifier
   namespace: daalu
 spec:
   minAvailable: 1
   selector:
     matchLabels:
-      app: llama-classifier
+      app: llm-classifier
